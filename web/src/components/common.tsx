@@ -105,16 +105,3 @@ export function ExternalLink({
     <span className="text-sm text-muted-foreground">来源链接待补充</span>
   )
 }
-export function MockNotice() {
-  return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 text-xs leading-5 text-violet-800">
-      <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-violet-500" />
-      <p>
-        <strong className="font-semibold">Mock 开发模式</strong>
-        <span className="ml-2 text-violet-700/80">
-          模拟审核用于验证流程，不代表科学审读；真实自动采集未启用。
-        </span>
-      </p>
-    </div>
-  )
-}

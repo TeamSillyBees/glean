@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultFilters } from './types'
-import { encodeFilters, filterFacets, restoreFilters } from './filters'
+import { encodeFilters, filterFacets, restoreFilters, getFilterSpecs } from './filters'
 import { facets } from '../test/fixtures'
 import { safeLink } from './utils'
 describe('backend taxonomy transport', () => {
@@ -55,9 +55,50 @@ describe('backend taxonomy transport', () => {
       }),
     ).toEqual({ q: '<script>' })
   })
+  it('keeps all nine biomedical controls in the original order and eight LLM controls', () => {
+    expect(getFilterSpecs('biomed-ai').map((item) => item.label)).toEqual([
+      '论文类型',
+      '生物医学方向',
+      'AI方法',
+      '期刊/会议范围',
+      '技术任务',
+      'AI的作用',
+      '发表年份',
+      '收录状态',
+      '具体期刊/会议',
+    ])
+    expect(getFilterSpecs('llm-agent').map((item) => item.label)).toEqual([
+      '论文类型',
+      '构建/应用方向',
+      '期刊/会议范围',
+      '技术任务',
+      'LLM/Agent的作用',
+      '发表年份',
+      '收录状态',
+      '具体期刊/会议',
+    ])
+  })
+  it('transports AI method and exact original collection independently', () => {
+    expect(
+      JSON.parse(
+        String(
+          encodeFilters({ ...defaultFilters, aiMethod: '深度学习', status: '正式纳入' }).dimension,
+        ),
+      ),
+    ).toEqual({ ai_methods: '深度学习', collection: '正式纳入' })
+    expect(
+      JSON.parse(
+        String(
+          encodeFilters({ ...defaultFilters, topic: 'llm-agent', status: '预印本候选' }).dimension,
+        ),
+      ),
+    ).toEqual({ display_collection: '预印本候选' })
+  })
   it('does not turn unsafe evidence URLs into links', () => {
     expect(safeLink('javascript:alert(1)')).toBeUndefined()
     expect(safeLink('data:text/html,x')).toBeUndefined()
+    expect(safeLink('file:///etc/passwd')).toBeUndefined()
+    expect(safeLink('https://user:pass@example.com')).toBeUndefined()
     expect(safeLink('https://example.com')).toBe('https://example.com/')
   })
 })

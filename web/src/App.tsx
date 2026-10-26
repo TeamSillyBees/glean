@@ -37,15 +37,22 @@ import {
   type Topic,
   type TopicSlug,
 } from './lib/types'
-import { filterFacets, restoreFilters } from './lib/filters'
+import { filterFacets, getFilterSpecs, restoreFilters } from './lib/filters'
 import { cn, number, readLabels, reviewLabels, topicLabels } from './lib/utils'
 import { Badge, Empty, ErrorState, Loading } from './components/common'
 import { Button } from './components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './components/ui/dialog'
 import { Select } from './components/ui/select'
+import { FilterCombobox } from './components/ui/filter-combobox'
 import { Tooltip, TooltipProvider } from './components/ui/tooltip'
 import { PaperCard, PaperDetail } from './components/papers'
-import { RunsView, SourcesView, TemplatesView, VenuesView } from './components/monitor'
+import {
+  FreshnessStrip,
+  RunsView,
+  SourcesView,
+  TemplatesView,
+  VenuesView,
+} from './components/monitor'
 
 type View = 'papers' | 'sources' | 'runs' | 'templates' | 'venues'
 const topicIcons = { 'biomed-ai': Dna, 'llm-agent': Network, 'biomed-worldmodel': Layers3 }
@@ -76,16 +83,6 @@ const viewMeta: Record<View, { title: string; description: string; eyebrow: stri
     eyebrow: 'KNOW YOUR SOURCES',
   },
 }
-const filterSpecs: { key: keyof Filters; label: string; facet: keyof Facets }[] = [
-  { key: 'method', label: '论文类型', facet: 'methods' },
-  { key: 'direction', label: '研究方向', facet: 'directions' },
-  { key: 'tier', label: '期刊 / 会议范围', facet: 'tiers' },
-  { key: 'task', label: '技术任务', facet: 'tasks' },
-  { key: 'role', label: '模型角色', facet: 'roles' },
-  { key: 'year', label: '发表年份', facet: 'years' },
-  { key: 'reviewStatus', label: '审读状态', facet: 'readStatuses' },
-  { key: 'venue', label: '期刊 / 会议', facet: 'venues' },
-]
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
@@ -239,6 +236,9 @@ function FilterPanel({
   onReset,
   onSave,
   saving,
+  loading,
+  failed,
+  retry,
 }: {
   filters: Filters
   facets?: Facets
@@ -246,9 +246,17 @@ function FilterPanel({
   onReset: () => void
   onSave: () => void
   saving: boolean
+  loading: boolean
+  failed: boolean
+  retry: () => void
 }) {
+  const filterSpecs = getFilterSpecs(filters.topic)
   return (
-    <div className="rounded-xl border bg-white">
+    <div
+      data-testid={loading ? 'filters-loading' : failed ? 'filters-error' : 'filters-ready'}
+      aria-busy={loading}
+      className="rounded-xl border bg-white"
+    >
       <div className="flex items-center justify-between border-b px-5 py-4">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <SlidersHorizontal className="size-4" />
@@ -261,24 +269,60 @@ function FilterPanel({
           重置
         </button>
       </div>
-      <div className="space-y-4 p-5">
+      {loading && (
+        <p
+          role="status"
+          className="flex items-center gap-2 px-5 pt-4 text-xs text-muted-foreground"
+        >
+          <LoaderCircle className="size-3.5 animate-spin" />
+          正在读取本目录筛选项…
+        </p>
+      )}
+      {failed && (
+        <div role="alert" className="px-5 pt-4 text-xs text-amber-800">
+          筛选项读取失败。
+          <button onClick={retry} className="ml-2 rounded text-primary underline">
+            重新读取
+          </button>
+        </div>
+      )}
+      <div className="space-y-3 px-5 py-4">
         {filterSpecs.map((spec) => {
           let values: Facet[] = filterFacets(facets, filters.topic, spec.key, spec.facet)
           if (spec.key === 'readStatus' && !values.length)
             values = Object.keys(readLabels).map((value) => ({ value, count: 0 }))
           const selected = String(filters[spec.key])
-          if (selected && !values.some((item) => item.value === selected))
-            values = [{ value: selected, count: 0 }, ...values]
+          const hasSelected = values.some((item) => item.value === selected)
+          if (selected && !hasSelected) values = [{ value: selected, count: 0 }, ...values]
           return (
             <div key={spec.key}>
-              <label className="mb-2 block text-[11px] font-medium text-slate-500">
-                {spec.label}
-              </label>
-              <Select
+              <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                <span>{spec.label}</span>
+                <Tooltip label={spec.help}>
+                  <button
+                    type="button"
+                    aria-label={`${spec.label}说明`}
+                    className="rounded text-slate-300 hover:text-primary"
+                  >
+                    <CircleHelp className="size-3" />
+                  </button>
+                </Tooltip>
+              </div>
+              <FilterCombobox
+                disabled={loading || failed}
+                filterKey={spec.key}
                 label={spec.label}
                 value={selected}
                 onValueChange={(value) => onChange(spec.key, value)}
-                placeholder={values.length ? '全部' : '暂无已记录分类'}
+                placeholder={
+                  loading
+                    ? '筛选项加载中'
+                    : failed
+                      ? '筛选项读取失败'
+                      : values.length
+                        ? '全部'
+                        : '当前目录暂无此标签'
+                }
                 options={values.map((item) => ({
                   value: item.value,
                   label:
@@ -287,7 +331,7 @@ function FilterPanel({
                       : spec.key === 'reviewStatus'
                         ? reviewLabels[item.value] || item.value
                         : item.value,
-                  count: item.count,
+                  count: selected === item.value && !hasSelected ? undefined : item.count,
                 }))}
               />
             </div>
@@ -299,7 +343,7 @@ function FilterPanel({
           {saving ? <LoaderCircle className="animate-spin" /> : <Save />}保存当前筛选
         </Button>
         <p className="mt-3 text-center text-[10px] text-muted-foreground">
-          可用分类来自当前主题的后端目录
+          条件之间取交集 · 标签保留原目录含义
         </p>
       </div>
     </div>
@@ -338,12 +382,15 @@ function WorkspaceReady({
   const [filters, setFilters] = useState<Filters>(initialFilters)
   const [view, setView] = useState<View>('papers')
   const [search, setSearch] = useState(initialFilters.q)
+  const [venueSearch, setVenueSearch] = useState('')
+  const [venueQuery, setVenueQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [mobileNav, setMobileNav] = useState(false)
   const [mobileFilters, setMobileFilters] = useState(false)
   const [settings, setSettings] = useState(false)
   const [message, setMessage] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  const resultsRef = useRef<HTMLElement>(null)
   const detailTrigger = useRef<HTMLElement | null>(null)
   const prefs = useQuery({
     queryKey: ['preferences'],
@@ -380,9 +427,17 @@ function WorkspaceReady({
     setFilters({ ...filters, page: lastPage })
   }
   const facetQuery = useQuery({
-    queryKey: ['facets', filters.topic, filters.hidden],
+    queryKey: ['facets', filters.topic, filters.hidden, filters.collectionScope],
     queryFn: ({ signal }) =>
-      api.facets({ ...defaultFilters, topic: filters.topic, hidden: filters.hidden }, signal),
+      api.facets(
+        {
+          ...defaultFilters,
+          topic: filters.topic,
+          hidden: filters.hidden,
+          collectionScope: filters.collectionScope,
+        },
+        signal,
+      ),
     enabled: view === 'papers',
   })
   const savePrefs = useMutation({
@@ -401,8 +456,17 @@ function WorkspaceReady({
     },
   })
   const activeTopic = topics.data?.items?.find((topic) => topic.slug === filters.topic)
+  const filterSpecs = getFilterSpecs(filters.topic)
   const activeFilters = filterSpecs.filter((spec) => filters[spec.key])
-  const activeCount = activeFilters.length + (filters.q ? 1 : 0) + (filters.readStatus ? 1 : 0)
+  const activeCount =
+    activeFilters.length +
+    [
+      filters.q,
+      filters.readStatus,
+      filters.source,
+      filters.inclusionStatus,
+      filters.reviewStatus,
+    ].filter(Boolean).length
   const reset = () => {
     setFilters({ ...defaultFilters, topic: filters.topic, hidden: filters.hidden })
     setSearch('')
@@ -422,7 +486,8 @@ function WorkspaceReady({
   }
   const submitSearch = (event: FormEvent) => {
     event.preventDefault()
-    change('q', search.trim())
+    if (view === 'venues') setVenueQuery(venueSearch.trim())
+    else change('q', search.trim())
   }
   const refresh = () => {
     client.invalidateQueries({ queryKey: [view === 'papers' ? 'papers' : view] })
@@ -451,7 +516,7 @@ function WorkspaceReady({
           icon={EyeOff}
           active={view === 'papers' && filters.hidden === 'only'}
           onClick={() => {
-            change('hidden', 'only')
+            setFilters((old) => ({ ...old, hidden: 'only', collectionScope: 'all', page: 1 }))
             navigate('papers')
           }}
         >
@@ -571,45 +636,60 @@ function WorkspaceReady({
             </Button>
           </Tooltip>
         </header>
-        <main id="main-content" className="main-content">
-          <div className="mb-7 flex flex-wrap items-end justify-between gap-5">
+        <main id="main-content" tabIndex={-1} className="main-content outline-none">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-7 sm:gap-5">
             <div>
-              <p className="eyebrow">{viewMeta[view].eyebrow}</p>
-              <h1 className="mt-2 text-[28px] font-semibold tracking-tight text-slate-900">
+              <p className="eyebrow hidden sm:block">{viewMeta[view].eyebrow}</p>
+              <h1 className="text-[21px] font-semibold tracking-tight text-slate-900 sm:mt-2 sm:text-[28px]">
                 {view === 'papers' && filters.hidden === 'only'
                   ? '已隐藏的论文'
                   : viewMeta[view].title}
               </h1>
-              <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+              <p className="mt-2 hidden text-[13px] leading-6 text-muted-foreground sm:block">
                 {view === 'papers' && filters.hidden === 'only'
-                  ? '为工作台留白。这里的论文随时可以恢复。'
+                  ? '这里保存你在所有主题中隐藏的论文，随时可以恢复。'
                   : viewMeta[view].description}
               </p>
             </div>
-            <div className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-xs text-slate-600">
+            <div className="hidden items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-xs text-slate-600 sm:flex">
               <span className="size-1.5 rounded-full bg-primary" />
               {topicLabels[filters.topic]}
             </div>
           </div>
-          {view === 'papers' && <TopicIntro topic={activeTopic} loading={topics.isLoading} />}
+          {view === 'papers' && (
+            <>
+              <TopicIntro topic={activeTopic} loading={topics.isLoading} />
+              <FreshnessStrip topic={filters.topic} onOpen={() => navigate('sources')} />
+            </>
+          )}
           {(view === 'papers' || view === 'venues') && (
             <form onSubmit={submitSearch} className="search-bar mb-6">
               <Search className="size-[18px] shrink-0 text-slate-400" />
               <input
                 ref={searchRef}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                value={view === 'venues' ? venueSearch : search}
+                maxLength={300}
+                onChange={(event) =>
+                  view === 'venues'
+                    ? setVenueSearch(event.target.value)
+                    : setSearch(event.target.value)
+                }
                 placeholder={view === 'venues' ? '搜索期刊或会议名称…' : '搜索论文标题、摘要、DOI…'}
-                aria-label="搜索论文或来源"
+                aria-label={view === 'venues' ? '搜索期刊或会议' : '搜索论文或来源'}
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
               />
-              {search && (
+              {(view === 'venues' ? venueSearch : search) && (
                 <button
                   type="button"
                   aria-label="清空搜索"
                   onClick={() => {
-                    setSearch('')
-                    change('q', '')
+                    if (view === 'venues') {
+                      setVenueSearch('')
+                      setVenueQuery('')
+                    } else {
+                      setSearch('')
+                      change('q', '')
+                    }
                   }}
                   className="rounded p-1 hover:bg-secondary"
                 >
@@ -632,13 +712,20 @@ function WorkspaceReady({
                 <FilterPanel
                   filters={filters}
                   facets={facetQuery.data}
+                  loading={facetQuery.isPending}
+                  failed={facetQuery.isError}
+                  retry={() => facetQuery.refetch()}
                   onChange={change}
                   onReset={reset}
                   onSave={() => savePrefs.mutate()}
                   saving={savePrefs.isPending}
                 />
               </aside>
-              <section className="min-w-0">
+              <section
+                ref={resultsRef}
+                className="min-w-0 scroll-mt-5"
+                aria-busy={paperQuery.isFetching}
+              >
                 <div className="mb-4 flex flex-wrap items-center gap-3">
                   <h2 data-testid="results-count" className="text-sm font-medium text-slate-600">
                     找到{' '}
@@ -663,7 +750,7 @@ function WorkspaceReady({
                     筛选{activeCount > 0 && <Badge tone="violet">{activeCount}</Badge>}
                   </Button>
                   <div className="ml-auto flex gap-2">
-                    <div className="hidden w-28 sm:block">
+                    <div className="w-28">
                       <Select
                         label="个人阅读状态"
                         value={filters.readStatus}
@@ -683,6 +770,8 @@ function WorkspaceReady({
                         placeholder="排序方式"
                         options={[
                           { value: 'newest', label: '最新发表优先' },
+                          { value: 'observed', label: '最近来源变化' },
+                          { value: 'source-updated', label: '来源最近更新' },
                           { value: 'oldest', label: '最早发表优先' },
                           { value: 'title', label: '标题顺序' },
                         ]}
@@ -690,6 +779,69 @@ function WorkspaceReady({
                     </div>
                   </div>
                 </div>
+                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-white px-3 py-2.5">
+                  <div
+                    role="group"
+                    aria-label="目录范围"
+                    className="flex w-full gap-1 rounded-md bg-secondary/70 p-1 sm:w-auto"
+                  >
+                    {(
+                      [
+                        { value: 'curated', label: '精选目录' },
+                        { value: 'pending', label: '新发现待审' },
+                        { value: 'all', label: '全部记录' },
+                      ] as const
+                    ).map((scope) => (
+                      <button
+                        key={scope.value}
+                        type="button"
+                        aria-pressed={filters.collectionScope === scope.value}
+                        onClick={() =>
+                          setFilters((old) => ({
+                            ...old,
+                            collectionScope: scope.value,
+                            inclusionStatus: '',
+                            page: 1,
+                          }))
+                        }
+                        className={cn(
+                          'flex-1 whitespace-nowrap rounded px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          filters.collectionScope === scope.value
+                            ? 'bg-white font-semibold text-primary shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {scope.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="min-w-36 flex-1 sm:max-w-56">
+                    <FilterCombobox
+                      disabled={facetQuery.isPending || facetQuery.isError}
+                      label="采集来源"
+                      value={filters.source}
+                      onValueChange={(value) => change('source', value)}
+                      placeholder={
+                        facetQuery.isPending
+                          ? '来源加载中'
+                          : facetQuery.isError
+                            ? '来源读取失败'
+                            : '全部来源'
+                      }
+                      options={(facetQuery.data?.sources || []).map((item) => ({
+                        ...item,
+                        label: item.value,
+                      }))}
+                    />
+                  </div>
+                </div>
+                <p className="mb-4 text-[11px] leading-5 text-muted-foreground">
+                  {filters.collectionScope === 'curated'
+                    ? '沿用原目录的正式纳入范围，不将新发现自动纳入。'
+                    : filters.collectionScope === 'pending'
+                      ? '真实来源的新发现，尚未完成科学审读。'
+                      : '全部记录包含精选、待核、背景与范围外资料。'}
+                </p>
                 {activeCount > 0 && (
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     {filters.q && (
@@ -705,6 +857,24 @@ function WorkspaceReady({
                       <FilterChip
                         label={`个人阅读：${readLabels[filters.readStatus]}`}
                         onRemove={() => change('readStatus', '')}
+                      />
+                    )}
+                    {filters.source && (
+                      <FilterChip
+                        label={`采集来源：${filters.source}`}
+                        onRemove={() => change('source', '')}
+                      />
+                    )}
+                    {filters.inclusionStatus && (
+                      <FilterChip
+                        label={`记录范围：${filters.inclusionStatus === 'historical' ? '历史目录' : filters.inclusionStatus === 'pending-review' ? '新发现 · 待审' : filters.inclusionStatus}`}
+                        onRemove={() => change('inclusionStatus', '')}
+                      />
+                    )}
+                    {filters.reviewStatus && (
+                      <FilterChip
+                        label={`审读证据：${reviewLabels[filters.reviewStatus] || filters.reviewStatus}`}
+                        onRemove={() => change('reviewStatus', '')}
                       />
                     )}
                     {activeFilters.map((spec) => (
@@ -745,14 +915,21 @@ function WorkspaceReady({
                   <ErrorState error={paperQuery.error} retry={() => paperQuery.refetch()} />
                 ) : !paperQuery.data?.items?.length ? (
                   <Empty
+                    title={
+                      filters.collectionScope === 'pending' && activeCount === 0
+                        ? '还没有待审的新发现'
+                        : undefined
+                    }
                     description={
-                      filters.hidden === 'only'
-                        ? '还没有隐藏的论文。你可以在论文详情里管理可见性。'
-                        : '试试减少筛选条件，或换一个关键词。'
+                      filters.collectionScope === 'pending' && activeCount === 0
+                        ? '真实来源完成新发现采集后会显示在这里。历史待核资料可在「全部记录」中查看。'
+                        : filters.hidden === 'only' && activeCount === 0
+                          ? '当前主题暂无隐藏记录。你可以在论文详情里管理可见性。'
+                          : '试试减少筛选条件，或换一个关键词。'
                     }
                   >
                     <Button variant="outline" size="sm" onClick={reset}>
-                      清除筛选
+                      {activeCount > 0 ? '清除筛选' : '返回精选目录'}
                     </Button>
                   </Empty>
                 ) : (
@@ -776,13 +953,34 @@ function WorkspaceReady({
                         {number(Math.min(filters.page * filters.pageSize, paperQuery.data.total))}{' '}
                         篇，共 {number(paperQuery.data.total)} 篇
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="mr-2 w-28">
+                          <Select
+                            label="每页条数"
+                            value={String(filters.pageSize)}
+                            onValueChange={(value) =>
+                              setFilters((old) => ({
+                                ...old,
+                                page: 1,
+                                pageSize: Number(value) || 20,
+                              }))
+                            }
+                            placeholder="每页条数"
+                            options={[20, 40, 100].map((value) => ({
+                              value: String(value),
+                              label: `每页 ${value} 篇`,
+                            }))}
+                          />
+                        </div>
                         <Button
                           variant="outline"
                           size="icon"
                           aria-label="上一页"
                           disabled={filters.page <= 1 || paperQuery.isFetching}
-                          onClick={() => setFilters((old) => ({ ...old, page: old.page - 1 }))}
+                          onClick={() => {
+                            setFilters((old) => ({ ...old, page: old.page - 1 }))
+                            resultsRef.current?.scrollIntoView({ block: 'start' })
+                          }}
                         >
                           <ChevronLeft />
                         </Button>
@@ -798,7 +996,10 @@ function WorkspaceReady({
                             filters.page * filters.pageSize >= paperQuery.data.total ||
                             paperQuery.isFetching
                           }
-                          onClick={() => setFilters((old) => ({ ...old, page: old.page + 1 }))}
+                          onClick={() => {
+                            setFilters((old) => ({ ...old, page: old.page + 1 }))
+                            resultsRef.current?.scrollIntoView({ block: 'start' })
+                          }}
                         >
                           <ChevronRight />
                         </Button>
@@ -809,13 +1010,13 @@ function WorkspaceReady({
               </section>
             </div>
           ) : view === 'sources' ? (
-            <SourcesView />
+            <SourcesView topic={filters.topic} />
           ) : view === 'runs' ? (
             <RunsView />
           ) : view === 'templates' ? (
             <TemplatesView topic={filters.topic} />
           ) : (
-            <VenuesView topic={filters.topic} q={filters.q} />
+            <VenuesView topic={filters.topic} q={venueQuery} />
           )}
           <footer className="mt-10 flex flex-wrap items-center gap-2 border-t pt-5 text-[10px] text-slate-400">
             <Sparkles className="size-3" />
@@ -825,7 +1026,11 @@ function WorkspaceReady({
         </main>
       </div>
       <PaperDetail
-        restoreFocus={() => detailTrigger.current?.focus()}
+        restoreFocus={() =>
+          detailTrigger.current?.isConnected
+            ? detailTrigger.current.focus()
+            : searchRef.current?.focus()
+        }
         id={selected}
         onClose={() => setSelected(null)}
         notify={setMessage}
@@ -844,6 +1049,9 @@ function WorkspaceReady({
           <FilterPanel
             filters={filters}
             facets={facetQuery.data}
+            loading={facetQuery.isPending}
+            failed={facetQuery.isError}
+            retry={() => facetQuery.refetch()}
             onChange={change}
             onReset={reset}
             onSave={() => savePrefs.mutate()}
@@ -880,7 +1088,7 @@ function WorkspaceReady({
               variant="outline"
               onClick={() => {
                 setSettings(false)
-                change('hidden', 'only')
+                setFilters((old) => ({ ...old, hidden: 'only', collectionScope: 'all', page: 1 }))
                 navigate('papers')
               }}
             >
@@ -916,28 +1124,40 @@ function WorkspaceReady({
 }
 function TopicIntro({ topic, loading }: { topic?: Topic; loading: boolean }) {
   return (
-    <section className="topic-intro mb-6">
-      <div className="relative z-10 flex flex-wrap items-center gap-4">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/80 bg-white/70 shadow-sm">
-          <FlaskConical className="size-5 text-violet-600" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[13px] font-semibold text-slate-700">
-            {topic?.description || '你的研究，全景呈现'}
-          </h2>
-          <p className="mt-1.5 text-[11px] leading-5 text-slate-500">
-            {topic?.rule ||
-              (loading ? '正在读取主题纳入规则…' : '纳入规则以独立后端的主题配置为准。')}
-          </p>
-        </div>
-        <div className="border-l border-violet-200/70 pl-5 text-right">
-          <span className="text-[23px] font-semibold tracking-tight text-violet-900">
-            {number(topic?.membershipCount)}
-          </span>
-          <p className="mt-0.5 text-[10px] text-violet-700/60">主题目录条目</p>
-        </div>
+    <>
+      <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground sm:hidden">
+        主题共 {number(topic?.membershipCount)} 条记录
+        {topic?.curatedCount != null && <span>· 精选 {number(topic.curatedCount)} 篇</span>}
       </div>
-    </section>
+      <section className="topic-intro mb-6 hidden sm:block">
+        <div className="relative z-10 flex flex-wrap items-center gap-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/80 bg-white/70 shadow-sm">
+            <FlaskConical className="size-5 text-violet-600" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[13px] font-semibold text-slate-700">
+              {topic?.description || '你的研究，全景呈现'}
+            </h2>
+            <p className="mt-1.5 text-[11px] leading-5 text-slate-500">
+              {topic?.rule ||
+                (loading ? '正在读取主题纳入规则…' : '纳入规则以独立后端的主题配置为准。')}
+            </p>
+          </div>
+          <div className="border-l border-violet-200/70 pl-5 text-right">
+            <span className="text-[23px] font-semibold tracking-tight text-violet-900">
+              {number(topic?.membershipCount)}
+            </span>
+            <p className="mt-0.5 text-[10px] text-violet-700/60">主题目录条目</p>
+            {topic?.historicalCount != null && (
+              <p className="mt-1 text-[10px] text-slate-500">
+                历史 {number(topic.historicalCount)}
+                {topic.candidateCount != null && ` · 新发现待审 ${number(topic.candidateCount)}`}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    </>
   )
 }
 function NavButton({

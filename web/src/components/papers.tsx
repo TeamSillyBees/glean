@@ -1,23 +1,16 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  ArrowUpRight,
-  BookOpen,
-  CalendarDays,
-  Check,
-  ChevronRight,
-  EyeOff,
-  FileText,
-  Link2,
-  Quote,
-} from 'lucide-react'
+import { ArrowUpRight, BookOpen, CalendarDays, Check, ChevronRight, EyeOff } from 'lucide-react'
 import type { Paper, ReadStatus, TopicSlug } from '../lib/types'
 import { api } from '../lib/api'
-import { cn, date, readLabels, reviewLabels, safeLink, topicLabels } from '../lib/utils'
-import { Badge, Empty, ErrorState, ExternalLink, Loading } from './common'
+import { cn, date, readLabels, reviewLabels, safeLink } from '../lib/utils'
+import { Badge, ErrorState, ExternalLink, Loading } from './common'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Tooltip } from './ui/tooltip'
+import { PaperOverview, PaperEvidence } from './paper-content'
+import { readingSnippet } from '../lib/presentation'
 export function PaperCard({
   paper,
   topic,
@@ -28,20 +21,33 @@ export function PaperCard({
   onOpen: () => void
 }) {
   const membership = paper.memberships?.find((item) => item.topic === topic)
-  const tags = membership?.categories?.slice(0, 3) || []
+  const tags = (
+    membership?.dimensions?.display_tasks ||
+    membership?.dimensions?.technical_tasks ||
+    membership?.categories ||
+    []
+  )
+    .filter(
+      (tag) =>
+        !['其他', '待核', '其他/待核', '其他／待核', 'unknown', '未分类'].includes(tag.trim()),
+    )
+    .slice(0, 3)
+  const snippet = readingSnippet(paper, membership)
   const reviewStatus = membership?.dimensions?.display_review_status?.[0]
   return (
     <article
       data-testid="paper-card"
       data-paper-id={paper.id}
-      className="paper-card group relative rounded-xl border bg-white px-6 py-5 transition-all hover:border-violet-200 hover:shadow-[0_5px_24px_-15px_rgba(79,70,229,.45)]"
+      className="paper-card group relative min-w-0 [overflow-wrap:anywhere] rounded-xl border bg-white px-6 py-5 transition-all hover:border-violet-200 hover:shadow-[0_5px_24px_-15px_rgba(79,70,229,.45)]"
     >
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold text-slate-700">{paper.venue || '来源待核验'}</span>
         {paper.year > 0 && <span className="text-muted-foreground">· {paper.year}</span>}
         {membership?.tier && <Badge tone="violet">{membership.tier}</Badge>}
         <span className="ml-auto flex items-center gap-2">
-          {paper.isMock && <Badge tone="violet">MOCK</Badge>}
+          {membership?.inclusionStatus === 'pending-review' && (
+            <Badge tone="amber">新发现 · 待审</Badge>
+          )}
           <span
             className={cn(
               'flex items-center gap-1.5 text-[11px]',
@@ -73,8 +79,11 @@ export function PaperCard({
           <p className="mt-1 line-clamp-1 text-[13px] leading-6 text-slate-500">{paper.title}</p>
         )}
       </button>
-      {paper.abstract && (
-        <p className="mt-3 line-clamp-2 text-[13px] leading-6 text-slate-500">{paper.abstract}</p>
+      {snippet.text && (
+        <p className="mt-3 line-clamp-2 text-[13px] leading-6 text-slate-500">
+          <span className="mr-2 text-[10px] font-medium text-slate-400">{snippet.label}</span>
+          {snippet.text}
+        </p>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {tags.map((tag) => (
@@ -85,11 +94,12 @@ export function PaperCard({
             {reviewLabels[reviewStatus] || reviewStatus}
           </span>
         )}
-        {paper.publicationType && (
-          <span className="text-[11px] text-muted-foreground">{paper.publicationType}</span>
-        )}
+        {paper.publicationType &&
+          !['其他', '待核', '其他/待核', '其他／待核', 'unknown', '未分类'].includes(
+            paper.publicationType.trim(),
+          ) && <span className="text-[11px] text-muted-foreground">{paper.publicationType}</span>}
         <span className="ml-auto flex items-center gap-3 text-[11px] text-muted-foreground">
-          <Tooltip label="只展示正式 online 日期；不以接收或索引日期代替">
+          <Tooltip label="只展示正式在线发表 日期；不以接收或索引日期代替">
             <span className="inline-flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
               {paper.formalOnlineDate ? date(paper.formalOnlineDate) : '正式日期待核验'}
@@ -141,10 +151,14 @@ export function PaperDetail({
       client.invalidateQueries({ queryKey: ['paper', variables.paper.id] })
       client.invalidateQueries({ queryKey: ['facets'] })
       notify(
-        variables.hidden === true ? '已加入隐藏列表，可在「已隐藏」中恢复。' : '阅读状态已保存。',
+        variables.hidden === true
+          ? '已在所有主题中隐藏，可在「已隐藏」中恢复。'
+          : '阅读状态已保存。',
       )
     },
   })
+  const { reset: resetMutation } = mutation
+  useEffect(() => resetMutation(), [id, resetMutation])
   const paper = query.data
   return (
     <Dialog
@@ -160,7 +174,7 @@ export function PaperDetail({
           restoreFocus?.()
         }}
       >
-        <div className="border-b px-7 py-6">
+        <div className="sticky top-0 z-10 border-b bg-white/95 px-5 py-5 backdrop-blur sm:px-7">
           <div className="mb-1 flex items-center gap-2 text-xs font-medium text-primary">
             <BookOpen className="size-4" />
             阅读空间
@@ -178,14 +192,14 @@ export function PaperDetail({
           </div>
         ) : (
           paper && (
-            <div className="px-7 py-7">
+            <div className="px-5 py-6 sm:px-7">
               <div className="mb-4 flex flex-wrap gap-2">
                 <Badge>{paper.venue || '来源待核验'}</Badge>
                 {paper.year > 0 && <Badge>{paper.year}</Badge>}
-                {paper.isMock && <Badge tone="violet">MOCK · 非真实审读</Badge>}
+                {paper.review?.isMock && <Badge tone="violet">模型总结为模拟输出</Badge>}
                 {paper.hidden && <Badge tone="amber">已隐藏</Badge>}
               </div>
-              <h2 className="text-2xl font-semibold leading-relaxed tracking-tight">
+              <h2 className="break-words text-xl font-semibold leading-relaxed tracking-tight sm:text-2xl">
                 {paper.titleZh || paper.title}
               </h2>
               {paper.titleZh && (
@@ -207,7 +221,9 @@ export function PaperDetail({
                     {readLabels[status]}
                   </Button>
                 ))}
-                <Tooltip label={paper.hidden ? '移回论文目录' : '从默认列表隐藏，可随时恢复'}>
+                <Tooltip
+                  label={paper.hidden ? '在所有主题中恢复显示' : '在所有主题中隐藏，可随时恢复'}
+                >
                   <Button
                     className="ml-auto"
                     variant="ghost"
@@ -220,6 +236,9 @@ export function PaperDetail({
                   </Button>
                 </Tooltip>
               </div>
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                隐藏状态适用于所有主题；可在「已隐藏」中恢复。个人阅读状态不会改变原始审读记录。
+              </p>
               {mutation.isError && mutation.variables?.paper.id === id && (
                 <p role="alert" className="mt-3 text-sm text-red-700">
                   {mutation.error.message}
@@ -235,116 +254,10 @@ export function PaperDetail({
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="overview">
-                  <section>
-                    <h3 className="section-title">
-                      <Quote className="size-4" />
-                      摘要 / 历史摘要
-                    </h3>
-                    <p className="mt-3 whitespace-pre-line text-sm leading-8 text-slate-600">
-                      {paper.abstract || '这篇论文暂未提供摘要。可通过下方原文链接继续阅读。'}
-                    </p>
-                  </section>
-                  <section className="mt-8">
-                    <h3 className="section-title">
-                      <CalendarDays className="size-4" />
-                      正式发表时间
-                    </h3>
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className="rounded-xl bg-secondary/60 p-4">
-                        <p className="text-xs text-muted-foreground">正式 online</p>
-                        <p className="mt-2 font-semibold">{date(paper.formalOnlineDate)}</p>
-                      </div>
-                      <div className="rounded-xl bg-secondary/60 p-4">
-                        <p className="text-xs text-muted-foreground">卷期发表</p>
-                        <p className="mt-2 font-semibold">{date(paper.issueDate)}</p>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs leading-6 text-muted-foreground">
-                      {paper.dateProvenance ||
-                        '日期依据待核验。接收、提交和索引日期不视为正式发表日期。'}
-                    </p>
-                  </section>
-                  <section className="mt-8">
-                    <h3 className="section-title">
-                      <FileText className="size-4" />
-                      主题归属
-                    </h3>
-                    <div className="mt-4 space-y-3">
-                      {paper.memberships?.map((m) => (
-                        <div key={`${m.topic}-${m.originalId}`} className="rounded-xl border p-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {topicLabels[m.topic] || m.topic}
-                            </span>
-                            {m.tier && <Badge tone="violet">{m.tier}</Badge>}
-                            {m.isMock && <Badge tone="violet">MOCK</Badge>}
-                            {m.dimensions?.display_review_status?.map((status) => (
-                              <Badge key={status}>{reviewLabels[status] || status}</Badge>
-                            ))}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {m.categories?.map((category) => (
-                              <Badge key={category}>{category}</Badge>
-                            ))}
-                          </div>
-                          <p className="mt-3 text-xs text-muted-foreground">
-                            历史 ID：{m.originalId} · {m.source || '历史目录'}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
+                  <PaperOverview paper={paper} />
                 </TabsContent>
                 <TabsContent value="evidence">
-                  <h3 className="section-title">
-                    <Link2 className="size-4" />
-                    可追溯的来源
-                  </h3>
-                  <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                    保留原始记录，不在前端推断分类、指标或发表日期。
-                  </p>
-                  {!paper.evidence?.length && (
-                    <div className="mt-4">
-                      <Empty
-                        title="暂无结构化证据"
-                        description="原始历史记录仍可在下方查看；缺失证据不会被模拟补全。"
-                      />
-                    </div>
-                  )}
-                  <div className="mt-5 space-y-4">
-                    {paper.evidence?.map((evidence, index) => (
-                      <section
-                        key={`${evidence.source}-${index}`}
-                        className="rounded-xl border p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <strong className="text-sm">{evidence.source || '原始来源'}</strong>
-                          <ExternalLink href={evidence.url}>访问来源</ExternalLink>
-                        </div>
-                        <p className="mt-3 text-xs text-muted-foreground">
-                          事件：{evidence.dateType || '未标记'} · {date(evidence.date)}
-                        </p>
-                        <details className="mt-4">
-                          <summary className="cursor-pointer text-xs font-medium text-primary">
-                            查看原始证据
-                          </summary>
-                          <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-secondary p-3 text-[11px] leading-6">
-                            {JSON.stringify(evidence.raw, null, 2)}
-                          </pre>
-                        </details>
-                      </section>
-                    ))}
-                    {paper.memberships?.map((m) => (
-                      <details key={m.originalId} className="rounded-xl border p-4">
-                        <summary className="cursor-pointer text-sm font-medium">
-                          {topicLabels[m.topic]} · 原始历史记录
-                        </summary>
-                        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-secondary p-3 text-[11px] leading-6">
-                          {JSON.stringify(m.raw, null, 2)}
-                        </pre>
-                      </details>
-                    ))}
-                  </div>
+                  <PaperEvidence paper={paper} />
                 </TabsContent>
               </Tabs>
               <div className="mt-8 flex flex-wrap items-center gap-4 border-t pt-6">

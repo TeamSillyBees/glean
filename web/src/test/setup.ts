@@ -15,6 +15,14 @@ if (typeof window !== 'undefined') {
       dispatchEvent: vi.fn(),
     })),
   })
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    writable: true,
+    value: class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  })
   HTMLElement.prototype.scrollIntoView = vi.fn()
   HTMLElement.prototype.hasPointerCapture = () => false
   HTMLElement.prototype.setPointerCapture = vi.fn()

@@ -33,7 +33,9 @@ export function safeLink(value: string | undefined): string | undefined {
   if (!value) return undefined
   try {
     const url = new URL(value)
-    return ['https:', 'http:'].includes(url.protocol) ? url.href : undefined
+    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password
+      ? url.href
+      : undefined
   } catch {
     return undefined
   }
@@ -41,7 +43,7 @@ export function safeLink(value: string | undefined): string | undefined {
 export const readLabels: Record<string, string> = { unread: '未读', reading: '在读', read: '已读' }
 export const topicLabels: Record<string, string> = {
   'biomed-ai': '生物医学 × AI',
-  'llm-agent': '大模型与智能体',
+  'llm-agent': '大模型知识工程',
   'biomed-worldmodel': '生物医学世界模型',
 }
 

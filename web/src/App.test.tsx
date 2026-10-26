@@ -10,6 +10,8 @@ let currentPaper: Paper
 let saved: Record<string, unknown>
 let paths: string[]
 let failPapers: boolean
+let failFacets: boolean
+let facetsGate: Promise<Response> | null
 let logoutGate: Promise<Response> | null
 const ok = (data: unknown) =>
   new Response(JSON.stringify({ code: 'OK', message: 'success', data }), {
@@ -22,6 +24,8 @@ beforeEach(() => {
   saved = {}
   paths = []
   failPapers = false
+  failFacets = false
+  facetsGate = null
   logoutGate = null
   vi.stubGlobal(
     'fetch',
@@ -40,7 +44,11 @@ beforeEach(() => {
         if (init?.method === 'PUT') saved = JSON.parse(String(init.body)).filters
         return ok({ filters: saved })
       }
-      if (url.pathname.endsWith('/facets')) return ok(facets)
+      if (url.pathname.endsWith('/facets')) {
+        if (failFacets)
+          return new Response(JSON.stringify({ message: '测试筛选服务不可用' }), { status: 503 })
+        return facetsGate || ok(facets)
+      }
       if (url.pathname.endsWith('/papers/123/state')) {
         Object.assign(currentPaper, JSON.parse(String(init?.body)))
         return ok({ hidden: currentPaper.hidden, readStatus: currentPaper.readStatus })
@@ -67,7 +75,10 @@ beforeEach(() => {
             nextRunUtc: '2026-10-04T00:00:00Z',
             everyHours: 72,
             completedRuns: 0,
-            realFetchEnabled: false,
+            realFetchEnabled: true,
+            acquisitionMode: 'live',
+            reviewMode: 'mock',
+            schedulerEnabled: false,
           },
         })
       if (url.pathname.endsWith('/runs')) return ok({ items: [] })
@@ -99,19 +110,20 @@ describe('Glean query workspace', () => {
     const user = mount()
     await signIn(user)
     expect(await screen.findByRole('heading', { name: paper.titleZh })).toBeInTheDocument()
-    expect(screen.getByText('MOCK')).toBeInTheDocument()
+    expect(screen.queryByText('Mock 开发模式')).not.toBeInTheDocument()
     const names = screen
       .getAllByRole('combobox')
       .map((element) => element.getAttribute('aria-label'))
-    expect(names.slice(0, 8)).toEqual([
+    expect(names.slice(0, 9)).toEqual([
       '论文类型',
-      '研究方向',
-      '期刊 / 会议范围',
+      '生物医学方向',
+      'AI方法',
+      '期刊/会议范围',
       '技术任务',
-      '模型角色',
+      'AI的作用',
       '发表年份',
-      '审读状态',
-      '期刊 / 会议',
+      '收录状态',
+      '具体期刊/会议',
     ])
     expect(paths.some((path) => path.startsWith('/api/v1/catalog/papers?'))).toBe(true)
     const requests = vi.mocked(fetch).mock.calls
@@ -120,11 +132,59 @@ describe('Glean query workspace', () => {
       requests.find(([input]) => String(input).includes('/topics'))?.[1]?.headers,
     ).toMatchObject({ Authorization: 'Bearer test-access' })
   })
+  it('distinguishes loading facets from an empty taxonomy and disables controls until ready', async () => {
+    let finish!: (response: Response) => void
+    facetsGate = new Promise((resolve) => {
+      finish = resolve
+    })
+    const user = mount()
+    await signIn(user)
+    await screen.findByRole('heading', { name: paper.titleZh })
+    expect(screen.getByTestId('filters-loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('combobox', { name: '论文类型' })).toBeDisabled()
+    expect(screen.queryByText('当前目录暂无此标签')).not.toBeInTheDocument()
+    await act(async () => {
+      finish(ok(facets))
+    })
+    await screen.findByTestId('filters-ready')
+    expect(screen.getByRole('combobox', { name: '论文类型' })).toBeEnabled()
+  })
+  it('offers a retry rather than claiming there are no facet labels on failure', async () => {
+    failFacets = true
+    const user = mount()
+    await signIn(user)
+    await screen.findByTestId('filters-error')
+    expect(screen.getByRole('combobox', { name: '论文类型' })).toBeDisabled()
+    failFacets = false
+    await user.click(screen.getByRole('button', { name: '重新读取' }))
+    await screen.findByTestId('filters-ready')
+  })
+  it('starts in backend-curated scope and explicitly queries all or pending records', async () => {
+    const user = mount()
+    await signIn(user)
+    await screen.findByRole('heading', { name: paper.titleZh })
+    expect(paths.find((path) => path.startsWith('/api/v1/catalog/papers?'))).toContain(
+      'collectionScope=curated',
+    )
+    const scopes = screen.getByRole('group', { name: '目录范围' })
+    await user.click(within(scopes).getByRole('button', { name: '全部记录' }))
+    await waitFor(() =>
+      expect(
+        paths.some((path) => path.includes('/papers?') && path.includes('collectionScope=all')),
+      ).toBe(true),
+    )
+    await user.click(within(scopes).getByRole('button', { name: '新发现待审' }))
+    await waitFor(() =>
+      expect(
+        paths.some((path) => path.includes('/facets?') && path.includes('collectionScope=pending')),
+      ).toBe(true),
+    )
+  })
   it('queries literal search, shows an honest empty state, and clears it', async () => {
     const user = mount()
     await signIn(user)
     const input = screen.getByRole('textbox', { name: '搜索论文或来源' })
-    await user.type(input, '不存在')
+    fireEvent.change(input, { target: { value: '不存在' } })
     await user.click(screen.getByRole('button', { name: '搜索' }))
     expect(await screen.findByText('暂时没有匹配的论文')).toBeInTheDocument()
     expect(paths.some((path) => path.includes('q=%E4%B8%8D%E5%AD%98%E5%9C%A8'))).toBe(true)
@@ -138,7 +198,7 @@ describe('Glean query workspace', () => {
     await user.click(open)
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('heading', { name: '论文详情' })).toBeInTheDocument()
-    expect(within(dialog).getByText('正式 online')).toBeInTheDocument()
+    expect(within(dialog).getByText('正式在线发表')).toBeInTheDocument()
     expect(within(dialog).getByText('卷期发表')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('tab', { name: '来源与证据' }))
     expect(await screen.findByText('Mock source')).toBeInTheDocument()
@@ -193,12 +253,13 @@ describe('Glean query workspace', () => {
     await user.click(screen.getByRole('button', { name: '重新连接' }))
     expect(await screen.findByRole('heading', { name: paper.titleZh })).toBeInTheDocument()
   })
-  it('keeps monitoring read-only and clearly marks mock/inactive collection', async () => {
+  it('keeps real monitoring read-only and separates model mock from disabled scheduling', async () => {
     const user = mount()
     await signIn(user)
     await user.click(screen.getByRole('button', { name: '来源健康' }))
-    expect(await screen.findByText('Mock 开发模式')).toBeInTheDocument()
-    expect(screen.getByText('仅配置计划 · 真实采集未启用')).toBeInTheDocument()
+    expect(await screen.findByText('真实来源采集')).toBeInTheDocument()
+    expect(screen.getByText('定时计划未启用')).toBeInTheDocument()
+    expect(screen.queryByText('Mock 开发模式')).not.toBeInTheDocument()
     expect(screen.getByText('尚未建立来源检查点')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '扫描记录' }))
     expect(await screen.findByText('还没有扫描记录')).toBeInTheDocument()
@@ -232,8 +293,13 @@ describe('Glean query workspace', () => {
     expect(screen.getByRole('button', { name: '筛选' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: '打开导航' }))
     const dialog = await screen.findByRole('dialog')
-    await user.click(within(dialog).getByRole('button', { name: /大模型与智能体/ }))
+    await user.click(within(dialog).getByRole('button', { name: /大模型知识工程/ }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(
+      await screen.findByRole('heading', {
+        name: 'LLM / Agent 知识工程：知识抽取、构建、融合与验证',
+      }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '论文工作台', level: 1 })).toBeInTheDocument()
   })
   it('signs out immediately and a delayed logout cannot close a new signed-in workspace', async () => {

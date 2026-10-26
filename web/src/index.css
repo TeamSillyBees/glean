@@ -12,7 +12,7 @@
   --color-secondary: #f2f4f8;
   --color-secondary-foreground: #475569;
   --color-muted: #f4f5f8;
-  --color-muted-foreground: #7c8597;
+  --color-muted-foreground: #687386;
   --color-accent: #f1edfb;
   --color-accent-foreground: #6753b9;
   --color-destructive: #dc4444;
@@ -312,7 +312,7 @@
 }
 @media (max-width: 767px) {
   .main-content {
-    padding: 25px 16px 20px;
+    padding: 18px 16px 20px;
   }
   .topbar {
     height: 58px;

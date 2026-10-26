@@ -9,8 +9,8 @@ export const topics: Topic[] = [
   },
   {
     slug: 'llm-agent',
-    name: '大模型与智能体',
-    description: '方法、任务与智能体系统',
+    name: '大模型知识工程',
+    description: 'LLM / Agent 知识工程：知识抽取、构建、融合与验证',
     rule: 'JIF ≥ 4 · CCF A / B / C',
     membershipCount: 1,
   },
@@ -50,6 +50,8 @@ export const paper: Paper = {
       dimensions: {
         paper_types: ['原创研究'],
         biomedical_domains: ['模拟方向'],
+        ai_methods: ['深度学习'],
+        collection: ['正式纳入'],
         display_scope: ['核心库'],
         technical_tasks: ['分类'],
         ai_leadership: ['核心方法'],

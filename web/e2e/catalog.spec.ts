@@ -1,17 +1,21 @@
 import { expect, test, type Page, type Response, type TestInfo } from '@playwright/test'
-import type { Paper, PaperPage, Topic } from '../src/lib/types'
+import type { Facets, Paper, PaperPage, Topic, Venue } from '../src/lib/types'
 
 // No page.route, synthetic papers, token injection or mocked HTTP: every assertion
 // below observes the built UI talking to the real Go API and isolated PostgreSQL.
-function catalogResponse(page: Page, suffix: string, query: Record<string, string> = {}) {
+function apiResponse(page: Page, path: string, query: Record<string, string> = {}) {
   return page.waitForResponse((response) => {
     const url = new URL(response.url())
     return (
-      url.pathname === `/api/v1/catalog/${suffix}` &&
+      url.pathname === path &&
       response.request().method() === 'GET' &&
       Object.entries(query).every(([key, value]) => url.searchParams.get(key) === value)
     )
   })
+}
+
+function catalogResponse(page: Page, suffix: string, query: Record<string, string> = {}) {
+  return apiResponse(page, `/api/v1/catalog/${suffix}`, query)
 }
 
 async function data<T>(response: Response): Promise<T> {
@@ -48,6 +52,20 @@ async function search(page: Page, query: string) {
   const response = catalogResponse(page, 'papers', { q: query })
   await page.getByRole('button', { name: '搜索', exact: true }).click()
   return data<PaperPage>(await response)
+}
+
+async function collectionScope(page: Page, label: string, scope: string) {
+  const papers = catalogResponse(page, 'papers', { collectionScope: scope })
+  const facets = catalogResponse(page, 'facets', { collectionScope: scope })
+  const button = page
+    .getByRole('group', { name: '目录范围', exact: true })
+    .getByRole('button', { name: label, exact: true })
+  await button.click()
+  const result = await data<PaperPage>(await papers)
+  await data<Facets>(await facets)
+  await expect(button).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('filters-ready').first()).toBeAttached()
+  return result
 }
 
 async function detail(page: Page, paper: Paper) {
@@ -103,8 +121,11 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await page.goto('/')
   await screenshot(page, info, 'login')
   const topicsResponse = catalogResponse(page, 'topics')
+  const initialFacetsResponse = catalogResponse(page, 'facets', { collectionScope: 'curated' })
   const initial = await login(page, username)
-  const topics = await data<{ items: Topic[] }>(await topicsResponse)
+  await data<Facets>(await initialFacetsResponse)
+  await expect(page.getByTestId('filters-ready').first()).toBeAttached()
+  const topics = await data<{ items: (Topic & { curatedCount: number })[] }>(await topicsResponse)
   expect(
     Object.fromEntries(topics.items.map((topic) => [topic.slug, topic.membershipCount])),
   ).toEqual({
@@ -112,13 +133,42 @@ test('real historical catalog: login, filters, detail, durable personal state an
     'llm-agent': 4059,
     'biomed-worldmodel': 4037,
   })
-  expect(initial.total).toBeGreaterThan(30000)
+  expect(Object.fromEntries(topics.items.map((topic) => [topic.slug, topic.curatedCount]))).toEqual(
+    {
+      'biomed-ai': 8556,
+      'llm-agent': 1204,
+      'biomed-worldmodel': 1210,
+    },
+  )
+  expect(initial.total).toBe(8556)
+  await expect(
+    page
+      .getByRole('group', { name: '目录范围', exact: true })
+      .getByRole('button', { name: '精选目录', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true')
   expect(initial.items.every((paper) => !paper.isMock)).toBe(true)
   await expect(page.getByTestId('results-count')).toContainText(
     initial.total.toLocaleString('zh-CN'),
   )
   await noHorizontalOverflow(page)
   await screenshot(page, info, 'catalog')
+
+  expect((await collectionScope(page, '全部记录', 'all')).total).toBe(31399)
+  await screenshot(page, info, 'all-records')
+  const pending = await collectionScope(page, '新发现待审', 'pending')
+  expect(pending.total).toBe(0)
+  expect(pending.items).toEqual([])
+  await expect(page.getByTestId('paper-card')).toHaveCount(0)
+  await screenshot(page, info, 'pending-empty')
+  // Returning to a recently fetched scope may use React Query's real-response
+  // cache. Do not demand a redundant HTTP call or weaken the application cache.
+  const curatedButton = page
+    .getByRole('group', { name: '目录范围', exact: true })
+    .getByRole('button', { name: '精选目录', exact: true })
+  await curatedButton.click()
+  await expect(curatedButton).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('results-count')).toContainText('8,556')
+  await expect(page.getByTestId('filters-ready').first()).toBeAttached()
 
   const year = String(initial.items.find((paper) => paper.year > 0)!.year)
   const openFilters = page.getByRole('button', { name: /^筛选/ })
@@ -128,7 +178,11 @@ test('real historical catalog: login, filters, detail, durable personal state an
     .getByRole('combobox', { name: '发表年份', exact: true })
     .filter({ visible: true })
     .click()
+  const yearPicker = page.getByRole('dialog', { name: '发表年份筛选', exact: true })
+  await expect(yearPicker).toBeVisible()
+  await yearPicker.getByRole('combobox', { name: '查找发表年份选项', exact: true }).fill(year)
   await page.getByRole('option', { name: new RegExp(`^${year}(?:[^0-9]|$)`) }).click()
+  await expect(yearPicker).toBeHidden()
   const filtered = await data<PaperPage>(await yearResponse)
   expect(filtered.items.length).toBeGreaterThan(0)
   expect(filtered.items.every((paper) => paper.year === Number(year))).toBe(true)
@@ -149,6 +203,11 @@ test('real historical catalog: login, filters, detail, durable personal state an
 
   const target = filtered.items[0]
   const query = target.doi || target.title
+  const empty = await search(page, '__glean_browser_no_matching_historical_record_39495__')
+  expect(empty.total).toBe(0)
+  expect(empty.items).toEqual([])
+  await expect(page.getByText('暂时没有匹配的论文', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('paper-card')).toHaveCount(0)
   const found = await search(page, query)
   expect(found.items.some((paper) => paper.id === target.id)).toBe(true)
   const original = await detail(page, target)
@@ -161,6 +220,19 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await noHorizontalOverflow(page)
   await screenshot(page, info, 'paper-detail')
   await drawer.getByRole('tab', { name: '来源与证据', exact: true }).click()
+  expect(original.origin).toBe('historical')
+  expect(original.observationCount ?? 0).toBe(0)
+  await expect(
+    drawer.getByText('暂无新增来源版本。下方仍保留导入目录中的证据记录。', { exact: true }),
+  ).toBeVisible()
+  for (const link of await drawer
+    .locator('a[href]')
+    .evaluateAll((links) => links.map((element) => (element as HTMLAnchorElement).href))) {
+    const destination = new URL(link)
+    expect(['https:', 'http:']).toContain(destination.protocol)
+    expect(destination.username).toBe('')
+    expect(destination.password).toBe('')
+  }
   await screenshot(page, info, 'source-evidence')
   const read = await updateState(page, target.id, '已读')
   expect(read.readStatus).toBe('read')
@@ -206,6 +278,68 @@ test('real historical catalog: login, filters, detail, durable personal state an
   // Leave the shared real dataset clean for the second viewport project.
   expect((await updateState(page, target.id, '未读')).readStatus).toBe('unread')
   await drawer.getByRole('button', { name: '关闭', exact: true }).click()
+
+  // A configured real provider is not a completed harvest. No scheduler or live
+  // canary runs in this isolated historical-only database, so progress stays unknown.
+  await navigate(page, '来源健康')
+  await expect(page.getByText('真实来源采集', { exact: true })).toBeVisible()
+  await expect(page.getByText('定时计划未启用', { exact: true })).toBeVisible()
+  const sourcesResponse = apiResponse(page, '/api/v1/monitor/sources')
+  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  const sources = await data<{
+    items: { source: string; acquiredThrough: string; enabled: boolean }[]
+    schedule: {
+      acquisitionMode: string
+      reviewMode: string
+      schedulerEnabled: boolean
+      completedRuns: number
+    }
+  }>(await sourcesResponse)
+  expect(sources.schedule).toMatchObject({
+    acquisitionMode: 'live',
+    reviewMode: 'mock',
+    schedulerEnabled: false,
+    completedRuns: 0,
+  })
+  expect(sources.items.map((item) => item.source).sort()).toEqual([
+    'arxiv',
+    'biorxiv',
+    'crossref',
+    'europepmc',
+    'medrxiv',
+    'pubmed',
+  ])
+  expect(
+    sources.items.every(
+      (item) => !item.acquiredThrough || item.acquiredThrough.startsWith('0001-'),
+    ),
+  ).toBe(true)
+  await expect(page.getByText('尚无完成记录', { exact: true })).toHaveCount(6)
+  await noHorizontalOverflow(page)
+  await screenshot(page, info, 'source-health')
+
+  const runsResponse = apiResponse(page, '/api/v1/monitor/runs')
+  await navigate(page, '扫描记录')
+  expect((await data<{ items: unknown[] }>(await runsResponse)).items).toEqual([])
+  await expect(page.getByText('还没有扫描记录', { exact: true })).toBeVisible()
+
+  const venuesResponse = catalogResponse(page, 'venues')
+  await navigate(page, '期刊与会议')
+  const venues = await data<{ items: Venue[] }>(await venuesResponse)
+  expect(venues.items.length).toBeGreaterThan(0)
+  const venue = venues.items[0]
+  const venueSearchResponse = catalogResponse(page, 'venues', { q: venue.name })
+  await page.getByRole('textbox', { name: '搜索期刊或会议', exact: true }).fill(venue.name)
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  expect(
+    (await data<{ items: Venue[] }>(await venueSearchResponse)).items.some(
+      (item) => item.id === venue.id,
+    ),
+  ).toBe(true)
+  await expect(
+    page.getByText(venue.name, { exact: true }).filter({ visible: true }).first(),
+  ).toBeVisible()
+  await screenshot(page, info, 'venues')
   await noHorizontalOverflow(page)
   expect(errors).toEqual([])
 })

@@ -23,13 +23,18 @@ func main() {
 // validateDestination 拒绝非 CI、非回环或非专用数据库，避免测试账号进入用户数据库。
 func validateDestination(ci, dsn, password string) error {
 	u, err := url.Parse(dsn)
-	if ci != "true" || err != nil || u == nil || u.Scheme != "postgres" || u.Hostname() != "127.0.0.1" || u.Path != "/glean_browser_ci" || u.Query().Get("sslmode") != "disable" {
+	if ci != "true" || err != nil || u == nil || u.Scheme != "postgres" || u.Hostname() != "127.0.0.1" || u.Path != "/glean_browser_ci" {
 		return fmt.Errorf("requires CI=true and the dedicated loopback glean_browser_ci database")
 	}
-	// lib/pq also accepts host/dbname as URL query options; do not let them override
-	// the loopback destination validated above.
-	if len(u.Query()) != 1 || len(u.Query()["sslmode"]) != 1 || u.Fragment != "" {
+	// lib/pq 的查询参数与环境配置均可改变实际连接目标，不能覆盖上面的回环边界。
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil || len(query) != 1 || len(query["sslmode"]) != 1 || query.Get("sslmode") != "disable" || u.Fragment != "" {
 		return fmt.Errorf("test database URL may only contain a single sslmode option")
+	}
+	for _, key := range []string{"PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE"} {
+		if os.Getenv(key) != "" {
+			return fmt.Errorf("test database does not permit destination-indirection environment settings")
+		}
 	}
 	if len(password) < 24 || len(password) > 72 {
 		return fmt.Errorf("requires a generated CI-only password between 24 and 72 bytes")
