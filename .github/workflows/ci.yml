@@ -215,7 +215,9 @@ jobs:
             --env-file "$smoke/backend.env" \
             --mount "type=bind,source=$smoke/configs,target=/app/configs,readonly" \
             -p 127.0.0.1:18080:8080 glean-backend:ci
-          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-connrefused \
+          # Docker can accept then reset TCP while the process is still bootstrapping.
+          # These idempotent health GETs retry all transport errors, within a hard budget.
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-all-errors \
             --max-time 5 --retry-max-time 90 http://127.0.0.1:18080/ready > "$smoke/ready.json"
 
       - name: Smoke-test frontend static files, backend readiness and API proxy
@@ -225,7 +227,7 @@ jobs:
             --read-only --cap-drop ALL --security-opt no-new-privileges \
             --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
             -p 127.0.0.1:18081:8080 glean-web:ci
-          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-connrefused \
+          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-all-errors \
             --max-time 5 --retry-max-time 45 http://127.0.0.1:18081/healthz > /dev/null
           python3 <<'PY'
           import json
