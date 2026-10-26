@@ -1,0 +1,34 @@
+app:
+  instance_id: local-1
+
+server:
+  addr: "127.0.0.1:8080"
+
+database:
+  host: "127.0.0.1"
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  dbname: "initra"
+  ssl_mode: disable
+  max_open_conns: 20
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+
+auth:
+  jwt:
+    secret: ""
+
+idgen:
+  node: 1
+
+log:
+  level: debug
+  console:
+    enabled: true
+    level: debug
+    stack: short
+  jsonl:
+    enabled: true
+    level: debug
+    path: ./var/logs/app.jsonl

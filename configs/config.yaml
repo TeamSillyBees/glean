@@ -1,0 +1,157 @@
+app:
+  name: initra
+  slug: initra
+  version: 0.1.0
+  instance_id: local-1
+
+server:
+  addr: "127.0.0.1:8080"
+  read_timeout: 10s
+  write_timeout: 30s
+  idle_timeout: 60s
+  shutdown_timeout: 45s
+  trusted_proxies: []
+  cors:
+    enabled: true
+    allowed_origins: [ "http://localhost:3000", "http://127.0.0.1:3000" ]
+    allowed_methods: [ "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS" ]
+    allowed_headers: [ "Authorization", "Content-Type", "X-Request-ID", "X-Trace-ID" ]
+    exposed_headers: [ "X-Request-ID", "X-Trace-ID" ]
+    allow_credentials: false
+    max_age: 10m
+  docs:
+    enabled: true
+
+database:
+  host: "127.0.0.1"
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  dbname: "initra"
+  application_name: initra
+  ssl_mode: disable
+  ssl_root_cert: ""
+  connect_timeout: 5s
+  max_open_conns: 20
+  max_idle_conns: 10
+  conn_max_idle_time: 15m
+  conn_max_lifetime: 1h
+  ping_timeout: 5s
+
+redis:
+  enabled: true
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+  pool:
+    size: 10
+
+auth:
+  enabled: true
+  allow_memory_token_store: false
+  access_token_ttl: 15m
+  refresh_token_ttl: 720h
+  jwt:
+    issuer: initra
+    secret: ""
+  login_protection:
+    enabled: true
+    account_rate_limit:
+      max_attempts: 10
+      window: 1m
+    ip_rate_limit:
+      max_attempts: 60
+      window: 1m
+    lockout:
+      max_failures: 5
+      failure_window: 15m
+      lock_duration: 15m
+
+log:
+  level: debug
+  console:
+    enabled: true
+    level: debug
+    stack: short
+    color: true
+    output: stderr
+  jsonl:
+    enabled: true
+    level: info
+    stack: full
+    path: ./var/logs/app.jsonl
+    rotation:
+      enabled: false
+      date_format: "2006-01-02"
+      max_size_mb: 0
+  redact:
+    enabled: true
+    fields: [ "password", "token", "secret", "authorization", "dsn" ]
+
+observability:
+  health:
+    enabled: true
+
+casbin:
+  model_path: ./configs/rbac_model.conf
+
+cache:
+  local_ttl: 1m
+  remote_ttl: 10m
+
+storage:
+  enabled: true
+  provider: local
+  bucket: ""
+  public_base_url: ""
+  presign_default_ttl: 15m
+  local:
+    root_dir: ./var/uploads
+    temp_dir: .multipart
+    public_base_url: ""
+    private_base_url: ""
+    generate_date_path: true
+    allowed_extensions: [ "txt", "md", "png", "jpg", "jpeg", "gif", "pdf" ]
+    max_size: 10485760
+
+http_client:
+  enabled: true
+  services:
+    httpbingo:
+      base_url: https://httpbingo.org
+
+task:
+  enabled: true
+  backend: asynq
+  redis:
+    enabled: true
+    mode: standalone
+    addr: "127.0.0.1:6379"
+    password: ""
+    db: 2
+    pool:
+      size: 10
+  publisher:
+    default_queue: default
+    default_max_retry: 3
+    default_timeout: 5m
+    default_retention: 24h
+    enforce_biz_key: true
+  worker:
+    enabled: false
+    concurrency: 10
+    shutdown_timeout: 30s
+    health_check_interval: 15s
+    delayed_task_check_interval: 5s
+    task_check_interval: 1s
+    strict_priority: false
+    queues:
+      critical: 6
+      default: 3
+      low: 1
+    retry:
+      strategy: official
+  scheduler:
+    enabled: false
+    sync_interval: 3m
+    timezone: Asia/Shanghai

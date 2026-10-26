@@ -1,0 +1,46 @@
+app:
+  instance_id: test-1
+
+server:
+  addr: "127.0.0.1:18080"
+
+database:
+  dbname: "initra_test"
+  ssl_mode: disable
+  max_open_conns: 10
+  max_idle_conns: 5
+
+redis:
+  enabled: false
+  db: 2
+
+auth:
+  allow_memory_token_store: true
+  access_token_ttl: 10m
+  jwt:
+    secret: ""
+
+idgen:
+  node: 1
+
+log:
+  level: debug
+  console:
+    enabled: true
+    level: debug
+  jsonl:
+    enabled: true
+    level: debug
+    path: ./var/logs/app.jsonl
+
+cache:
+  local_ttl: 30s
+  remote_ttl: 2m
+
+storage:
+  local:
+    root_dir: ./var/test-uploads
+
+task:
+  redis:
+    db: 3

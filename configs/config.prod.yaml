@@ -1,0 +1,45 @@
+app:
+  instance_id: prod-1
+
+server:
+  cors:
+    allowed_origins: []
+  docs:
+    enabled: false
+
+database:
+  host: ""
+  user: ""
+  password: ""
+  dbname: ""
+  ssl_mode: verify-full
+  max_open_conns: 50
+  max_idle_conns: 20
+
+idgen:
+  node: -1
+
+redis:
+  enabled: true
+  addr: ""
+  db: 0
+  pool:
+    size: 20
+
+auth:
+  jwt:
+    secret: ""
+
+log:
+  level: info
+  console:
+    enabled: false
+  jsonl:
+    enabled: true
+    level: info
+    stack: full
+    path: stdout
+
+cache:
+  local_ttl: 30s
+  remote_ttl: 5m

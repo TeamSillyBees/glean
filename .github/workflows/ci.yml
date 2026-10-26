@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: initra_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Verify module dependencies and generated Ent sources
+        run: |
+          go mod tidy
+          go generate ./internal/data
+          git diff --exit-code -- go.mod go.sum internal/data/ent
+          if [ -n "$(git status --porcelain --untracked-files=all -- go.mod go.sum internal/data/ent)" ]; then
+            echo "Generated Ent sources or module dependencies are not fully committed."
+            exit 1
+          fi
+
+      - name: Test, vet and build template
+        env:
+          INITRA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/initra_ci?sslmode=disable
+        run: |
+          go test ./... -count=1
+          go vet ./...
+          go build -o "$RUNNER_TEMP/server" ./cmd/server
+
+      - name: Verify renamed project
+        run: |
+          target="$RUNNER_TEMP/template-smoke"
+          mkdir -p "$target"
+          git archive HEAD | tar -x -C "$target"
+          cd "$target"
+          go run ./tools/setup -module example.com/template-smoke -name "Template Smoke" > /dev/null
+          go generate ./internal/data
+          go test ./... -count=1
+          go vet ./...
+          go build -o "$RUNNER_TEMP/renamed-server" ./cmd/server

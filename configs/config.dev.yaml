@@ -1,0 +1,29 @@
+app:
+  instance_id: dev-1
+
+server:
+  addr: "127.0.0.1:8080"
+
+database:
+  dbname: "initra_dev"
+  max_open_conns: 30
+
+redis:
+  db: 1
+
+auth:
+  jwt:
+    secret: ""
+
+idgen:
+  node: 1
+
+log:
+  level: info
+  console:
+    enabled: true
+    stack: short
+  jsonl:
+    enabled: true
+    stack: full
+    path: ./var/logs/app.jsonl
