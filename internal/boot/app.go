@@ -10,6 +10,7 @@ import (
 	"github.com/casbin/casbin/v2"
 	"github.com/samber/do"
 	"github.com/teamsillybees/glean/internal/accesscontrol"
+	"github.com/teamsillybees/glean/internal/modules/monitor"
 	platformdatabase "github.com/teamsillybees/glean/internal/platform/database"
 	"github.com/teamsillybees/glean/internal/platform/logx"
 	"github.com/teamsillybees/glean/internal/platform/observability"
@@ -80,6 +81,10 @@ func Bootstrap(options Options) (*Application, error) {
 		closeBootstrapResources(db, redisClient, nil)
 		return nil, fmt.Errorf("resolve task publisher: %w", err)
 	}
+	if err := registerMonitorTasks(injector, cfg); err != nil {
+		closeBootstrapResources(db, redisClient, publisher)
+		return nil, err
+	}
 	worker, scheduler, err := resolveTaskRunners(injector, cfg.Task)
 	if err != nil {
 		closeBootstrapResources(db, redisClient, publisher)
@@ -115,6 +120,35 @@ func Bootstrap(options Options) (*Application, error) {
 		Scheduler:     scheduler,
 		AccessControl: accessControl,
 	}, nil
+}
+
+// registerMonitorTasks 在 Worker 构建处理器快照前完成显式模拟调度装配。
+func registerMonitorTasks(injector *do.Injector, cfg *Config) error {
+	if !cfg.Monitor.SchedulerEnabled {
+		return nil
+	}
+	if !cfg.Task.Enabled || !cfg.Task.Worker.Enabled || !cfg.Task.Scheduler.Enabled {
+		return fmt.Errorf("monitor scheduler requires enabled task worker and scheduler")
+	}
+	service, err := do.Invoke[*monitor.Service](injector)
+	if err != nil {
+		return fmt.Errorf("resolve monitor service: %w", err)
+	}
+	registry, err := do.Invoke[task.Registry](injector)
+	if err != nil {
+		return fmt.Errorf("resolve monitor task registry: %w", err)
+	}
+	if err := service.RegisterTasks(registry); err != nil {
+		return fmt.Errorf("register monitor tasks: %w", err)
+	}
+	scheduler, err := do.Invoke[task.Scheduler](injector)
+	if err != nil {
+		return fmt.Errorf("resolve monitor task scheduler: %w", err)
+	}
+	if err := service.RegisterSchedule(scheduler); err != nil {
+		return fmt.Errorf("register monitor schedule: %w", err)
+	}
+	return nil
 }
 
 func resolveTaskRunners(injector *do.Injector, cfg task.Config) (task.Worker, task.Scheduler, error) {

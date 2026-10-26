@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -158,5 +159,45 @@ func TestCatalogPostgresEndToEnd(t *testing.T) {
 	venues, err := service.Venues(ctx, "Evidence", "")
 	require.NoError(t, err)
 	require.Len(t, venues, 2)
+
+	// 真实来源样本直接经过同一服务写入并重放，覆盖 DTO 与 PostgreSQL JSONB 数组筛选。
+	fixture := baselineFixtureRecords(t)
+	fixtureIDs := map[string]idgen.ID{}
+	for _, record := range fixture {
+		result, err := service.Import(ctx, record)
+		require.NoError(t, err)
+		require.True(t, result.Created)
+		fixtureIDs[record.Topic+":"+record.OriginalID] = result.PaperID
+	}
+	for _, record := range fixture {
+		result, err := service.Import(ctx, record)
+		require.NoError(t, err)
+		require.False(t, result.Created)
+		require.Equal(t, fixtureIDs[record.Topic+":"+record.OriginalID], result.PaperID)
+	}
+	checkedTopics := map[string]bool{}
+	for _, record := range fixture {
+		if checkedTopics[record.Topic] {
+			continue
+		}
+		checkedTopics[record.Topic] = true
+		for _, key := range []string{"paper_types", "biomedical_domains", "display_scope", "technical_tasks", "ai_leadership", "display_review_status", "relation_direction", "scope", "llm_role", "display_type", "display_scale", "display_tasks", "display_roles"} {
+			values := record.Dimensions[key]
+			if len(values) == 0 {
+				continue
+			}
+			encoded, err := json.Marshal(map[string]string{key: values[0]})
+			require.NoError(t, err)
+			page, err := service.Papers(user8, PaperQuery{Topic: record.Topic, Dimension: string(encoded), PageSize: 100})
+			require.NoError(t, err)
+			found := false
+			for _, paper := range page.Items {
+				if paper.ID == fixtureIDs[record.Topic+":"+record.OriginalID] {
+					found = true
+				}
+			}
+			require.True(t, found, "literal JSONB array filter must find original source record: %s/%s", record.Topic, key)
+		}
+	}
 	require.Error(t, client.GleanPaper.DeleteOneID(first.PaperID).Exec(ctx), "historical records must reject physical deletion")
 }

@@ -1,0 +1,25 @@
+package monitor
+
+import (
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+	platformauth "github.com/teamsillybees/glean/internal/platform/auth"
+	"github.com/teamsillybees/glean/internal/platform/server"
+)
+
+// Module 注册认证后的监控只读接口，不提供启动真实采集的公开入口。
+type Module struct{ handler *Handler }
+
+// NewModule 创建监控路由模块。
+func NewModule(handler *Handler) *Module { return &Module{handler: handler} }
+
+// Register 注册操作及 fail-closed 路由安全声明。
+func (m *Module) Register(api huma.API, registry *server.RouteRegistry) {
+	huma.Register(api, huma.Operation{OperationID: "monitor-sources", Method: http.MethodGet, Path: "/api/v1/monitor/sources", Summary: "查看来源状态", Tags: []string{"论文监控"}}, m.handler.sources)
+	huma.Register(api, huma.Operation{OperationID: "monitor-runs", Method: http.MethodGet, Path: "/api/v1/monitor/runs", Summary: "查看扫描历史", Tags: []string{"论文监控"}}, m.handler.runs)
+	huma.Register(api, huma.Operation{OperationID: "monitor-templates", Method: http.MethodGet, Path: "/api/v1/monitor/templates", Summary: "查看统一检索模板", Tags: []string{"论文监控"}}, m.handler.templates)
+	registry.Register(http.MethodGet, "/api/v1/monitor/sources", platformauth.RouteSecurity{AccessMode: platformauth.AccessModeAuthenticated})
+	registry.Register(http.MethodGet, "/api/v1/monitor/runs", platformauth.RouteSecurity{AccessMode: platformauth.AccessModeAuthenticated})
+	registry.Register(http.MethodGet, "/api/v1/monitor/templates", platformauth.RouteSecurity{AccessMode: platformauth.AccessModeAuthenticated})
+}

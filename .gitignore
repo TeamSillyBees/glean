@@ -7,3 +7,9 @@ db/seeds/*.local.sql
 .env
 .idea/
 .vscode/
+
+.tools/
+node_modules/
+web/dist/
+coverage/
+.baseline/

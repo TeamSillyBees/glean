@@ -8,8 +8,10 @@ import (
 	"github.com/teamsillybees/glean/internal/data"
 	"github.com/teamsillybees/glean/internal/data/ent"
 	authmodule "github.com/teamsillybees/glean/internal/modules/auth"
+	catalogmodule "github.com/teamsillybees/glean/internal/modules/catalog"
 	filemodule "github.com/teamsillybees/glean/internal/modules/file"
 	httpdemomodule "github.com/teamsillybees/glean/internal/modules/httpdemo"
+	monitormodule "github.com/teamsillybees/glean/internal/modules/monitor"
 	rbacmodule "github.com/teamsillybees/glean/internal/modules/rbac"
 	taskdemomodule "github.com/teamsillybees/glean/internal/modules/taskdemo"
 	usermodule "github.com/teamsillybees/glean/internal/modules/user"
@@ -86,6 +88,8 @@ func registerModules(injector *do.Injector, cfg *Config) {
 	httpdemomodule.Provide(injector)
 	taskdemomodule.Provide(injector)
 	rbacmodule.Provide(injector)
+	catalogmodule.Provide(injector)
+	monitormodule.Provide(injector)
 }
 
 func storageproviderMaxFileSize(cfg *Config) int64 {
@@ -111,4 +115,6 @@ func registerRoutes(
 	do.MustInvoke[*httpdemomodule.Module](injector).Register(webApp.API, webApp.Registry)
 	do.MustInvoke[*taskdemomodule.Module](injector).Register(webApp.API, webApp.Registry)
 	do.MustInvoke[*rbacmodule.Module](injector).Register(webApp.API, webApp.Registry)
+	do.MustInvoke[*catalogmodule.Module](injector).Register(webApp.API, webApp.Registry)
+	do.MustInvoke[*monitormodule.Module](injector).Register(webApp.API, webApp.Registry)
 }

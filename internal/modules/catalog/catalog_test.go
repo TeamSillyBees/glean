@@ -2,7 +2,11 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -125,4 +129,48 @@ func TestUserInputsRejectedBeforeDatabase(t *testing.T) {
 	require.Error(t, err)
 	_, err = service.SavePreferences(ctx, PreferenceVO{Filters: map[string]any{"notJSON": make(chan int)}})
 	require.Error(t, err)
+}
+
+// baselineFixtureRecords 读取随仓库保存的十二条真实来源回归记录。
+func baselineFixtureRecords(t *testing.T) []ImportRecord {
+	t.Helper()
+	file, err := os.Open(filepath.Join("..", "..", "..", "data", "baselines", "testdata", "records.ndjson"))
+	require.NoError(t, err)
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	records := []ImportRecord{}
+	for {
+		var record ImportRecord
+		err := decoder.Decode(&record)
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		records = append(records, record)
+	}
+	require.Len(t, records, 12)
+	return records
+}
+
+// TestHistoricalFixtureMatchesCatalogDTO 验证原始样本可直接导入，展示维度也符合实际查询约束。
+func TestHistoricalFixtureMatchesCatalogDTO(t *testing.T) {
+	counts := map[string]int{}
+	for _, record := range baselineFixtureRecords(t) {
+		rawBefore, err := json.Marshal(record.Raw)
+		require.NoError(t, err)
+		require.NoError(t, normalizeImport(&record))
+		rawAfter, err := json.Marshal(record.Raw)
+		require.NoError(t, err)
+		require.Equal(t, rawBefore, rawAfter)
+		counts[record.Topic]++
+		for _, key := range []string{"paper_types", "biomedical_domains", "display_scope", "technical_tasks", "ai_leadership", "display_review_status", "relation_direction", "scope", "llm_role", "display_type", "display_scale", "display_tasks", "display_roles"} {
+			for _, value := range record.Dimensions[key] {
+				encoded, err := json.Marshal(map[string]string{key: value})
+				require.NoError(t, err)
+				q := PaperQuery{Topic: record.Topic, Dimension: string(encoded)}
+				require.NoError(t, validateQuery(&q))
+			}
+		}
+	}
+	require.Equal(t, map[string]int{"biomed-ai": 4, "llm-agent": 4, "biomed-worldmodel": 4}, counts)
 }

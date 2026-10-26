@@ -1,6 +1,6 @@
 app:
-  name: initra
-  slug: initra
+  name: Glean
+  slug: glean
   version: 0.1.0
   instance_id: local-1
 
@@ -27,8 +27,8 @@ database:
   port: 5432
   user: "postgres"
   password: "postgres"
-  dbname: "initra"
-  application_name: initra
+  dbname: "glean"
+  application_name: glean
   ssl_mode: disable
   ssl_root_cert: ""
   connect_timeout: 5s
@@ -52,7 +52,7 @@ auth:
   access_token_ttl: 15m
   refresh_token_ttl: 720h
   jwt:
-    issuer: initra
+    issuer: glean
     secret: ""
   login_protection:
     enabled: true
@@ -155,3 +155,7 @@ task:
     enabled: false
     sync_interval: 3m
     timezone: Asia/Shanghai
+
+# 模拟监控调度默认关闭；只有显式同时启用 task worker/scheduler 后才可开启。
+monitor:
+  scheduler_enabled: false

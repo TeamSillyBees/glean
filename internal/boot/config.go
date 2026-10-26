@@ -31,6 +31,12 @@ type Config struct {
 	Storage       platformstorage.Config `mapstructure:"storage"`
 	HTTPClient    httpclient.Config      `mapstructure:"http_client"`
 	Task          task.Config            `mapstructure:"task"`
+	Monitor       MonitorConfig          `mapstructure:"monitor"`
+}
+
+// MonitorConfig 描述显式启用的模拟调度；默认不启动任何采集定时器。
+type MonitorConfig struct {
+	SchedulerEnabled bool `mapstructure:"scheduler_enabled"`
 }
 
 // AppConfig 描述应用基础元信息。
@@ -126,6 +132,8 @@ func (c *Config) Validate() error {
 	}
 	taskConfig := c.Task.Normalize()
 	switch {
+	case c.Monitor.SchedulerEnabled && (!taskConfig.Enabled || !taskConfig.Worker.Enabled || !taskConfig.Scheduler.Enabled):
+		return fmt.Errorf("monitor.scheduler_enabled requires task.enabled, task.worker.enabled and task.scheduler.enabled")
 	case c.App.Name == "":
 		return fmt.Errorf("app.name 不能为空")
 	case !isSafeAppSlug(c.App.Slug):
@@ -294,6 +302,7 @@ func configDefaults() map[string]any {
 		"storage.local.max_size":                  int64(10 * 1024 * 1024),
 		"http_client.enabled":                     true,
 		"http_client.services.httpbingo.base_url": "https://httpbingo.org",
+		"monitor.scheduler_enabled":               false,
 		"task.enabled":                            true,
 		"task.backend":                            string(task.BackendAsynq),
 		"task.redis.enabled":                      true,
