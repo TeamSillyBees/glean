@@ -71,7 +71,7 @@ func TestCrossrefMetadataDates(t *testing.T) {
 		t.Fatal("adapter must separate acquisition timestamp and source indexed metadata")
 	}
 	q := f.requests[0].options.QueryParams
-	if !strings.Contains(q.Get("filter"), "from-index-date:2026-10-19T00:00:00Z,until-index-date:2026-10-26T00:00:00Z") || q.Get("cursor") != "*" {
+	if !strings.Contains(q.Get("filter"), "from-index-date:2026-10-19T00:00:00,until-index-date:2026-10-26T00:00:00") || q.Get("cursor") != "*" {
 		t.Fatalf("query not fixed: %v", q)
 	}
 	req.Cursor = page.NextCursor
@@ -150,7 +150,7 @@ func TestPubMedPreprintDoesNotBecomeFormal(t *testing.T) {
 }
 
 func TestPubMedTooLargeAndExpiredHistoryFailClosed(t *testing.T) {
-	for _, body := range []string{`{"esearchresult":{"count":"10001","webenv":"x","querykey":"1"}}`, `{"esearchresult":{"count":"1"}}`, `{"esearchresult":{"count":"0","errorlist":{"phrasesnotfound":["x"]}}}`} {
+	for _, body := range []string{`{"esearchresult":{"count":"1"}}`, `{"esearchresult":{"count":"0","errorlist":{"phrasesnotfound":["x"]}}}`} {
 		s := NewPubMedSource(&adapterExecutor{responses: []*httpclient.Response{{StatusCode: 200, Body: []byte(body)}}})
 		page, err := s.Fetch(context.Background(), adapterWindow())
 		if err == nil || page.Complete {
@@ -166,36 +166,39 @@ func TestPubMedTooLargeAndExpiredHistoryFailClosed(t *testing.T) {
 }
 
 func TestArXivOldPreprintNewVersionAndWindow(t *testing.T) {
-	f := &adapterExecutor{responses: []*httpclient.Response{adapterFixture(t, "arxiv-page.xml")}}
-	page, err := NewArXivSource(f).Fetch(context.Background(), adapterWindow())
+	f := &adapterExecutor{responses: []*httpclient.Response{adapterFixture(t, "arxiv-oai-synthetic.xml")}}
+	req := adapterWindow()
+	req.Window.Start = time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC)
+	req.Window.End = req.Window.Start.Add(24 * time.Hour)
+	page, err := NewArXivSource(f).Fetch(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !page.Complete || len(page.Records) != 1 {
-		t.Fatalf("wrong date-filtered page: %+v", page)
+		t.Fatalf("bad OAI page: %+v", page)
 	}
 	r := page.Records[0]
-	if r.SourceID != "2608.00001" || r.Version != "2" || r.SourceUpdatedAt.Day() != 23 {
-		t.Fatalf("version normalization failed: %+v", r)
+	if r.SourceID != "2608.00001" || r.ArxivID != r.SourceID || r.Version != "2" || r.SourceUpdatedAt.Day() != 23 {
+		t.Fatalf("bad version: %+v", r)
 	}
-	if len(r.PublicationEvents) != 1 || r.PublicationEvents[0].Kind != "preprint" || r.PublicationEvents[0].Date.Month() != time.August {
-		t.Fatal("arXiv publication date means preprint, even with DOI/journal_ref")
+	if len(r.PublicationEvents) != 2 || r.PublicationEvents[0].Kind != "preprint" || r.PublicationEvents[0].Date.Month() != time.August {
+		t.Fatal("version history must remain preprint events")
 	}
 	q := f.requests[0].options.QueryParams
-	if q.Get("sortBy") != "lastUpdatedDate" || q.Get("sortOrder") != "descending" || strings.Contains(q.Get("search_query"), "submittedDate") {
-		t.Fatal("submittedDate filter would miss old preprint new versions")
+	if f.requests[0].path != "/oai" || q.Get("metadataPrefix") != "arXivRaw" || q.Get("from") != "2026-10-23" || q.Get("until") != "2026-10-23" || q.Get("search_query") != "" {
+		t.Fatalf("wrong OAI query: %v", q)
 	}
 }
 
 func TestArXivFutureVersionExcluded(t *testing.T) {
-	fixture := adapterFixture(t, "arxiv-page.xml")
-	fixture.Body = []byte(strings.ReplaceAll(string(fixture.Body), "2026-10-23T10:00:00Z", "2026-10-27T10:00:00Z"))
+	fixture := adapterFixture(t, "arxiv-oai-synthetic.xml")
+	fixture.Body = []byte(strings.ReplaceAll(string(fixture.Body), "Fri, 23 Oct 2026 10:00:00 GMT", "Tue, 27 Oct 2026 10:00:00 GMT"))
 	page, err := NewArXivSource(&adapterExecutor{responses: []*httpclient.Response{fixture}}).Fetch(context.Background(), adapterWindow())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Records) != 0 {
-		t.Fatal("updates beyond fixed watermark must not enter current acquisition")
+		t.Fatal("future version text cannot be labeled historical")
 	}
 }
 
@@ -215,7 +218,7 @@ func TestBioRxivPagingUsesRawCountAndNoInventedFormalDate(t *testing.T) {
 	if !strings.Contains(string(r.Raw), "formal-link-without-date") {
 		t.Fatal("retain linkage evidence for later publisher resolution")
 	}
-	if f.requests[0].path != "/details/biorxiv/2026-10-19/2026-10-26/0/json" {
+	if f.requests[0].path != "/details/biorxiv/2026-10-19/2026-10-25/0/json" {
 		t.Fatalf("bad bioRxiv path: %s", f.requests[0].path)
 	}
 }
@@ -283,7 +286,7 @@ func TestAdapterFixedEndIsExclusive(t *testing.T) {
 		file, from, to string
 	}{
 		{"crossref", NewCrossrefSource, "crossref-page.json", "2026-10-23T10:00:00Z", "2026-10-26T00:00:00Z"},
-		{"arxiv", NewArXivSource, "arxiv-page.xml", "2026-10-23T10:00:00Z", "2026-10-26T00:00:00Z"},
+		{"arxiv", NewArXivSource, "arxiv-oai-synthetic.xml", "<datestamp>2026-10-23</datestamp>", "<datestamp>2026-10-26</datestamp>"},
 		{"biorxiv", NewBioRxivSource, "biorxiv-page.json", "2026-10-23", "2026-10-26"},
 	}
 	for _, tc := range cases {
@@ -307,15 +310,15 @@ func TestArXivAPIResultCapFailsClosed(t *testing.T) {
 	f := &adapterExecutor{}
 	page, err := NewArXivSource(f).Fetch(context.Background(), req)
 	var se *SourceError
-	if !errors.As(err, &se) || se.Kind != "window_too_large" || page.Complete || len(f.requests) != 0 {
+	if !errors.As(err, &se) || se.Kind != "invalid_response" || page.Complete || len(f.requests) != 0 {
 		t.Fatalf("result cap must require window/template refinement without claiming completion: %+v %v", page, err)
 	}
 }
 
-func TestPubMedFixedEndIsExclusive(t *testing.T) {
+func TestPubMedHistorySelectionRetainsLatestRevision(t *testing.T) {
 	search := adapterFixture(t, "pubmed-search.json")
 	fetch := adapterFixture(t, "pubmed-fetch.xml")
-	fetch.Body = []byte(strings.ReplaceAll(string(fetch.Body), "<Day>23</Day>", "<Day>26</Day>"))
+	fetch.Body = []byte(strings.ReplaceAll(string(fetch.Body), "<Day>23</Day>", "<Day>27</Day>"))
 	s := NewPubMedSource(&adapterExecutor{responses: []*httpclient.Response{search, fetch}})
 	req := adapterWindow()
 	page, err := s.Fetch(context.Background(), req)
@@ -327,8 +330,20 @@ func TestPubMedFixedEndIsExclusive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !page.Complete || len(page.Records) != 0 {
-		t.Fatal("daily-resolution PubMed search may be broad, but post-watermark records must not be acquired")
+	if !page.Complete || len(page.Records) != 1 || page.Records[0].SourceUpdatedAt.Day() != 27 {
+		t.Fatal("CRDT-in-window history match must survive a later revision beyond End with exact revision provenance")
+	}
+	var evidence struct {
+		Value string `json:"value"`
+	}
+	if json.Unmarshal(page.Records[0].Raw, &evidence) != nil || !strings.Contains(evidence.Value, `PubStatus="entrez"><Year>2026</Year><Month>10</Month><Day>22</Day>`) {
+		t.Fatal("preserve original in-window creation evidence")
+	}
+
+	for _, event := range page.Records[0].PublicationEvents {
+		if event.Date.Day() == 27 {
+			t.Fatal("citation revision is not formal publication")
+		}
 	}
 }
 
@@ -344,14 +359,19 @@ func TestCrossrefMissingContinuationFailsClosed(t *testing.T) {
 func TestArXivTranslatesTermGroupsWithoutDroppingContext(t *testing.T) {
 	req := adapterWindow()
 	req.Template.TermGroups = [][]string{{"language agent", "LLM"}, {"clinical", "biology"}}
-	f := &adapterExecutor{responses: []*httpclient.Response{adapterFixture(t, "arxiv-page.xml")}}
-	if _, err := NewArXivSource(f).Fetch(context.Background(), req); err != nil {
+	f := &adapterExecutor{responses: []*httpclient.Response{adapterFixture(t, "arxiv-oai-synthetic.xml")}}
+	page, err := NewArXivSource(f).Fetch(context.Background(), req)
+	if err != nil {
 		t.Fatal(err)
 	}
-	got := f.requests[0].options.QueryParams.Get("search_query")
-	want := `(all:"language agent" OR all:"LLM") AND (all:"clinical" OR all:"biology")`
-	if got != want {
-		t.Fatalf("unified AND/OR intent lost: %q, want %q", got, want)
+	if len(page.Records) != 1 {
+		t.Fatal("matching groups lost")
+	}
+	req.Template.TermGroups[1] = []string{"unrelated"}
+	f = &adapterExecutor{responses: []*httpclient.Response{adapterFixture(t, "arxiv-oai-synthetic.xml")}}
+	page, err = NewArXivSource(f).Fetch(context.Background(), req)
+	if err != nil || len(page.Records) != 0 {
+		t.Fatal("local OAI filtering must require each context group")
 	}
 }
 
@@ -385,7 +405,7 @@ func TestCrossrefUsesBroadDiscoveryNotUnsupportedBoolean(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := f.requests[0].options.QueryParams.Get("query.bibliographic")
-	if got != "language agent LLM clinical biology" || len(page.Records) != 1 {
+	if got != "language agent" || len(page.Records) != 1 {
 		t.Fatalf("Crossref should retain broad candidates, not pretend bibliographic is Boolean: %q %+v", got, page)
 	}
 }

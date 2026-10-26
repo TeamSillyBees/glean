@@ -24,6 +24,13 @@ type PublicationEvent struct {
 
 // Record 保存一条来源版本及原始证据，AcquiredAt 不表示正式发表日期。
 type Record struct {
+	SourceURL       string   `json:"sourceUrl"`
+	PMID            string   `json:"pmid"`
+	IsMock          bool     `json:"isMock"`
+	ArxivID         string   `json:"arxivId"`
+	Authors         []string `json:"authors"`
+	PublicationType string   `json:"publicationType"`
+
 	Source            string             `json:"source"`
 	SourceID          string             `json:"sourceId"`
 	DOI               string             `json:"doi"`
@@ -63,9 +70,11 @@ type InclusionPolicy struct {
 
 // FetchRequest 指定一次有限翻页操作，不授权适配器自行重试。
 type FetchRequest struct {
-	Window   Window
-	Cursor   string
-	Template SearchTemplate
+	PageSize      int
+	Window        Window
+	Cursor        string
+	Template      SearchTemplate
+	RegistryISSNs []string
 }
 
 // Page 仅在分页证据完整时标记 Complete。
@@ -215,3 +224,4 @@ type templatesRequest struct{}
 type templatesResponse struct {
 	Body response.SuccessVO[TemplatesVO]
 }
+

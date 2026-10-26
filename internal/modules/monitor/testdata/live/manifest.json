@@ -1,0 +1,123 @@
+[
+  {
+    "file": "arxiv-raw.xml.gz",
+    "status": 200,
+    "endpoint": "https://oaipmh.arxiv.org/oai?verb=GetRecord&metadataPrefix=arXivRaw&identifier=oai%3AarXiv.org%3A1706.03762",
+    "capturedAt": "2026-10-26T12:14:59.324991+00:00",
+    "bytes": 4099,
+    "sha256": "173b7e0324388622313eb9bfc6a3b919e67f3720cd4210c07ff3c9c63e201add",
+    "retryAfter": null,
+    "contentType": null,
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "arxiv-list-live.xml.gz",
+    "status": 200,
+    "endpoint": "https://oaipmh.arxiv.org/oai?verb=ListRecords&metadataPrefix=arXivRaw&from=2026-10-23&until=2026-10-23&set=cs%3Acs%3AAI",
+    "capturedAt": "2026-10-26T12:16:57.106421+00:00",
+    "bytes": 1006840,
+    "sha256": "4f6bd619869afe3d5f1bd75254a9a511ade77b1a9f3979e06692ba32bccd6087",
+    "retryAfter": null,
+    "contentType": null,
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "europepmc-core-live.json.gz",
+    "status": 200,
+    "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%22large%20language%20model%22&format=json&resultType=core&pageSize=1",
+    "capturedAt": "2026-10-26T12:16:50.220439+00:00",
+    "bytes": 9560,
+    "sha256": "e835fb8b56b32d6042bd0a49f02d070022612bf6f2e198dd99ab621edf8782ae",
+    "retryAfter": null,
+    "contentType": null,
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "europepmc-incremental-live.json.gz",
+    "status": 200,
+    "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%28%22large+language+model%22%29+AND+%28FIRST_IDATE%3A%5B2026-10-20+TO+2026-10-23%5D+OR+UPDATE_DATE%3A%5B2026-10-20+TO+2026-10-23%5D%29&format=json&resultType=core&pageSize=1&cursorMark=%2A",
+    "capturedAt": "2026-10-26T12:19:57.765747+00:00",
+    "bytes": 6303,
+    "sha256": "8ab619a0e2a5265cc84494149e82d2bac4f0891ea050a4a7c5aa4848e957fb17",
+    "retryAfter": null,
+    "contentType": "application/json;charset=UTF-8",
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "crossref-live.json.gz",
+    "status": 200,
+    "endpoint": "https://api.crossref.org/journals/0028-0836/works?filter=from-index-date%3A2026-10-23%2Cuntil-index-date%3A2026-10-23&rows=1&cursor=%2A",
+    "capturedAt": "2026-10-26T12:17:05.734530+00:00",
+    "bytes": 5471,
+    "sha256": "995a64eb9405e20f1a5beda1545d5ffd9e055fb4443575f71c6301f459373d29",
+    "retryAfter": null,
+    "contentType": null,
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "pubmed-search-live.json.gz",
+    "status": 200,
+    "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%22large%20language%20model%22%20AND%20%282026%2F10%2F20%3A2026%2F10%2F23%5Bcrdt%5D%20OR%202026%2F10%2F20%3A2026%2F10%2F23%5Blr%5D%29&retmode=json&retmax=1&usehistory=y&tool=glean",
+    "capturedAt": "2026-10-26T12:17:13.541319+00:00",
+    "bytes": 351,
+    "sha256": "cf64e31d5796c26e8fd1cdcc2012aaf71a63a3aa60d3c5bd592cb9101e9d9df6",
+    "retryAfter": null,
+    "contentType": null,
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "pubmed-fetch-live.xml.gz",
+    "status": 200,
+    "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&WebEnv=MCID_6adf44cdc5bafcfa6b0533e5&query_key=1&retstart=0&retmax=1&tool=glean",
+    "capturedAt": "2026-10-26T12:19:49.396728+00:00",
+    "bytes": 19396,
+    "sha256": "6b56ff5028cb34eabdb8c6c5ecf45a6439f2d06297c65c7b381678c7b7af41c3",
+    "retryAfter": null,
+    "contentType": "text/xml; charset=UTF-8",
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "biorxiv-live.json.gz",
+    "status": 200,
+    "endpoint": "https://api.biorxiv.org/details/biorxiv/2026-10-23/2026-10-23/0/json",
+    "capturedAt": "2026-10-26T12:17:20.382549+00:00",
+    "bytes": 61352,
+    "sha256": "6d74467e185ee83ce3e09a9cefbf44fcde933be71cfa4d0127e1e7da59e2cabd",
+    "retryAfter": null,
+    "contentType": null,
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "medrxiv-live.json.gz",
+    "status": 200,
+    "endpoint": "https://api.biorxiv.org/details/medrxiv/2026-10-23/2026-10-23/0/json",
+    "capturedAt": "2026-10-26T12:15:15.389703+00:00",
+    "bytes": 77880,
+    "sha256": "fc694a38752472c45f226ccb7442d9dc6b8cb57ca1553070b29639ddd6243aa9",
+    "retryAfter": null,
+    "contentType": null,
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "biorxiv-empty-live.json.gz",
+    "status": 200,
+    "endpoint": "https://api.biorxiv.org/details/biorxiv/1900-01-01/1900-01-01/0/json",
+    "capturedAt": "2026-10-26T12:24:24.313492+00:00",
+    "bytes": 67,
+    "sha256": "2baa0dad30fe576d570cafc518d24895c48def862d52bb00917f2534bc65568e",
+    "retryAfter": null,
+    "contentType": "application/json",
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  },
+  {
+    "file": "europepmc-day100-live.json.gz",
+    "status": 200,
+    "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%28%22large+language+model%22%29+AND+%28FIRST_IDATE%3A%5B2026-10-23+TO+2026-10-23%5D+OR+UPDATE_DATE%3A%5B2026-10-23+TO+2026-10-23%5D%29&format=json&resultType=core&pageSize=100&cursorMark=%2A",
+    "capturedAt": "2026-10-26T12:28:43.610189+00:00",
+    "bytes": 662926,
+    "sha256": "f619b47b42843a3de76d7b5c892f10669203bc4b496d3c075c7c8399b138ddd7",
+    "retryAfter": null,
+    "contentType": "application/json;charset=UTF-8",
+    "encoding": "gzip; SHA256 and byte count refer to original unmodified response bytes"
+  }
+]

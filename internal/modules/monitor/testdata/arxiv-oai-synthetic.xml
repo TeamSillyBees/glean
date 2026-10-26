@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic unit-test data; not a captured arXiv record. -->
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/">
+<responseDate>2026-10-26T00:00:00Z</responseDate><ListRecords><record><header><identifier>oai:arXiv.org:2608.00001</identifier><datestamp>2026-10-23</datestamp></header>
+<metadata><arXivRaw xmlns="http://arxiv.org/OAI/arXivRaw/"><id>2608.00001</id>
+<version version="v1"><date>Mon, 03 Aug 2026 10:00:00 GMT</date></version><version version="v2"><date>Fri, 23 Oct 2026 10:00:00 GMT</date></version>
+<title>Clinical language agents</title><authors>Fixture Author</authors><abstract>Synthetic unit-test abstract for clinical language agents.</abstract><doi>10.5555/glean.1</doi><journal-ref>Fixture journal</journal-ref></arXivRaw></metadata></record></ListRecords></OAI-PMH>
