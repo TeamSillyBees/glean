@@ -1,0 +1,50 @@
+[
+  {
+    "topic": "biomed-worldmodel",
+    "originalId": "BWE4E4BDE173",
+    "doi": "10.1021/acs.jcim.4c01838",
+    "title": "Sampling Conformational Ensembles of Highly Dynamic Proteins via Generative Deep Learning.",
+    "source": "europepmc",
+    "sourceId": "MED:39984300",
+    "sourceUrl": "https://europepmc.org/article/MED/39984300",
+    "sourceVersion": "cached-source-field",
+    "responseHash": "7003c4f26487922f09b69a4efb0f9f558a6cff767231014f08d48865c2de5d28",
+    "abstractHash": "3d57eade8287455842b7c10fc0a46dbc8ea966a68db562e24a8ae52a961e59d0",
+    "parserVersion": "historical-abstract-block-aware-v1",
+    "sourceField": "$.resultList.result[6].abstractText",
+    "completeness": "source-field-complete",
+    "abstract": "Proteins are inherently dynamic, and their conformational ensembles play a crucial role in biological function. Large-scale motions may govern the protein structure-function relationship, and numerous transient but stable conformations of intrinsically disordered proteins (IDPs) can play a crucial role in biological function. Investigating conformational ensembles to understand regulations and disease-related aggregations of IDPs is challenging, both experimentally and computationally. In this paper, we first introduce a deep learning-based model, termed Internal Coordinate Net (ICoN), which learns the physical principles of conformational changes from molecular dynamics simulation data. Second, we selected data points through interpolation in the learned latent space to rapidly identify novel synthetic conformations with sophisticated and large-scale side chains and backbone arrangements. Third, with the highly dynamic amyloid-β1-42 (Aβ42) monomer, our deep learning model provided a comprehensive sampling of Aβ42's conformational landscape. Analysis of these synthetic conformations revealed conformational clusters that could be used to rationalize experimental findings. Additionally, the method can identify novel conformations with important interactions in atomistic details that are not included in the training data. New synthetic conformations showed distinct side chain rearrangements that are probed by our electron paramagnetic resonance and amino acid substitution studies. This approach is highly transferable and can be used for any available data for training. The work also demonstrated the ability of deep learning to utilize natural atomistic motions in protein conformation sampling."
+  },
+  {
+    "topic": "biomed-ai",
+    "originalId": "BAIE4C9614D01",
+    "doi": "10.1146/annurev-cellbio-111524-111428",
+    "title": "From Pixels to Discovery: Microscopy Image Analysis in the Age of Artificial Intelligence.",
+    "source": "europepmc",
+    "sourceId": "MED:42823348",
+    "sourceUrl": "https://europepmc.org/article/MED/42823348",
+    "sourceVersion": "cached-source-field",
+    "responseHash": "20da8227ce2c4002ed5813bff18bb446d425c43c31bff19826959f4beb716356",
+    "abstractHash": "db69b594660542aecbc30e6050eaa8df8a01a9a28473b0252354dcd43e1b864e",
+    "parserVersion": "historical-abstract-block-aware-v1",
+    "sourceField": "$[0].record.abstractText",
+    "completeness": "source-field-complete",
+    "abstract": "Modern microscopy generates data volumes that far exceed human analytical capacity. Over the past decade, artificial intelligence (AI) has transformed microscopy image analysis into an engine for quantitative insights. This review retraces the evolution from supervised models automating tedious manual tasks, through self-supervised approaches uncovering patterns without annotations, to generative models learning the rules underlying biological processes. We examine the emerging trend toward universal visual representations with foundation models, while highlighting the persistent need for biological specialization. Looking forward, we identify factors that will be determinant in realizing the transformative potential of AI in microscopy: developing trustworthy models with calibrated uncertainty, training computationally fluent biologists, and building infrastructure to free microscopy image data from institutional silos. As AI transitions from accelerating existing analyses to driving discoveries, coordinated action across the scientific community will be required to ensure that microscopy image analysis develops as a transparent, equitable tool for understanding biology."
+  },
+  {
+    "topic": "llm-agent",
+    "originalId": "P1286",
+    "doi": "10.1007/978-981-92-1468-6_37",
+    "title": "RLKGC: Reinforcement Learning Retrieval with Large Language Models for Knowledge Graph Completion",
+    "source": "springer",
+    "sourceId": "10.1007/978-981-92-1468-6_37",
+    "sourceUrl": "https://link.springer.com/chapter/10.1007/978-981-92-1468-6_37",
+    "sourceVersion": "cached-publisher-section",
+    "responseHash": "c1ee055dad979b525b7064f2ddb1dff61b98c58c970993ad51b1713cec4f221b",
+    "abstractHash": "7bd1f983935766b1755c27269eaf36d25dcd266f121885da3862778297e179d8",
+    "parserVersion": "historical-abstract-block-aware-v1",
+    "sourceField": "section[data-title=Abstract][aria-labelledby=Abs1]",
+    "completeness": "source-field-complete",
+    "abstract": "Inductive knowledge graph completion (KGC) aims to predict missing facts that involve unseen entities. Many recent methods rely strongly on pre-computed reasoning paths or dense graph structure, making them unreliable when paths are sparse or noisy. At the same time, type information and local neighborhood facts often provide useful clues, but they are not fully exploited by existing models. We present RLKGC, a framework that combines policy-guided multi-hop exploration with lightweight type and subgraph reasoning using a language model. The reinforcement learning (RL) module searches for meaningful paths and is trained with reward shaping and action dropout to reduce false-negative signals and avoid spurious shortcuts. The type module checks whether a candidate aligns with the implicit type pattern required by the query relation, and the subgraph module uses RL paths together with nearby facts to assess triple plausibility. Across three standard KGC benchmarks, RLKGC improves inductive and few-shot prediction quality, achieving gains of 4.78% in MRR and 7.82% in Hits@1, and outperforming prior methods in 9 of 12 evaluation settings."
+  }
+]

@@ -189,7 +189,7 @@ func (s *Service) Papers(ctx context.Context, q PaperQuery) (PaperPageVO, error)
 			if q.Sort == "source-updated" {
 				field = gleanobservation.FieldSourceUpdatedAt
 			}
-			latest := sql.Dialect(dialect.Postgres).Select(sql.Max(o.C(field))).From(o).Where(sql.ColumnsEQ(o.C(gleanobservation.FieldPaperID), sel.C(gleanpaper.FieldID)))
+			latest := sql.Dialect(dialect.Postgres).Select(sql.Max(o.C(field))).From(o).Where(sql.And(sql.ColumnsEQ(o.C(gleanobservation.FieldPaperID), sel.C(gleanpaper.FieldID)), liveObservationSQL(o.C(gleanobservation.FieldMetadata))))
 			sel.OrderExpr(sql.ExprFunc(func(b *sql.Builder) { b.WriteByte('(').Join(latest).WriteString(") DESC NULLS LAST") }))
 		}, ent.Desc(gleanpaper.FieldID))
 	case "title":

@@ -1,5 +1,5 @@
 import { CalendarDays, FileText, History, Link2, Quote, Sparkles } from 'lucide-react'
-import type { Paper, SourceObservation } from '../lib/types'
+import type { AbstractEvidence, Paper, SourceObservation } from '../lib/types'
 import { date, number, reviewLabels, topicLabels } from '../lib/utils'
 import { Badge, ExternalLink } from './common'
 
@@ -60,10 +60,70 @@ function RawRecord({ value, label = '查看原始字段' }: { value: unknown; la
     </details>
   )
 }
+function AbstractProvenance({ evidence }: { evidence: AbstractEvidence }) {
+  const verified = evidence.verificationStatus === 'source-response-verified'
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="text-xs leading-6 text-muted-foreground">
+        {verified
+          ? '已核对保存的来源内容；不代表已完成论文审读或完整性核验。'
+          : '尚未完成来源响应核验，不作为内容概览中的已核验摘要。'}
+      </p>
+      <ExternalLink href={evidence.sourceUrl}>查看官方摘要来源</ExternalLink>
+      <details className="rounded-lg border border-dashed px-3 py-2.5">
+        <summary className="cursor-pointer text-xs text-muted-foreground">
+          查看来源与核对依据
+        </summary>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Badge tone={verified ? 'green' : 'amber'}>
+            {verified ? '来源响应已核验' : '来源响应未核验'}
+          </Badge>
+          <Badge>
+            {evidence.completeness === 'source-field-complete'
+              ? '来源摘要字段已保留'
+              : evidence.completeness === 'fragment'
+                ? '摘要片段 · 非完整摘要'
+                : '摘要完整性待核验'}
+          </Badge>
+        </div>
+        <dl className="mt-3 space-y-3 text-xs">
+          {[
+            ['来源', evidence.source],
+            ['来源记录 ID', evidence.sourceId],
+            ['DOI', evidence.doi],
+            ['来源版本', evidence.sourceVersion],
+            ['来源字段', evidence.sourceField],
+            ['恢复时间', date(evidence.enrichedAt)],
+            ['解析器版本', evidence.parserVersion],
+            ['摘要校验值', evidence.abstractHash],
+            ['来源响应校验值', evidence.responseHash],
+          ]
+            .filter(([, value]) => value)
+            .map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="mt-1 break-all leading-6">{value}</dd>
+              </div>
+            ))}
+        </dl>
+      </details>
+    </div>
+  )
+}
 export function PaperOverview({ paper }: { paper: Paper }) {
   const notes = (paper.memberships || []).filter((m) =>
     Object.values(m.readingNotes || {}).some(Boolean),
   )
+  const canonicalAbstract = paper.abstract.trim()
+  const enrichment = paper.abstractEnrichment
+  // 只展示已核对的完整来源字段，不把片段、未知状态或模型输出升级成摘要。
+  const recoveredAbstract =
+    !canonicalAbstract &&
+    enrichment?.verificationStatus === 'source-response-verified' &&
+    enrichment.completeness === 'source-field-complete' &&
+    enrichment.abstract.trim()
+      ? enrichment
+      : null
   return (
     <div className="space-y-8">
       <section>
@@ -77,20 +137,33 @@ export function PaperOverview({ paper }: { paper: Paper }) {
             <Paragraph>{paper.abstractZh}</Paragraph>
           </div>
         )}
-        {paper.abstract ? (
+        {canonicalAbstract ? (
           <div className="mt-4">
             <p className="text-[11px] font-medium text-muted-foreground">原文摘要</p>
             <Paragraph>{paper.abstract}</Paragraph>
           </div>
+        ) : recoveredAbstract ? (
+          <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+            <h4 className="text-xs font-semibold text-slate-700">补充的来源摘要</h4>
+            <p className="mt-2 text-xs leading-6 text-muted-foreground">
+              来源：{recoveredAbstract.source} · 历史目录和阅读笔记保持不变。
+            </p>
+            <Paragraph>{recoveredAbstract.abstract}</Paragraph>
+            <AbstractProvenance evidence={recoveredAbstract} />
+          </div>
         ) : (
           <p className="mt-3 rounded-xl bg-secondary/50 p-4 text-xs leading-6 text-muted-foreground">
-            当前未获取摘要。
+            {enrichment?.abstract.trim()
+              ? enrichment.verificationStatus !== 'source-response-verified'
+                ? '来源摘要尚未核验，暂不在内容概览中展示。'
+                : '现有来源内容可能是摘要片段，完整性仍待核对，暂不作为完整摘要展示。'
+              : '当前未获取摘要。'}
             {notes.length
               ? '可先阅读下方保留的历史笔记，或打开论文原文。'
               : '可打开论文原文继续阅读；摘要不会由模拟内容补齐。'}
           </p>
         )}
-        {!paper.abstractZh && paper.abstract && (
+        {!paper.abstractZh && (canonicalAbstract || recoveredAbstract) && (
           <p className="mt-3 text-[11px] text-muted-foreground">
             当前未获取中文摘要；模型翻译未接入。
           </p>
@@ -247,6 +320,9 @@ export function PaperOverview({ paper }: { paper: Paper }) {
   )
 }
 function Observation({ item }: { item: SourceObservation }) {
+  const enrichment = item.kind === 'historical-abstract-enrichment' || item.abstractEvidence != null
+  const verified = item.abstractEvidence?.verificationStatus === 'source-response-verified'
+  const completeSourceField = item.abstractEvidence?.completeness === 'source-field-complete'
   return (
     <details
       data-testid="source-observation"
@@ -256,6 +332,7 @@ function Observation({ item }: { item: SourceObservation }) {
       <summary className="cursor-pointer list-none">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="violet">{item.source}</Badge>
+          {enrichment && <Badge>历史摘要恢复</Badge>}
           {item.eventType && (
             <Badge>
               {{
@@ -290,10 +367,26 @@ function Observation({ item }: { item: SourceObservation }) {
         )}
         {item.abstract && (
           <div className="mt-4">
-            <h4 className="text-xs font-semibold">该版本原文摘要</h4>
+            <h4 className="text-xs font-semibold">
+              {!enrichment
+                ? '该版本原文摘要'
+                : !verified
+                  ? '待核来源摘要内容'
+                  : completeSourceField
+                    ? '补充的来源摘要'
+                    : '来源摘要片段或待核内容'}
+            </h4>
             <Paragraph>{item.abstract}</Paragraph>
           </div>
         )}
+        {enrichment &&
+          (item.abstractEvidence ? (
+            <AbstractProvenance evidence={item.abstractEvidence} />
+          ) : (
+            <p className="mt-3 text-xs leading-6 text-muted-foreground">
+              摘要恢复依据尚不完整，不作为内容概览中的已核验摘要。
+            </p>
+          ))}
         {item.publicationEvents?.length > 0 && (
           <dl className="mt-4 space-y-3">
             {item.publicationEvents.map((event, i) => (
@@ -313,10 +406,13 @@ function Observation({ item }: { item: SourceObservation }) {
         )}
         {item.review?.isMock && (
           <p className="mt-4 text-xs leading-6 text-muted-foreground">
-            此版本的模型阅读为模拟输出；来源内容是真实采集记录。
+            {enrichment
+              ? '此版本的模型阅读为模拟输出；摘要来源核验不代表科学审读。'
+              : '此版本的模型阅读为模拟输出；来源内容是真实采集记录。'}
           </p>
         )}
-        <RawRecord value={item.raw} label="查看该版本原始字段" />
+        {/* 恢复记录仅展示白名单依据，避免原始缓存元数据泄露本地路径。 */}
+        {!enrichment && <RawRecord value={item.raw} label="查看该版本原始字段" />}
       </div>
     </details>
   )

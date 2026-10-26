@@ -46,6 +46,7 @@ type MembershipVO struct {
 
 // PaperVO 为只读论文详情，个人状态与历史元数据分开保存。
 type PaperVO struct {
+	AbstractEnrichment    *AbstractEnrichmentVO `json:"abstractEnrichment,omitempty"`
 	Origin                string                `json:"origin"`
 	ImportedAt            *time.Time            `json:"importedAt,omitempty"`
 	FirstSeenAt           *time.Time            `json:"firstSeenAt,omitempty"`
@@ -252,6 +253,8 @@ type PublicationEventVO struct {
 
 // ObservationInput 是真实来源向目录提交的版本化证据，不等于科学纳入批准。
 type ObservationInput struct {
+	Kind              string               `json:"kind,omitempty"`
+	AbstractEvidence  *AbstractEvidenceVO  `json:"abstractEvidence,omitempty"`
 	CoreDiscovery     bool                 `json:"coreDiscovery,omitempty"`
 	EventType         string               `json:"eventType"`
 	SourceURL         string               `json:"sourceUrl"`
@@ -276,6 +279,29 @@ type ObservationInput struct {
 	Topics            []string             `json:"topics"`
 	TemplateVersion   string               `json:"templateVersion"`
 	Raw               json.RawMessage      `json:"raw"`
+}
+
+// AbstractEvidenceVO 只公开已核对来源的摘要证据，不包含本机缓存路径或采集请求头。
+type AbstractEvidenceVO struct {
+	Source             string    `json:"source"`
+	SourceID           string    `json:"sourceId"`
+	SourceURL          string    `json:"sourceUrl"`
+	DOI                string    `json:"doi"`
+	SourceVersion      string    `json:"sourceVersion"`
+	Completeness       string    `json:"completeness"`
+	VerificationStatus string    `json:"verificationStatus"`
+	AbstractHash       string    `json:"abstractHash"`
+	ResponseHash       string    `json:"responseHash"`
+	ParserVersion      string    `json:"parserVersion"`
+	SourceField        string    `json:"sourceField"`
+	EnrichedAt         time.Time `json:"enrichedAt"`
+}
+
+// AbstractEnrichmentVO 为独立的可追溯摘要覆盖层，不替换历史 canonical 摘要。
+type AbstractEnrichmentVO struct {
+	AbstractEvidenceVO
+	ObservationID idgen.ID `json:"observationId"`
+	Abstract      string   `json:"abstract"`
 }
 
 // SourceObservationVO 是不可覆盖的来源版本及独立审核标记。

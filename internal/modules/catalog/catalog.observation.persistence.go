@@ -125,6 +125,9 @@ func exactFormalDate(events []PublicationEventVO, kind string) *time.Time {
 
 // IngestObservation 原子追加真实来源版本及待审核主题发现；不覆盖任何已存历史结论或论文元数据。
 func (s *Service) IngestObservation(ctx context.Context, input ObservationInput) (ObservationResult, error) {
+	if input.Kind != "" || input.AbstractEvidence != nil {
+		return ObservationResult{}, &observationRejection{kind: "invalid_source_record", err: bizerrors.BadRequest("historical abstract evidence requires the restricted enrichment path")}
+	}
 	hash, err := normalizeObservation(&input)
 	if err != nil {
 		return ObservationResult{}, &observationRejection{kind: "invalid_source_record", err: err}
@@ -215,7 +218,7 @@ func (s *Service) IngestObservation(ctx context.Context, input ObservationInput)
 			observation, err := c.GleanObservation.Query().Where(gleanobservation.Source(input.Source), gleanobservation.SourceID(input.SourceID), gleanobservation.ContentHash(hash)).Only(ctx)
 			if ent.IsNotFound(err) {
 				input.EventType = "source_observed"
-				previous, previousErr := c.GleanObservation.Query().Where(gleanobservation.Source(input.Source), gleanobservation.SourceID(input.SourceID)).Order(ent.Desc(gleanobservation.FieldID)).First(ctx)
+				previous, previousErr := c.GleanObservation.Query().Where(gleanobservation.Source(input.Source), gleanobservation.SourceID(input.SourceID), func(sel *sql.Selector) { sel.Where(liveObservationSQL(sel.C(gleanobservation.FieldMetadata))) }).Order(ent.Desc(gleanobservation.FieldID)).First(ctx)
 				if previousErr == nil {
 					input.EventType = sourceChangeType(input.Source, previous.Version, input.Version)
 				} else if !ent.IsNotFound(previousErr) {

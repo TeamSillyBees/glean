@@ -50,11 +50,32 @@ export interface Membership {
   inclusionStatus?: string
   readingNotes?: Record<string, string>
 }
+// AbstractEvidence 仅包含可公开的摘要恢复依据，不包含本地缓存路径或原始响应。
+export interface AbstractEvidence {
+  source: string
+  sourceId: string
+  sourceUrl: string
+  doi: string
+  sourceVersion: string
+  completeness: string
+  verificationStatus: string
+  abstractHash: string
+  responseHash: string
+  parserVersion: string
+  sourceField: string
+  enrichedAt: string
+}
+// AbstractEnrichment 将来源摘要作为独立补充，不覆盖历史目录的摘要字段。
+export interface AbstractEnrichment extends AbstractEvidence {
+  observationId: string
+  abstract: string
+}
 export interface Paper {
   id: string
   title: string
   titleZh: string
   abstract: string
+  abstractEnrichment?: AbstractEnrichment | null
   abstractZh?: string
   translationStatus?: string
   origin?: 'historical' | 'live'
@@ -173,6 +194,8 @@ export interface PublicationEvent {
   evidence: string
 }
 export interface SourceObservation {
+  kind?: 'historical-abstract-enrichment'
+  abstractEvidence?: AbstractEvidence | null
   eventType?: 'source_observed' | 'metadata_updated' | 'version_updated'
   sourceUrl?: string
   pmid?: string

@@ -75,6 +75,7 @@ jobs:
           required = {
               (module + "/internal/modules/catalog", "TestCatalogPostgresEndToEnd"),
               (module + "/internal/modules/catalog", "TestCatalogLiveObservationPostgres"),
+              (module + "/internal/modules/catalog", "TestHistoricalAbstractEnrichmentPostgres"),
               (module + "/internal/modules/monitor", "TestMonitorPostgresDurableMockRun"),
               (module + "/internal/modules/monitor", "TestMonitorRealPipelinePostgres"),
               (module + "/test/integration", "TestMigrationsAndSeedOnPostgres"),
@@ -99,11 +100,12 @@ jobs:
       - name: Vet Go packages
         run: go vet ./...
 
-      - name: Build server, source monitor and baseline importer
+      - name: Build server, source monitor, baseline importer and abstract enricher
         run: |
           go build -o "$RUNNER_TEMP/glean-server" ./cmd/server
           go build -o "$RUNNER_TEMP/glean-monitor" ./cmd/glean-monitor
           go build -o "$RUNNER_TEMP/glean-importbaseline" ./tools/importbaseline
+          go build -o "$RUNNER_TEMP/glean-enrichabstract" ./tools/enrichabstract
 
   frontend:
     name: Frontend tests and production build

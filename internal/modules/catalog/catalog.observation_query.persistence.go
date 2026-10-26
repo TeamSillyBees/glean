@@ -28,21 +28,30 @@ func (s *Service) attachObservations(ctx context.Context, items []PaperVO, detai
 	query := s.client.GleanObservation.Query().Where(gleanobservation.PaperIDIn(ids...)).Order(ent.Desc(gleanobservation.FieldObservedAt), ent.Desc(gleanobservation.FieldID))
 	if !detail {
 		var counts []struct {
-			PaperID         idgen.ID   `json:"paper_id"`
-			Count           int        `json:"count"`
-			SourceUpdatedAt *time.Time `json:"max"`
+			PaperID idgen.ID `json:"paper_id"`
+			Count   int      `json:"count"`
 		}
-		if err := s.client.GleanObservation.Query().Where(gleanobservation.PaperIDIn(ids...)).GroupBy(gleanobservation.FieldPaperID).Aggregate(ent.Count(), ent.Max(gleanobservation.FieldSourceUpdatedAt)).Scan(ctx, &counts); err != nil {
+		if err := s.client.GleanObservation.Query().Where(gleanobservation.PaperIDIn(ids...)).GroupBy(gleanobservation.FieldPaperID).Aggregate(ent.Count()).Scan(ctx, &counts); err != nil {
 			return bizerrors.WrapDBContext(ctx, err, "count source observations failed")
 		}
 		for _, count := range counts {
 			items[indices[count.PaperID]].ObservationCount = count.Count
-			items[indices[count.PaperID]].LatestSourceUpdatedAt = count.SourceUpdatedAt
+		}
+		var updates []struct {
+			PaperID         idgen.ID   `json:"paper_id"`
+			SourceUpdatedAt *time.Time `json:"max"`
+		}
+		if err := s.client.GleanObservation.Query().Where(gleanobservation.PaperIDIn(ids...), func(sel *sql.Selector) { sel.Where(liveObservationSQL(sel.C(gleanobservation.FieldMetadata))) }).GroupBy(gleanobservation.FieldPaperID).Aggregate(ent.Max(gleanobservation.FieldSourceUpdatedAt)).Scan(ctx, &updates); err != nil {
+			return bizerrors.WrapDBContext(ctx, err, "load live source update times failed")
+		}
+		for _, update := range updates {
+			items[indices[update.PaperID]].LatestSourceUpdatedAt = update.SourceUpdatedAt
 		}
 		// 列表只取每篇最新观察，不随来源版本历史增长而加载所有 JSON。
 		query.Where(func(sel *sql.Selector) {
+			sel.Where(liveObservationSQL(sel.C(gleanobservation.FieldMetadata)))
 			newer := sql.Table(gleanobservation.Table).As("newer_observation")
-			sub := sql.Dialect(dialect.Postgres).Select(newer.C(gleanobservation.FieldID)).From(newer).Where(sql.And(sql.ColumnsEQ(newer.C(gleanobservation.FieldPaperID), sel.C(gleanobservation.FieldPaperID)), sql.Or(sql.ColumnsGT(newer.C(gleanobservation.FieldObservedAt), sel.C(gleanobservation.FieldObservedAt)), sql.And(sql.ColumnsEQ(newer.C(gleanobservation.FieldObservedAt), sel.C(gleanobservation.FieldObservedAt)), sql.ColumnsGT(newer.C(gleanobservation.FieldID), sel.C(gleanobservation.FieldID))))))
+			sub := sql.Dialect(dialect.Postgres).Select(newer.C(gleanobservation.FieldID)).From(newer).Where(sql.And(liveObservationSQL(newer.C(gleanobservation.FieldMetadata)), sql.ColumnsEQ(newer.C(gleanobservation.FieldPaperID), sel.C(gleanobservation.FieldPaperID)), sql.Or(sql.ColumnsGT(newer.C(gleanobservation.FieldObservedAt), sel.C(gleanobservation.FieldObservedAt)), sql.And(sql.ColumnsEQ(newer.C(gleanobservation.FieldObservedAt), sel.C(gleanobservation.FieldObservedAt)), sql.ColumnsGT(newer.C(gleanobservation.FieldID), sel.C(gleanobservation.FieldID))))))
 			sel.Where(sql.Not(sql.Exists(sub)))
 		})
 		query.Select(gleanobservation.FieldID, gleanobservation.FieldPaperID, gleanobservation.FieldObservedAt, gleanobservation.FieldReview)
@@ -70,8 +79,12 @@ func (s *Service) attachObservations(ctx context.Context, items []PaperVO, detai
 	}
 	for _, o := range observations {
 		item := &items[indices[o.PaperID]]
+		var metadata ObservationInput
 		if detail {
-			if o.SourceUpdatedAt != nil && (item.LatestSourceUpdatedAt == nil || o.SourceUpdatedAt.After(*item.LatestSourceUpdatedAt)) {
+			if err := json.Unmarshal(o.Metadata, &metadata); err != nil {
+				return bizerrors.WrapDBContext(ctx, err, "decode source metadata failed")
+			}
+			if metadata.Kind != historicalAbstractKind && o.SourceUpdatedAt != nil && (item.LatestSourceUpdatedAt == nil || o.SourceUpdatedAt.After(*item.LatestSourceUpdatedAt)) {
 				at := *o.SourceUpdatedAt
 				item.LatestSourceUpdatedAt = &at
 			}
@@ -85,19 +98,21 @@ func (s *Service) attachObservations(ctx context.Context, items []PaperVO, detai
 		if err := json.Unmarshal(encoded, &review); err != nil {
 			return bizerrors.WrapDBContext(ctx, err, "decode source review failed")
 		}
-		if item.LastObservedAt == nil {
+		if metadata.Kind != historicalAbstractKind && item.LastObservedAt == nil {
 			observed := o.ObservedAt
 			item.LastObservedAt = &observed
 			item.Review = &review
 		}
 		if detail {
-			var metadata ObservationInput
-			if err := json.Unmarshal(o.Metadata, &metadata); err != nil {
-				return bizerrors.WrapDBContext(ctx, err, "decode source metadata failed")
-			}
 			metadata.Review = review
 			metadata.Topics = uniqueSorted(matched[o.ID])
-			item.Observations = append(item.Observations, SourceObservationVO{ObservationInput: metadata, ID: o.ID, ContentHash: o.ContentHash})
+			observation := SourceObservationVO{ObservationInput: metadata, ID: o.ID, ContentHash: o.ContentHash}
+			item.Observations = append(item.Observations, observation)
+			if item.AbstractEnrichment == nil {
+				if selected := selectedStoredHistoricalAbstract(o, metadata); selected != nil && item.DOI == selected.DOI {
+					item.AbstractEnrichment = selected
+				}
+			}
 		}
 	}
 	return nil
