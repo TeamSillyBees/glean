@@ -286,3 +286,154 @@ jobs:
           docker rm -fv glean-ci-web glean-ci-backend glean-ci-redis glean-ci-postgres 2>/dev/null || true
           docker network rm glean-ci 2>/dev/null || true
           rm -rf "$RUNNER_TEMP/glean-container-smoke"
+
+  browser:
+    name: Real database and browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Dedicated disposable services, not application or user credentials.
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: glean_browser_ci
+      GLEAN_E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/glean_browser_ci?sslmode=disable
+      GLEAN_BASELINE_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/glean_browser_ci?sslmode=disable
+      GLEAN_E2E_USERNAME: glean-browser
+      GLEAN_E2E_SECOND_USERNAME: glean-browser-other
+      GLEAN_E2E_BASE_URL: http://127.0.0.1:18081
+      GLEAN_API_PROXY: http://127.0.0.1:18080
+      APP_ENV: local
+      INITRA_SERVER_ADDR: 127.0.0.1:18080
+      INITRA_DATABASE_DBNAME: glean_browser_ci
+      INITRA_IDGEN_NODE: 1
+      INITRA_TASK_WORKER_ENABLED: 'false'
+      INITRA_TASK_SCHEDULER_ENABLED: 'false'
+      INITRA_MONITOR_SCHEDULER_ENABLED: 'false'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: glean_browser_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Prepare isolated runtime and generated test-only identity
+        run: |
+          set -euo pipefail
+          umask 077
+          runtime="$RUNNER_TEMP/glean-browser"
+          mkdir -p "$runtime/configs"
+          cp configs/config.yaml configs/rbac_model.conf "$runtime/configs/"
+          jwt_secret="$(openssl rand -hex 32)"
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$jwt_secret"
+          echo "::add-mask::$password"
+          printf 'INITRA_AUTH_JWT_SECRET=%s\nGLEAN_E2E_PASSWORD=%s\n' "$jwt_secret" "$password" >> "$GITHUB_ENV"
+          cat db/migrations/*.sql | psql --set ON_ERROR_STOP=1 --single-transaction > "$runtime/migrations.log"
+          go build -o "$runtime/server" ./cmd/server
+          go build -o "$runtime/importbaseline" ./tools/importbaseline
+          go build -o "$runtime/browserseed" ./test/e2e/browserseed
+
+      - name: Import all real historical records into PostgreSQL
+        run: |
+          set -euo pipefail
+          runtime="$RUNNER_TEMP/glean-browser"
+          "$runtime/browserseed"
+          timeout 15m "$runtime/importbaseline" -mode import -node 17 -operator 7 \
+            -allow-local-insecure -report "$runtime/import-report.json" \
+            -quarantine "$runtime/quarantine.ndjson"
+          python3 - "$runtime/import-report.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as source:
+              report = json.load(source)
+          assert report["complete"] is True, report
+          assert report["attempted"] == report["created"] == 39495, report
+          assert report["existing"] == report["quarantined"] == 0, report
+          assert report["byTopic"] == {"biomed-ai": 31399, "llm-agent": 4059, "biomed-worldmodel": 4037}, report
+          print("Real PostgreSQL import verified: all 39,495 historical memberships, zero quarantined.")
+          PY
+          test "$(psql -Atqc 'SELECT COUNT(*) FROM glean_membership')" = 39495
+          test "$(psql -Atqc 'SELECT COUNT(*) FROM glean_paper WHERE is_mock')" = 0
+          psql -Atqc 'SELECT COUNT(*) AS actual_papers FROM glean_paper'
+
+      - name: Start actual Go HTTP API
+        run: |
+          runtime="$RUNNER_TEMP/glean-browser"
+          cd "$runtime"
+          ./server > "$runtime/server.log" 2>&1 &
+          echo "$!" > "$runtime/server.pid"
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-all-errors \
+            --max-time 5 --retry-max-time 90 http://127.0.0.1:18080/ready > /dev/null
+
+      - name: Build actual frontend and install CI Chromium
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npx playwright install --with-deps chromium
+
+      - name: Exercise real login, catalog and durable state in desktop and mobile browsers
+        working-directory: web
+        run: npm run test:e2e
+
+      - name: Upload browser screenshots and HTML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: glean-browser-${{ github.sha }}
+          path: |
+            web/test-results/**/*.png
+            web/playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
+          # No HAR, traces, auth storage, server logs, secrets or quarantine data.
+          include-hidden-files: false
+
+      - name: Diagnose failed API startup or browser acceptance
+        if: failure()
+        run: tail -n 80 "$RUNNER_TEMP/glean-browser/server.log" 2>/dev/null || true
+
+      - name: Stop API and delete generated credentials
+        if: always()
+        run: |
+          runtime="$RUNNER_TEMP/glean-browser"
+          if [ -f "$runtime/server.pid" ]; then kill "$(cat "$runtime/server.pid")" 2>/dev/null || true; fi
+          rm -rf "$runtime"

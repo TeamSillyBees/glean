@@ -31,7 +31,11 @@ export function PaperCard({
   const tags = membership?.categories?.slice(0, 3) || []
   const reviewStatus = membership?.dimensions?.display_review_status?.[0]
   return (
-    <article className="paper-card group relative rounded-xl border bg-white px-6 py-5 transition-all hover:border-violet-200 hover:shadow-[0_5px_24px_-15px_rgba(79,70,229,.45)]">
+    <article
+      data-testid="paper-card"
+      data-paper-id={paper.id}
+      className="paper-card group relative rounded-xl border bg-white px-6 py-5 transition-all hover:border-violet-200 hover:shadow-[0_5px_24px_-15px_rgba(79,70,229,.45)]"
+    >
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold text-slate-700">{paper.venue || '来源待核验'}</span>
         {paper.year > 0 && <span className="text-muted-foreground">· {paper.year}</span>}
@@ -120,6 +124,7 @@ export function PaperDetail({
     queryKey: ['paper', id],
     queryFn: ({ signal }) => api.paper(id!, signal),
     enabled: !!id,
+    staleTime: 0,
   })
   const mutation = useMutation({
     mutationFn: ({

@@ -9,15 +9,18 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b",
-    "format": "prettier --write src vite.config.ts",
-    "format:check": "prettier --check src vite.config.ts"
+    "typecheck": "tsc -b && tsc -p tsconfig.e2e.json",
+    "format": "prettier --write src vite.config.ts playwright.config.ts tsconfig.e2e.json \"e2e/**/*.ts\" --no-error-on-unmatched-pattern",
+    "format:check": "prettier --check src vite.config.ts playwright.config.ts tsconfig.e2e.json \"e2e/**/*.ts\" --no-error-on-unmatched-pattern",
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "lucide-react": "^1.61.0",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",
@@ -26,6 +29,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",

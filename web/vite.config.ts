@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
+      include: ['src/**/*.test.{ts,tsx}'],
       testTimeout: 20_000,
       maxWorkers: 2,
       environment: 'jsdom',

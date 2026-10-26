@@ -640,7 +640,7 @@ function WorkspaceReady({
               </aside>
               <section className="min-w-0">
                 <div className="mb-4 flex flex-wrap items-center gap-3">
-                  <h2 className="text-sm font-medium text-slate-600">
+                  <h2 data-testid="results-count" className="text-sm font-medium text-slate-600">
                     找到{' '}
                     <strong className="mx-1 text-base text-slate-900">
                       {number(paperQuery.data?.total)}
