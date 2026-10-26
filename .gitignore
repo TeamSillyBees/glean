@@ -13,3 +13,6 @@ node_modules/
 web/dist/
 coverage/
 .baseline/
+
+# Local planning note; not part of the deliverable
+docs/glean/implementation-brief.md

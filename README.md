@@ -1,72 +1,137 @@
-# initra
+# Glean
 
-initra 是面向企业内部 Go 服务的源码模板。复制仓库后即可在同一项目中查看和修改业务与基础能力；Gin、Huma、Ent、Redis 等第三方库继续通过 Go Modules 管理。
+**持续生长的文献库。**
 
-项目采用单一 Go module，包含现有认证、权限、文件、HTTP Client、异步任务示例及其测试。派生项目由业务团队独立维护。
+Glean 将历史论文、增量发现与证据核验分开管理：一个 Go 后端，三个主题视图，一个中文优先的 React 阅读与查询工作台。基于 [initra](https://github.com/TeamSillyBees/initra) 源码模板构建，沿用认证、权限、Ent/PostgreSQL、Redis 和任务抽象，而不是另起平行基础框架。
 
-## 目录
+## 当前能力与边界
 
-```text
-cmd/server           服务入口
-internal/boot        配置、装配和生命周期
-internal/platform    项目内基础能力源码
-internal/modules     业务模块
-internal/data        Ent schema、生成代码和迁移工具
-configs              分环境配置与 Casbin model
-db                   迁移与种子数据
-test                 架构、集成和 HTTP 测试
-tools/setup          本地改名与凭据初始化
-```
+- 历史快照：生物医学 AI **31,399**、LLM / Agent 知识工程 **4,059**、生物医学世界模型 **4,037**，共 **39,495 条主题成员关系**。包含已纳入、范围外、预印本及待核记录，不假装全部已核实。
+- 文献检索、主题筛选、精确历史分类、来源证据、正式在线/卷期日期、版本化载体证据；个人阅读/隐藏与原科学结论相互独立。
+- 72 小时扫描窗口、重叠补漏、分页断点、重试预算、并发租约与采集/审核/投影分离；Crossref、PubMed、arXiv、bioRxiv 适配器以 fixture 验证。
+- 模型阅读与总结目前为**明确标识的 mock**。Mock 不构成科学核验，不将模拟论文插入历史文献库。真实模型密钥未配置。
+- 前端只访问本服务 API，不自行调用外部文献库、运行模型或修改科学分类。
+- 自动调度默认关闭。可明确启用**模拟**调度；当前版本不启用真实全网抓取。尚无外部部署。
 
-## 开始使用
+完整历史数据已打包，不等于已经导入你自己的数据库；实际导入数量以导入报告为准。源码测试、CI 数据库测试和真实浏览器视觉验收是不同的验证层。
 
-需要 Go 1.26、Docker Compose、Atlas 和 PostgreSQL 客户端。使用仓库模板或复制源码后，在项目根目录执行：
+## 技术与目录
 
-```powershell
-go run ./tools/setup -module example.com/my-api -name "My API" -slug my-api
+| 位置 | 用途 |
+|---|---|
+| `cmd/server` | 独立 Go HTTP API，Gin + Huma，initra 安全边界 |
+| `internal/modules/catalog` | 文献、主题、证据、载体与个人状态 |
+| `internal/modules/monitor` | 增量编排、来源适配器、mock 审核、持久进度 |
+| `internal/baseline`、`tools/importbaseline` | 历史数据提取、校验、幂等导入、失败隔离 |
+| `internal/data/schema`、`db/migrations` | Ent 定义、生成代码、显式迁移 |
+| `web` | React、TypeScript、shadcn/ui-style 开放源码组件、Radix、Tailwind |
+| `data/baselines` | 42 个压缩历史分片、显示分类、校验清单 |
 
+## 本地启动
+
+需要 Go 1.26、Node 24/npm 11、Docker Compose、Atlas CLI 和 PostgreSQL 客户端。下面是本机开发流程，不是生产部署脚本。
+
+### 1. 初始化本地应用配置与依赖
+
+```sh
+go run ./tools/setup -name Glean -slug glean
 docker compose up -d postgres redis
-$env:DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:5432/my-api?sslmode=disable"
-atlas -c file://db/atlas.hcl migrate apply --env local
-psql $env:DATABASE_URL --set ON_ERROR_STOP=1 --single-transaction -f db/seeds/001_seed_admin.local.sql
-
-$env:APP_ENV = "local"
-go run ./cmd/server
 ```
 
-直接试用本仓库时，执行 `go run ./tools/setup` 保留现有名称，连接 URL 中的数据库名使用 `initra`。
+setup 只生成 Git 忽略的本地配置与管理员 seed；不会执行数据库迁移。首次生成时显示本地管理员密码，请自行妥善保存，后续执行不会覆盖既有凭据。不要将本地配置、密码或带密码的数据库 URL 提交到仓库。
 
-setup 会改写 module 和内部引用、应用名称及默认命名空间，生成未纳入 Git 的 `configs/config.local.yaml` 和 `db/seeds/001_seed_admin.local.sql`。JWT 密钥随机生成；管理员用户名为 `admin`，初始密码仅在首次生成 seed 时显示，文件中只保存 bcrypt 哈希。重复执行保留已有凭据。迁移和 seed 由上述命令显式执行。
+本地数据库由 Compose 创建为 `glean`，账号为 `postgres`，仅绑定回环地址。为后续命令在自己的终端私密设置 `DATABASE_URL` 指向此本地数据库；本地允许 `sslmode=disable`，共享环境必须使用 `verify-full`。
 
-## 配置
-
-配置按默认值、`configs/config.yaml`、`configs/config.<env>.yaml`、环境变量的顺序覆盖，并在启动时校验。运行环境使用 `APP_ENV`，其他配置环境变量默认使用 `INITRA_` 前缀，例如 `INITRA_AUTH_JWT_SECRET` 和 `INITRA_IDGEN_NODE`。
-
-setup 准备本地环境；dev、test 和共享环境需要自行提供 JWT 密钥。每个运行实例必须显式配置唯一的 0–1023 Snowflake node。共享环境要求 PostgreSQL `verify-full`、Redis 认证状态、明确的 CORS 白名单，并关闭匿名 API 文档。
-
-本地依赖默认连接回环地址；Docker 镜像通过环境变量接收运行配置。生产配置和本地凭据由各业务项目自行管理。
-
-## 数据库
-
-Ent schema 位于 `internal/data/schema`，生成代码随仓库提交。修改 schema 后执行：
-
-```powershell
-go generate ./internal/data
-go run ./internal/data/migratediff/main.go <name> --env local --config-dir configs --dev-url <独立的迁移开发库URL>
-atlas migrate hash --dir file://db/migrations
+```sh
 atlas -c file://db/atlas.hcl migrate apply --env local
+psql "$DATABASE_URL" --set ON_ERROR_STOP=1 --single-transaction -f db/seeds/001_seed_admin.local.sql
 ```
 
-diff 使用独立的临时开发库重放迁移；apply 使用 `DATABASE_URL` 指定目标库。当前迁移从全新基线开始，整个历史不创建物理外键；关联一致性由应用事务和行锁维护。
+### 2. 校验并导入真实历史基线
 
-## 开发验证
+```sh
+go run ./tools/importbaseline -mode verify
+```
 
-```powershell
+从已创建的管理员账号获得用户 ID（登录响应或 `/api/v1/auth/me`），设置 `GLEAN_BASELINE_DATABASE_URL` 为同一数据库 URL。也可在启动服务前通过本地数据库查询已创建的启用用户 ID。
+
+```sh
+go run ./tools/importbaseline -mode import -node 17 -operator '<existing-user-id>' -allow-local-insecure
+```
+
+`17` 是示例节点，必须与同时运行的服务/导入器不同。`-allow-local-insecure` 只适用于明确的本地回环开发数据库，不能用于远程数据库。
+
+所有分片先校验后导入。重跑不会重复新增相同主题原始编号；失败条目隔离并非零退出，不静默忽略。报告写入忽略的 `.baseline/`。详见 [基线说明](docs/glean/baseline.md)。
+
+### 3. 启动后端和前端
+
+```sh
+APP_ENV=local INITRA_IDGEN_NODE=1 go run ./cmd/server
+```
+
+另一个终端：
+
+```sh
+cd web
+npm ci
+npm run dev
+```
+
+浏览器访问 `http://127.0.0.1:5173`，用本地初始化账号登录。Vite 将 `/api` 转发到 `127.0.0.1:8080`。后端配置环境变量保留 initra 的 **`INITRA_` 前缀**以保持模板兼容；应用标识、数据库与项目名为 Glean。
+
+可先启动服务获取用户 ID，再完成步骤 2；在导入前，页面显示真实空状态，不会偷偷显示假数据。
+
+### 4. 验证模拟监控
+
+无需数据库的有限演示：
+
+```sh
+go run ./cmd/glean-monitor --node 11 --scenario incremental
+```
+
+这会演练新记录、版本更新、正式发表事件和明确标记的 mock 审核。要在真实前端的监控页面看到持久模拟运行，显式设置 `INITRA_MONITOR_DATABASE_URL` 后按 [监控命令说明](cmd/glean-monitor/README.md) 运行 `--persist-mock --operator ...`。不默认开启后台扫描，不需要真实 LLM 密钥。
+
+## 可选容器前后端
+
+完成本地配置、迁移和基线导入后：
+
+Linux 开发机先使用当前非 root 用户创建私有运行目录，并显式传递文件所有者 ID。不要将本地配置改成全员可读，也不要以 root 启动应用容器：
+
+```sh
+export LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)"
+test "$LOCAL_UID" != 0 || { echo "请使用普通开发用户"; exit 1; }
+install -d -m 700 var
+docker compose --profile app up --build -d
+```
+
+本地 `config.local.yaml` 保持 setup 创建的私有权限，后端容器以对应 UID/GID 读取；`var` 挂载供日志/上传写入。macOS/Windows Docker Desktop 的挂载 UID 行为需要在目标机器验证。
+
+前端 `http://127.0.0.1:3000`，`/api` 由 Nginx 反向代理至 Compose 内部的 `backend:8080`。仅供本地验证，不能直接作为公网生产配置。前端静态健康检查不代表数据库或后端就绪。生产部署需要自行提供 TLS、受控账号/密钥、备份及明确来源访问额度。
+
+## 验证
+
+```sh
 go test ./... -count=1
 go vet ./...
-go build -o ./tmp/server.exe ./cmd/server
+go build ./cmd/server
+go build ./cmd/glean-monitor
+go build ./tools/importbaseline
+cd web
+npm test
+npm run typecheck
+npm run lint
+npm run build
+npm run format:check
 ```
 
-默认测试使用 fake、sqlmock 和内存依赖。设置 `INITRA_TEST_DATABASE_URL` 后，集成测试会在该 PostgreSQL 测试库的独立事务 schema 内验证迁移和 seed，并在结束时回滚；CI 已启用此验证。
+CI 启动隔离 PostgreSQL 16，强制检查真实迁移、文献导入/查询、监控持久化和完整历史快照测试，不能用跳过数据库测试冒充通过。本地未设置 `INITRA_TEST_DATABASE_URL` 时，相关测试会明确跳过。真实源/LLM 联调与浏览器视觉验收不由 mock 或 DOM 测试替代。
 
-业务模块按 flat package 组织。开发约定见 [AGENTS.md](AGENTS.md)，贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+## 设计原则
+
+- 发现时间、索引时间、预印本时间、正式在线/卷期时间分别保存；投稿/录用日期不冒充正式发表。
+- 三个主题独立资格与科学判断；JIF/CCF 证据版本化，不混用目录规则。
+- 旧科学核验不被 mock 或低置信度自动结果覆盖；获取内容不等于读过内容。
+- 不把数千条逐篇描述直接展开成侧栏选项；原始证据保留，显示分组复用最新历史目录。
+- 无硬编码模型密钥；认证 token 仅在前端内存中，页面刷新后重新登录。
+
+参阅 [API 契约](docs/glean/api-contract.md)、[历史基线](docs/glean/baseline.md)、[前端说明](web/README.md)、[模板来源](TEMPLATE_ORIGIN.md) 以及 [开发约定](AGENTS.md)。

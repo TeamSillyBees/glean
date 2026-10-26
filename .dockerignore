@@ -9,3 +9,9 @@ configs/*.yaml
 db
 *.log
 coverage.out
+
+.tools
+.baseline
+web/node_modules
+web/dist
+coverage

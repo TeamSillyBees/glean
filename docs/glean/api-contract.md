@@ -28,3 +28,12 @@ The three HTML baseline membership totals are 31399 / 4059 / 4037. These are exp
 ## Dynamic historical filter dimensions
 
 Query `dimension` is a JSON object of exact original dimension key to one exact string value (AND across keys), e.g. `dimension={"biomedical_domains":"Oncology"}` URL-encoded. `null`, arrays and non-string values are rejected. Convenience aliases: `task` matches `technical_tasks` or `tasks`; `role` matches `llm_role`, `ai_leadership` or `roles`; `direction` matches `relation_direction`; `method` matches `ai_methods`. `facets.dimensions` preserves every supplied dimension key; convenience arrays `tasks`, `roles`, `directions`, `methods` use the same unions. `Membership.dimensions` and import `dimensions` are `map[string][]string`. Paper-level `readStatus` is personal unread/reading/read; source scientific-review evidence remains independently in membership/read-status and original dimensions. List responses omit heavy raw/evidence content (empty objects/arrays); detail returns complete stored evidence.
+
+## Authentication used by the query frontend
+
+- `POST /api/v1/auth/login` JSON `{username,password}` is public; `data` contains `{accessToken,refreshToken,user:{userId,username,nickname,roleCodes,isSuperAdmin,isEnable}}`.
+- `POST /api/v1/auth/refresh` JSON `{refreshToken}` is public and does not require an expired Bearer token. It atomically rotates both tokens; the old refresh token cannot be replayed.
+- `POST /api/v1/auth/logout` requires `Authorization: Bearer <accessToken>` plus JSON `{refreshToken}` from the same current session. Both tokens are invalid after successful logout.
+- Every catalog and monitor query uses the Bearer access token and the standard `code/message/data` envelope. The frontend keeps tokens in memory only and serializes concurrent refresh attempts.
+
+`TestGleanFrontendAuthContract` exercises this exact HTTP flow with real JWT/token-store behavior and a SQLmock database. This is not a browser-with-live-PostgreSQL test.

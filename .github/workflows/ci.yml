@@ -1,23 +1,36 @@
-name: CI
+name: Glean CI
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: glean-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   verify:
+    name: Go, PostgreSQL and historical baseline
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Isolated CI service only; no application, LLM or source API secrets required.
+      INITRA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/glean_ci?sslmode=disable
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: initra_ci
+          POSTGRES_DB: glean_ci
         ports:
           - 5432:5432
         options: >-
@@ -29,6 +42,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -39,6 +54,7 @@ jobs:
       - name: Verify module dependencies and generated Ent sources
         run: |
           go mod tidy
+          go mod verify
           go generate ./internal/data
           git diff --exit-code -- go.mod go.sum internal/data/ent
           if [ -n "$(git status --porcelain --untracked-files=all -- go.mod go.sum internal/data/ent)" ]; then
@@ -46,22 +62,225 @@ jobs:
             exit 1
           fi
 
-      - name: Test, vet and build template
-        env:
-          INITRA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/initra_ci?sslmode=disable
+      - name: Test all Go packages, real PostgreSQL and complete historical data
         run: |
-          go test ./... -count=1
-          go vet ./...
-          go build -o "$RUNNER_TEMP/server" ./cmd/server
+          set -euo pipefail
+          go test -json ./... -count=1 | tee "$RUNNER_TEMP/glean-go-test.jsonl"
+          # Fail if a required database or full-snapshot test silently becomes skipped.
+          python3 - "$RUNNER_TEMP/glean-go-test.jsonl" "$(go list -m)" <<'PY'
+          import json
+          import sys
 
-      - name: Verify renamed project
+          module = sys.argv[2]
+          required = {
+              (module + "/internal/modules/catalog", "TestCatalogPostgresEndToEnd"),
+              (module + "/internal/modules/monitor", "TestMonitorPostgresDurableMockRun"),
+              (module + "/test/integration", "TestMigrationsAndSeedOnPostgres"),
+              (module + "/internal/baseline", "TestCommittedHistoricalManifest"),
+          }
+          passed = set()
+          with open(sys.argv[1], encoding="utf-8") as results:
+              for line in results:
+                  event = json.loads(line)
+                  if event.get("Action") == "pass" and event.get("Test"):
+                      passed.add((event["Package"], event["Test"]))
+          missing = required - passed
+          if missing:
+              raise SystemExit("Required database/baseline tests did not pass: " + repr(sorted(missing)))
+          print("Verified real PostgreSQL catalog, durable monitor, migrations and every committed baseline shard.")
+          PY
+
+      - name: Vet Go packages
+        run: go vet ./...
+
+      - name: Build server, offline monitor and baseline importer
         run: |
-          target="$RUNNER_TEMP/template-smoke"
-          mkdir -p "$target"
-          git archive HEAD | tar -x -C "$target"
-          cd "$target"
-          go run ./tools/setup -module example.com/template-smoke -name "Template Smoke" > /dev/null
-          go generate ./internal/data
-          go test ./... -count=1
-          go vet ./...
-          go build -o "$RUNNER_TEMP/renamed-server" ./cmd/server
+          go build -o "$RUNNER_TEMP/glean-server" ./cmd/server
+          go build -o "$RUNNER_TEMP/glean-monitor" ./cmd/glean-monitor
+          go build -o "$RUNNER_TEMP/glean-importbaseline" ./tools/importbaseline
+
+  frontend:
+    name: Frontend tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test frontend behavior and session isolation
+        run: npm test -- --maxWorkers=1
+
+      - name: Type-check frontend
+        run: npm run typecheck
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Build production frontend
+        run: npm run build
+
+      - name: Check frontend formatting
+        run: npm run format:check
+
+  containers:
+    name: Container builds and isolated HTTP smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Validate local Compose without loading local credentials
+        run: |
+          LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" \
+            docker compose --env-file /dev/null --profile app config --quiet
+
+      - name: Build backend and frontend images without publishing
+        run: |
+          docker build --tag glean-backend:ci .
+          docker build --tag glean-web:ci ./web
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 glean-web:ci -t
+
+      - name: Start isolated PostgreSQL, Redis and backend
+        run: |
+          set -euo pipefail
+          umask 077
+          smoke="$RUNNER_TEMP/glean-container-smoke"
+          mkdir -p "$smoke/configs"
+          # Only committed base configuration; never setup output or a user local file.
+          cp configs/config.yaml configs/rbac_model.conf "$smoke/configs/"
+          chmod 755 "$smoke/configs"
+          chmod 644 "$smoke/configs/"*
+          db_password="$(openssl rand -hex 32)"
+          jwt_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$db_password"
+          echo "::add-mask::$jwt_secret"
+          printf 'POSTGRES_DB=glean_smoke\nPOSTGRES_USER=postgres\nPOSTGRES_PASSWORD=%s\n' \
+            "$db_password" > "$smoke/postgres.env"
+          cat > "$smoke/backend.env" <<EOF
+          APP_ENV=local
+          INITRA_SERVER_ADDR=0.0.0.0:8080
+          INITRA_DATABASE_HOST=postgres
+          INITRA_DATABASE_DBNAME=glean_smoke
+          INITRA_DATABASE_PASSWORD=$db_password
+          INITRA_REDIS_ADDR=redis:6379
+          INITRA_TASK_REDIS_ADDR=redis:6379
+          INITRA_AUTH_JWT_SECRET=$jwt_secret
+          INITRA_IDGEN_NODE=1
+          INITRA_TASK_WORKER_ENABLED=false
+          INITRA_TASK_SCHEDULER_ENABLED=false
+          INITRA_MONITOR_SCHEDULER_ENABLED=false
+          EOF
+          # No dependency host ports or persistent volumes, and no application accounts.
+          docker network create glean-ci
+          docker run -d --name glean-ci-postgres --network glean-ci --network-alias postgres \
+            --env-file "$smoke/postgres.env" postgres:16
+          docker run -d --name glean-ci-redis --network glean-ci --network-alias redis \
+            redis:7 redis-server --save '' --appendonly no
+          for attempt in {1..30}; do
+            if docker exec glean-ci-postgres pg_isready -h 127.0.0.1 -U postgres -d glean_smoke >/dev/null 2>&1 \
+              && docker exec glean-ci-redis redis-cli ping | grep -q PONG; then
+              break
+            fi
+            sleep 2
+          done
+          docker exec glean-ci-postgres pg_isready -h 127.0.0.1 -U postgres -d glean_smoke
+          docker exec glean-ci-redis redis-cli ping | grep -q PONG
+          cat db/migrations/*.sql | docker exec -i glean-ci-postgres \
+            psql -U postgres -d glean_smoke --set ON_ERROR_STOP=1 --single-transaction > "$smoke/migrations.log"
+          docker run -d --name glean-ci-backend --network glean-ci --network-alias backend \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+            --tmpfs /app/var:rw,noexec,nosuid,size=32m,uid=65532,gid=65532,mode=0700 \
+            --env-file "$smoke/backend.env" \
+            --mount "type=bind,source=$smoke/configs,target=/app/configs,readonly" \
+            -p 127.0.0.1:18080:8080 glean-backend:ci
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-connrefused \
+            --max-time 5 --retry-max-time 90 http://127.0.0.1:18080/ready > "$smoke/ready.json"
+
+      - name: Smoke-test frontend static files, backend readiness and API proxy
+        run: |
+          set -euo pipefail
+          docker run -d --name glean-ci-web --network glean-ci \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+            -p 127.0.0.1:18081:8080 glean-web:ci
+          curl --fail --silent --show-error --retry 15 --retry-delay 2 --retry-connrefused \
+            --max-time 5 --retry-max-time 45 http://127.0.0.1:18081/healthz > /dev/null
+          python3 <<'PY'
+          import json
+          import re
+          from urllib.error import HTTPError
+          from urllib.request import urlopen
+
+          def get(base, path, expected=200):
+              try:
+                  response = urlopen(base + path, timeout=10)
+              except HTTPError as error:
+                  response = error
+              with response:
+                  assert response.status == expected, (path, response.status, expected)
+                  return response.read(), response.headers
+
+          api = "http://127.0.0.1:18080"
+          web = "http://127.0.0.1:18081"
+          for path, status in [("/health", "ok"), ("/ready", "ready")]:
+              body, _ = get(api, path)
+              assert json.loads(body)["data"]["status"] == status
+          index, headers = get(web, "/")
+          assert b'<div id="root">' in index
+          assert headers["X-Content-Type-Options"] == "nosniff"
+          assert headers["X-Frame-Options"] == "DENY"
+          assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+          assert get(web, "/papers/direct-navigation")[0] == index
+          assert get(web, "/healthz")[0] == index
+          assets = re.findall(rb'(?:src|href)="(/assets/[^"?]+\.(?:js|css))"', index)
+          assert any(path.endswith(b".js") for path in assets), "built JavaScript entry missing"
+          assert any(path.endswith(b".css") for path in assets), "built CSS entry missing"
+          for path in assets:
+              body, asset_headers = get(web, path.decode())
+              assert body and body != index
+              assert "immutable" in asset_headers["Cache-Control"]
+              assert "html" not in asset_headers["Content-Type"]
+          get(web, "/assets/does-not-exist.js", 404)
+          get(web, "/api", 404)
+          for base in (api, web):
+              body, api_headers = get(base, "/api/v1/catalog/papers", 401)
+              assert "json" in api_headers["Content-Type"]
+              assert isinstance(json.loads(body), dict), "API errors must not become SPA HTML"
+          print("Container HTTP smoke passed: nonroot static SPA/assets, backend dependencies and unauthenticated API proxy.")
+          PY
+
+      - name: Diagnose failed container smoke
+        if: failure()
+        run: |
+          for container in glean-ci-backend glean-ci-web glean-ci-postgres glean-ci-redis; do
+            docker logs --tail 100 "$container" 2>&1 || true
+          done
+
+      - name: Remove isolated containers, network and ephemeral configuration
+        if: always()
+        run: |
+          docker rm -fv glean-ci-web glean-ci-backend glean-ci-redis glean-ci-postgres 2>/dev/null || true
+          docker network rm glean-ci 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/glean-container-smoke"

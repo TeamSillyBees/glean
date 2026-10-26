@@ -1,0 +1,20 @@
+# Only the source/build inputs explicitly copied by Dockerfile are required.
+node_modules
+dist
+dist-ssr
+coverage
+*.log
+.git
+.github
+.env
+.env.*
+*.local
+.npmrc
+.npm
+*.pem
+*.key
+*.p12
+*.pfx
+.vscode
+.idea
+.DS_Store

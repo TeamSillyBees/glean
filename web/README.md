@@ -54,3 +54,48 @@ Documentation consulted:
 ## Verification scope
 
 Vitest + Testing Library exercise authenticated querying, exact taxonomy transport, saved preference restoration, loading/error/empty transitions, repeated detail dismissal, read/hidden mutations and restoration, read-only monitoring, keyboard search, and session-race isolation. All network data in these tests is explicitly mocked. These are functional DOM tests, not a claim of browser screenshot QA or live backend end-to-end coverage. Real Chromium execution was unavailable in the assigned environment due to the previously reported socket permission denial; it was not retried or bypassed.
+
+## Container deployment
+
+Build from the repository root with **`web/` as the build context**:
+
+```bash
+docker build --pull -t glean-web:local ./web
+```
+
+The multi-stage image builds with the official `node:24-bookworm-slim` image, then copies only `dist/` into official `nginx:stable-alpine`. The runtime uses the non-root `nginx` user on port **8080**. `RUN nginx -t` validates configuration during the image build. Upstream image tags intentionally receive maintenance updates; production release tooling should additionally pin verified image digests.
+
+The frontend and Go service must share a **user-defined Docker/Compose network**, and the Go service must be reachable on that network as **`backend:8080`**. Docker's embedded DNS (`127.0.0.11`) is resolved at request time and refreshed every 30 seconds; a backend starting later does not prevent the static frontend from starting. The API should stay on that private service network; only publish the frontend's port to the local host. The repository-level Compose configuration is maintained separately.
+
+For an already-created network named `glean` containing the backend service, a restrictive local run is:
+
+```bash
+docker run --rm --name glean-web --network glean \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  -p 127.0.0.1:8088:8080 glean-web:local
+```
+
+- Open `http://127.0.0.1:8088`. `/api/*` is forwarded to `backend:8080` **without stripping `/api`**, preserving JSON request bodies, query strings and the Bearer header. API errors remain API errors, never an HTML fallback.
+- SPA deep links fall back to `index.html`; missing hashed assets return 404. HTML is revalidated; hashed `/assets/` files are cacheable. API responses are not cached.
+- `/healthz` checks nginx and the built `index.html` file. The Docker health check does **not** claim database/API readiness or a successful login. Validate the backend independently.
+- The image consumes no runtime secrets, tokens, LLM keys or environment substitution. `.env*`, local npm configuration and common key formats are excluded from the build context, and Dockerfile uses an explicit source-copy allowlist. The container intentionally uses same-origin `/api`, so `VITE_API_BASE_URL` is not a runtime switch.
+- Nginx uses `/tmp` for its PID and temporary files, permitting a read-only root filesystem. Access logs omit query strings and credentials. Static CSP permits same-origin connections only, while external paper links remain ordinary user-initiated navigation.
+- This is a private local-network HTTP example, not an external production deployment. Terminate TLS at a separately configured trusted edge before public exposure; adapt trusted-proxy/forwarded-header settings deliberately rather than trusting arbitrary client headers.
+
+### Authentication onboarding and verification
+
+Initialize a real local account with the backend's setup/seed instructions; no fixed production credentials are supplied by the frontend. The browser uses these exact routes:
+
+| Action | Route | JSON / authentication |
+| --- | --- | --- |
+| Sign in | `POST /api/v1/auth/login` | `{username,password}`; reads `data.user`, `data.accessToken`, `data.refreshToken` |
+| Refresh | `POST /api/v1/auth/refresh` | `{refreshToken}`; public endpoint, rotates the refresh token |
+| Query | `GET /api/v1/catalog/topics` (and catalog/monitor views) | `Authorization: Bearer …` |
+| Sign out | `POST /api/v1/auth/logout` | `{refreshToken}` plus Bearer access token |
+
+`test/e2e/glean_auth_test.go::TestGleanFrontendAuthContract` verifies the real Go HTTP handlers, JWT issuance/rotation, refresh replay rejection, authenticated topic query, logout and subsequent revocation through `httptest`, using a SQL-mocked database. This is stronger than the frontend's mocked transport tests but **is not a live PostgreSQL/browser end-to-end claim**.
+
+`src/test/deployment.test.ts` checks deployment-file invariants only. In the current executor Docker, Podman and nginx binaries are unavailable, so the container image build, `nginx -t` inside that image, and running reverse-proxy behavior have not been executed here. The build-time validation above runs when the image is actually built. No browser screenshot QA is claimed.
+
+Official references: [Node Docker images](https://github.com/nodejs/docker-node), [nginx Docker image and non-root configuration](https://hub.docker.com/_/nginx), [nginx proxy URI behavior](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass), [Docker health checks](https://docs.docker.com/reference/dockerfile/#healthcheck).
