@@ -12,6 +12,12 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanmonitorstate"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
 	"github.com/teamsillybees/glean/internal/data/ent/sysdictcollection"
 	"github.com/teamsillybees/glean/internal/data/ent/sysdictitem"
@@ -80,6 +86,12 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			gleanmembership.Table:   gleanmembership.ValidColumn,
+			gleanmonitorstate.Table: gleanmonitorstate.ValidColumn,
+			gleanpaper.Table:        gleanpaper.ValidColumn,
+			gleanpaperstate.Table:   gleanpaperstate.ValidColumn,
+			gleanpreference.Table:   gleanpreference.ValidColumn,
+			gleanvenue.Table:        gleanvenue.ValidColumn,
 			sysconfig.Table:         sysconfig.ValidColumn,
 			sysdictcollection.Table: sysdictcollection.ValidColumn,
 			sysdictitem.Table:       sysdictitem.ValidColumn,

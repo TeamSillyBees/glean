@@ -5,6 +5,12 @@ package ent
 import (
 	"time"
 
+	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanmonitorstate"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
 	"github.com/teamsillybees/glean/internal/data/ent/sysdictcollection"
 	"github.com/teamsillybees/glean/internal/data/ent/sysdictitem"
@@ -21,6 +27,274 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	gleanmembershipFields := schema.GleanMembership{}.Fields()
+	_ = gleanmembershipFields
+	// gleanmembershipDescPaperID is the schema descriptor for paper_id field.
+	gleanmembershipDescPaperID := gleanmembershipFields[1].Descriptor()
+	// gleanmembership.PaperIDValidator is a validator for the "paper_id" field. It is called by the builders before save.
+	gleanmembership.PaperIDValidator = gleanmembershipDescPaperID.Validators[0].(func(int64) error)
+	// gleanmembershipDescTopic is the schema descriptor for topic field.
+	gleanmembershipDescTopic := gleanmembershipFields[2].Descriptor()
+	// gleanmembership.TopicValidator is a validator for the "topic" field. It is called by the builders before save.
+	gleanmembership.TopicValidator = gleanmembershipDescTopic.Validators[0].(func(string) error)
+	// gleanmembershipDescOriginalID is the schema descriptor for original_id field.
+	gleanmembershipDescOriginalID := gleanmembershipFields[3].Descriptor()
+	// gleanmembership.OriginalIDValidator is a validator for the "original_id" field. It is called by the builders before save.
+	gleanmembership.OriginalIDValidator = gleanmembershipDescOriginalID.Validators[0].(func(string) error)
+	// gleanmembershipDescTier is the schema descriptor for tier field.
+	gleanmembershipDescTier := gleanmembershipFields[4].Descriptor()
+	// gleanmembership.DefaultTier holds the default value on creation for the tier field.
+	gleanmembership.DefaultTier = gleanmembershipDescTier.Default.(string)
+	// gleanmembershipDescPrimaryCategory is the schema descriptor for primary_category field.
+	gleanmembershipDescPrimaryCategory := gleanmembershipFields[5].Descriptor()
+	// gleanmembership.DefaultPrimaryCategory holds the default value on creation for the primary_category field.
+	gleanmembership.DefaultPrimaryCategory = gleanmembershipDescPrimaryCategory.Default.(string)
+	// gleanmembershipDescCategories is the schema descriptor for categories field.
+	gleanmembershipDescCategories := gleanmembershipFields[6].Descriptor()
+	// gleanmembership.DefaultCategories holds the default value on creation for the categories field.
+	gleanmembership.DefaultCategories = gleanmembershipDescCategories.Default.([]string)
+	// gleanmembershipDescDimensions is the schema descriptor for dimensions field.
+	gleanmembershipDescDimensions := gleanmembershipFields[7].Descriptor()
+	// gleanmembership.DefaultDimensions holds the default value on creation for the dimensions field.
+	gleanmembership.DefaultDimensions = gleanmembershipDescDimensions.Default.(map[string][]string)
+	// gleanmembershipDescReadStatus is the schema descriptor for read_status field.
+	gleanmembershipDescReadStatus := gleanmembershipFields[8].Descriptor()
+	// gleanmembership.DefaultReadStatus holds the default value on creation for the read_status field.
+	gleanmembership.DefaultReadStatus = gleanmembershipDescReadStatus.Default.(string)
+	// gleanmembershipDescSource is the schema descriptor for source field.
+	gleanmembershipDescSource := gleanmembershipFields[9].Descriptor()
+	// gleanmembership.DefaultSource holds the default value on creation for the source field.
+	gleanmembership.DefaultSource = gleanmembershipDescSource.Default.(string)
+	// gleanmembershipDescIsMock is the schema descriptor for is_mock field.
+	gleanmembershipDescIsMock := gleanmembershipFields[10].Descriptor()
+	// gleanmembership.DefaultIsMock holds the default value on creation for the is_mock field.
+	gleanmembership.DefaultIsMock = gleanmembershipDescIsMock.Default.(bool)
+	// gleanmembershipDescRaw is the schema descriptor for raw field.
+	gleanmembershipDescRaw := gleanmembershipFields[11].Descriptor()
+	// gleanmembership.DefaultRaw holds the default value on creation for the raw field.
+	gleanmembership.DefaultRaw = gleanmembershipDescRaw.Default.(map[string]interface{})
+	// gleanmembershipDescCreatedAt is the schema descriptor for created_at field.
+	gleanmembershipDescCreatedAt := gleanmembershipFields[12].Descriptor()
+	// gleanmembership.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleanmembership.DefaultCreatedAt = gleanmembershipDescCreatedAt.Default.(func() time.Time)
+	// gleanmembershipDescUpdatedAt is the schema descriptor for updated_at field.
+	gleanmembershipDescUpdatedAt := gleanmembershipFields[13].Descriptor()
+	// gleanmembership.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleanmembership.DefaultUpdatedAt = gleanmembershipDescUpdatedAt.Default.(func() time.Time)
+	// gleanmembership.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleanmembership.UpdateDefaultUpdatedAt = gleanmembershipDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleanmembershipDescID is the schema descriptor for id field.
+	gleanmembershipDescID := gleanmembershipFields[0].Descriptor()
+	// gleanmembership.DefaultID holds the default value on creation for the id field.
+	gleanmembership.DefaultID = gleanmembershipDescID.Default.(func() idgen.ID)
+	// gleanmembership.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleanmembership.IDValidator = gleanmembershipDescID.Validators[0].(func(int64) error)
+	gleanmonitorstateFields := schema.GleanMonitorState{}.Fields()
+	_ = gleanmonitorstateFields
+	// gleanmonitorstateDescKey is the schema descriptor for key field.
+	gleanmonitorstateDescKey := gleanmonitorstateFields[1].Descriptor()
+	// gleanmonitorstate.KeyValidator is a validator for the "key" field. It is called by the builders before save.
+	gleanmonitorstate.KeyValidator = gleanmonitorstateDescKey.Validators[0].(func(string) error)
+	// gleanmonitorstateDescRevision is the schema descriptor for revision field.
+	gleanmonitorstateDescRevision := gleanmonitorstateFields[3].Descriptor()
+	// gleanmonitorstate.DefaultRevision holds the default value on creation for the revision field.
+	gleanmonitorstate.DefaultRevision = gleanmonitorstateDescRevision.Default.(int)
+	// gleanmonitorstateDescCreatedAt is the schema descriptor for created_at field.
+	gleanmonitorstateDescCreatedAt := gleanmonitorstateFields[4].Descriptor()
+	// gleanmonitorstate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleanmonitorstate.DefaultCreatedAt = gleanmonitorstateDescCreatedAt.Default.(func() time.Time)
+	// gleanmonitorstateDescUpdatedAt is the schema descriptor for updated_at field.
+	gleanmonitorstateDescUpdatedAt := gleanmonitorstateFields[5].Descriptor()
+	// gleanmonitorstate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleanmonitorstate.DefaultUpdatedAt = gleanmonitorstateDescUpdatedAt.Default.(func() time.Time)
+	// gleanmonitorstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleanmonitorstate.UpdateDefaultUpdatedAt = gleanmonitorstateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleanmonitorstateDescID is the schema descriptor for id field.
+	gleanmonitorstateDescID := gleanmonitorstateFields[0].Descriptor()
+	// gleanmonitorstate.DefaultID holds the default value on creation for the id field.
+	gleanmonitorstate.DefaultID = gleanmonitorstateDescID.Default.(func() idgen.ID)
+	// gleanmonitorstate.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleanmonitorstate.IDValidator = gleanmonitorstateDescID.Validators[0].(func(int64) error)
+	gleanpaperFields := schema.GleanPaper{}.Fields()
+	_ = gleanpaperFields
+	// gleanpaperDescIdentityKey is the schema descriptor for identity_key field.
+	gleanpaperDescIdentityKey := gleanpaperFields[1].Descriptor()
+	// gleanpaper.IdentityKeyValidator is a validator for the "identity_key" field. It is called by the builders before save.
+	gleanpaper.IdentityKeyValidator = gleanpaperDescIdentityKey.Validators[0].(func(string) error)
+	// gleanpaperDescTitle is the schema descriptor for title field.
+	gleanpaperDescTitle := gleanpaperFields[2].Descriptor()
+	// gleanpaper.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	gleanpaper.TitleValidator = gleanpaperDescTitle.Validators[0].(func(string) error)
+	// gleanpaperDescTitleZh is the schema descriptor for title_zh field.
+	gleanpaperDescTitleZh := gleanpaperFields[3].Descriptor()
+	// gleanpaper.DefaultTitleZh holds the default value on creation for the title_zh field.
+	gleanpaper.DefaultTitleZh = gleanpaperDescTitleZh.Default.(string)
+	// gleanpaperDescAbstract is the schema descriptor for abstract field.
+	gleanpaperDescAbstract := gleanpaperFields[4].Descriptor()
+	// gleanpaper.DefaultAbstract holds the default value on creation for the abstract field.
+	gleanpaper.DefaultAbstract = gleanpaperDescAbstract.Default.(string)
+	// gleanpaperDescAuthors is the schema descriptor for authors field.
+	gleanpaperDescAuthors := gleanpaperFields[5].Descriptor()
+	// gleanpaper.DefaultAuthors holds the default value on creation for the authors field.
+	gleanpaper.DefaultAuthors = gleanpaperDescAuthors.Default.([]string)
+	// gleanpaperDescYear is the schema descriptor for year field.
+	gleanpaperDescYear := gleanpaperFields[6].Descriptor()
+	// gleanpaper.DefaultYear holds the default value on creation for the year field.
+	gleanpaper.DefaultYear = gleanpaperDescYear.Default.(int)
+	// gleanpaperDescVenue is the schema descriptor for venue field.
+	gleanpaperDescVenue := gleanpaperFields[7].Descriptor()
+	// gleanpaper.DefaultVenue holds the default value on creation for the venue field.
+	gleanpaper.DefaultVenue = gleanpaperDescVenue.Default.(string)
+	// gleanpaperDescPublicationType is the schema descriptor for publication_type field.
+	gleanpaperDescPublicationType := gleanpaperFields[8].Descriptor()
+	// gleanpaper.DefaultPublicationType holds the default value on creation for the publication_type field.
+	gleanpaper.DefaultPublicationType = gleanpaperDescPublicationType.Default.(string)
+	// gleanpaperDescURL is the schema descriptor for url field.
+	gleanpaperDescURL := gleanpaperFields[11].Descriptor()
+	// gleanpaper.DefaultURL holds the default value on creation for the url field.
+	gleanpaper.DefaultURL = gleanpaperDescURL.Default.(string)
+	// gleanpaperDescDateProvenance is the schema descriptor for date_provenance field.
+	gleanpaperDescDateProvenance := gleanpaperFields[14].Descriptor()
+	// gleanpaper.DefaultDateProvenance holds the default value on creation for the date_provenance field.
+	gleanpaper.DefaultDateProvenance = gleanpaperDescDateProvenance.Default.(string)
+	// gleanpaperDescEvidence is the schema descriptor for evidence field.
+	gleanpaperDescEvidence := gleanpaperFields[15].Descriptor()
+	// gleanpaper.DefaultEvidence holds the default value on creation for the evidence field.
+	gleanpaper.DefaultEvidence = gleanpaperDescEvidence.Default.([]map[string]interface{})
+	// gleanpaperDescIsMock is the schema descriptor for is_mock field.
+	gleanpaperDescIsMock := gleanpaperFields[16].Descriptor()
+	// gleanpaper.DefaultIsMock holds the default value on creation for the is_mock field.
+	gleanpaper.DefaultIsMock = gleanpaperDescIsMock.Default.(bool)
+	// gleanpaperDescCreatedAt is the schema descriptor for created_at field.
+	gleanpaperDescCreatedAt := gleanpaperFields[17].Descriptor()
+	// gleanpaper.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleanpaper.DefaultCreatedAt = gleanpaperDescCreatedAt.Default.(func() time.Time)
+	// gleanpaperDescUpdatedAt is the schema descriptor for updated_at field.
+	gleanpaperDescUpdatedAt := gleanpaperFields[18].Descriptor()
+	// gleanpaper.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleanpaper.DefaultUpdatedAt = gleanpaperDescUpdatedAt.Default.(func() time.Time)
+	// gleanpaper.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleanpaper.UpdateDefaultUpdatedAt = gleanpaperDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleanpaperDescID is the schema descriptor for id field.
+	gleanpaperDescID := gleanpaperFields[0].Descriptor()
+	// gleanpaper.DefaultID holds the default value on creation for the id field.
+	gleanpaper.DefaultID = gleanpaperDescID.Default.(func() idgen.ID)
+	// gleanpaper.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleanpaper.IDValidator = gleanpaperDescID.Validators[0].(func(int64) error)
+	gleanpaperstateFields := schema.GleanPaperState{}.Fields()
+	_ = gleanpaperstateFields
+	// gleanpaperstateDescPaperID is the schema descriptor for paper_id field.
+	gleanpaperstateDescPaperID := gleanpaperstateFields[1].Descriptor()
+	// gleanpaperstate.PaperIDValidator is a validator for the "paper_id" field. It is called by the builders before save.
+	gleanpaperstate.PaperIDValidator = gleanpaperstateDescPaperID.Validators[0].(func(int64) error)
+	// gleanpaperstateDescUserID is the schema descriptor for user_id field.
+	gleanpaperstateDescUserID := gleanpaperstateFields[2].Descriptor()
+	// gleanpaperstate.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	gleanpaperstate.UserIDValidator = gleanpaperstateDescUserID.Validators[0].(func(int64) error)
+	// gleanpaperstateDescHidden is the schema descriptor for hidden field.
+	gleanpaperstateDescHidden := gleanpaperstateFields[3].Descriptor()
+	// gleanpaperstate.DefaultHidden holds the default value on creation for the hidden field.
+	gleanpaperstate.DefaultHidden = gleanpaperstateDescHidden.Default.(bool)
+	// gleanpaperstateDescReadStatus is the schema descriptor for read_status field.
+	gleanpaperstateDescReadStatus := gleanpaperstateFields[4].Descriptor()
+	// gleanpaperstate.DefaultReadStatus holds the default value on creation for the read_status field.
+	gleanpaperstate.DefaultReadStatus = gleanpaperstateDescReadStatus.Default.(string)
+	// gleanpaperstateDescCreatedAt is the schema descriptor for created_at field.
+	gleanpaperstateDescCreatedAt := gleanpaperstateFields[5].Descriptor()
+	// gleanpaperstate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleanpaperstate.DefaultCreatedAt = gleanpaperstateDescCreatedAt.Default.(func() time.Time)
+	// gleanpaperstateDescUpdatedAt is the schema descriptor for updated_at field.
+	gleanpaperstateDescUpdatedAt := gleanpaperstateFields[6].Descriptor()
+	// gleanpaperstate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleanpaperstate.DefaultUpdatedAt = gleanpaperstateDescUpdatedAt.Default.(func() time.Time)
+	// gleanpaperstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleanpaperstate.UpdateDefaultUpdatedAt = gleanpaperstateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleanpaperstateDescID is the schema descriptor for id field.
+	gleanpaperstateDescID := gleanpaperstateFields[0].Descriptor()
+	// gleanpaperstate.DefaultID holds the default value on creation for the id field.
+	gleanpaperstate.DefaultID = gleanpaperstateDescID.Default.(func() idgen.ID)
+	// gleanpaperstate.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleanpaperstate.IDValidator = gleanpaperstateDescID.Validators[0].(func(int64) error)
+	gleanpreferenceFields := schema.GleanPreference{}.Fields()
+	_ = gleanpreferenceFields
+	// gleanpreferenceDescUserID is the schema descriptor for user_id field.
+	gleanpreferenceDescUserID := gleanpreferenceFields[1].Descriptor()
+	// gleanpreference.UserIDValidator is a validator for the "user_id" field. It is called by the builders before save.
+	gleanpreference.UserIDValidator = gleanpreferenceDescUserID.Validators[0].(func(int64) error)
+	// gleanpreferenceDescFilters is the schema descriptor for filters field.
+	gleanpreferenceDescFilters := gleanpreferenceFields[2].Descriptor()
+	// gleanpreference.DefaultFilters holds the default value on creation for the filters field.
+	gleanpreference.DefaultFilters = gleanpreferenceDescFilters.Default.(map[string]interface{})
+	// gleanpreferenceDescCreatedAt is the schema descriptor for created_at field.
+	gleanpreferenceDescCreatedAt := gleanpreferenceFields[3].Descriptor()
+	// gleanpreference.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleanpreference.DefaultCreatedAt = gleanpreferenceDescCreatedAt.Default.(func() time.Time)
+	// gleanpreferenceDescUpdatedAt is the schema descriptor for updated_at field.
+	gleanpreferenceDescUpdatedAt := gleanpreferenceFields[4].Descriptor()
+	// gleanpreference.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleanpreference.DefaultUpdatedAt = gleanpreferenceDescUpdatedAt.Default.(func() time.Time)
+	// gleanpreference.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleanpreference.UpdateDefaultUpdatedAt = gleanpreferenceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleanpreferenceDescID is the schema descriptor for id field.
+	gleanpreferenceDescID := gleanpreferenceFields[0].Descriptor()
+	// gleanpreference.DefaultID holds the default value on creation for the id field.
+	gleanpreference.DefaultID = gleanpreferenceDescID.Default.(func() idgen.ID)
+	// gleanpreference.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleanpreference.IDValidator = gleanpreferenceDescID.Validators[0].(func(int64) error)
+	gleanvenueFields := schema.GleanVenue{}.Fields()
+	_ = gleanvenueFields
+	// gleanvenueDescName is the schema descriptor for name field.
+	gleanvenueDescName := gleanvenueFields[1].Descriptor()
+	// gleanvenue.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	gleanvenue.NameValidator = gleanvenueDescName.Validators[0].(func(string) error)
+	// gleanvenueDescKind is the schema descriptor for kind field.
+	gleanvenueDescKind := gleanvenueFields[2].Descriptor()
+	// gleanvenue.DefaultKind holds the default value on creation for the kind field.
+	gleanvenue.DefaultKind = gleanvenueDescKind.Default.(string)
+	// gleanvenueDescCcf is the schema descriptor for ccf field.
+	gleanvenueDescCcf := gleanvenueFields[4].Descriptor()
+	// gleanvenue.DefaultCcf holds the default value on creation for the ccf field.
+	gleanvenue.DefaultCcf = gleanvenueDescCcf.Default.(string)
+	// gleanvenueDescMetricYear is the schema descriptor for metric_year field.
+	gleanvenueDescMetricYear := gleanvenueFields[5].Descriptor()
+	// gleanvenue.DefaultMetricYear holds the default value on creation for the metric_year field.
+	gleanvenue.DefaultMetricYear = gleanvenueDescMetricYear.Default.(int)
+	// gleanvenueDescRegistryVersion is the schema descriptor for registry_version field.
+	gleanvenueDescRegistryVersion := gleanvenueFields[6].Descriptor()
+	// gleanvenue.RegistryVersionValidator is a validator for the "registry_version" field. It is called by the builders before save.
+	gleanvenue.RegistryVersionValidator = gleanvenueDescRegistryVersion.Validators[0].(func(string) error)
+	// gleanvenueDescSource is the schema descriptor for source field.
+	gleanvenueDescSource := gleanvenueFields[7].Descriptor()
+	// gleanvenue.DefaultSource holds the default value on creation for the source field.
+	gleanvenue.DefaultSource = gleanvenueDescSource.Default.(string)
+	// gleanvenueDescEvidence is the schema descriptor for evidence field.
+	gleanvenueDescEvidence := gleanvenueFields[8].Descriptor()
+	// gleanvenue.DefaultEvidence holds the default value on creation for the evidence field.
+	gleanvenue.DefaultEvidence = gleanvenueDescEvidence.Default.(map[string]interface{})
+	// gleanvenueDescEligibleTopics is the schema descriptor for eligible_topics field.
+	gleanvenueDescEligibleTopics := gleanvenueFields[9].Descriptor()
+	// gleanvenue.DefaultEligibleTopics holds the default value on creation for the eligible_topics field.
+	gleanvenue.DefaultEligibleTopics = gleanvenueDescEligibleTopics.Default.([]string)
+	// gleanvenueDescQualificationStatus is the schema descriptor for qualification_status field.
+	gleanvenueDescQualificationStatus := gleanvenueFields[10].Descriptor()
+	// gleanvenue.DefaultQualificationStatus holds the default value on creation for the qualification_status field.
+	gleanvenue.DefaultQualificationStatus = gleanvenueDescQualificationStatus.Default.(string)
+	// gleanvenueDescCreatedAt is the schema descriptor for created_at field.
+	gleanvenueDescCreatedAt := gleanvenueFields[11].Descriptor()
+	// gleanvenue.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleanvenue.DefaultCreatedAt = gleanvenueDescCreatedAt.Default.(func() time.Time)
+	// gleanvenueDescUpdatedAt is the schema descriptor for updated_at field.
+	gleanvenueDescUpdatedAt := gleanvenueFields[12].Descriptor()
+	// gleanvenue.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleanvenue.DefaultUpdatedAt = gleanvenueDescUpdatedAt.Default.(func() time.Time)
+	// gleanvenue.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleanvenue.UpdateDefaultUpdatedAt = gleanvenueDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleanvenueDescID is the schema descriptor for id field.
+	gleanvenueDescID := gleanvenueFields[0].Descriptor()
+	// gleanvenue.DefaultID holds the default value on creation for the id field.
+	gleanvenue.DefaultID = gleanvenueDescID.Default.(func() idgen.ID)
+	// gleanvenue.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleanvenue.IDValidator = gleanvenueDescID.Validators[0].(func(int64) error)
 	sysconfigFields := schema.SysConfig{}.Fields()
 	_ = sysconfigFields
 	// sysconfigDescConfigKey is the schema descriptor for config_key field.

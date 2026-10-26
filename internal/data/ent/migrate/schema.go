@@ -9,6 +9,189 @@ import (
 )
 
 var (
+	// GleanMembershipColumns holds the columns for the "glean_membership" table.
+	GleanMembershipColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "paper_id", Type: field.TypeInt64},
+		{Name: "topic", Type: field.TypeString},
+		{Name: "original_id", Type: field.TypeString},
+		{Name: "tier", Type: field.TypeString, Default: ""},
+		{Name: "primary_category", Type: field.TypeString, Default: ""},
+		{Name: "categories", Type: field.TypeJSON},
+		{Name: "dimensions", Type: field.TypeJSON},
+		{Name: "read_status", Type: field.TypeString, Default: "unread"},
+		{Name: "source", Type: field.TypeString, Default: "historical-baseline"},
+		{Name: "is_mock", Type: field.TypeBool, Default: false},
+		{Name: "raw", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanMembershipTable holds the schema information for the "glean_membership" table.
+	GleanMembershipTable = &schema.Table{
+		Name:       "glean_membership",
+		Columns:    GleanMembershipColumns,
+		PrimaryKey: []*schema.Column{GleanMembershipColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleanmembership_topic_original_id",
+				Unique:  true,
+				Columns: []*schema.Column{GleanMembershipColumns[2], GleanMembershipColumns[3]},
+			},
+			{
+				Name:    "gleanmembership_paper_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanMembershipColumns[1]},
+			},
+			{
+				Name:    "gleanmembership_tier",
+				Unique:  false,
+				Columns: []*schema.Column{GleanMembershipColumns[4]},
+			},
+		},
+	}
+	// GleanMonitorStateColumns holds the columns for the "glean_monitor_state" table.
+	GleanMonitorStateColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "snapshot", Type: field.TypeJSON},
+		{Name: "revision", Type: field.TypeInt, Default: 0},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanMonitorStateTable holds the schema information for the "glean_monitor_state" table.
+	GleanMonitorStateTable = &schema.Table{
+		Name:       "glean_monitor_state",
+		Columns:    GleanMonitorStateColumns,
+		PrimaryKey: []*schema.Column{GleanMonitorStateColumns[0]},
+	}
+	// GleanPaperColumns holds the columns for the "glean_paper" table.
+	GleanPaperColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "identity_key", Type: field.TypeString, Unique: true},
+		{Name: "title", Type: field.TypeString},
+		{Name: "title_zh", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "abstract", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "authors", Type: field.TypeJSON},
+		{Name: "year", Type: field.TypeInt, Default: 0},
+		{Name: "venue", Type: field.TypeString, Default: ""},
+		{Name: "publication_type", Type: field.TypeString, Default: ""},
+		{Name: "doi", Type: field.TypeString, Unique: true, Nullable: true},
+		{Name: "arxiv_id", Type: field.TypeString, Unique: true, Nullable: true},
+		{Name: "url", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "formal_online_date", Type: field.TypeTime, Nullable: true},
+		{Name: "issue_date", Type: field.TypeTime, Nullable: true},
+		{Name: "date_provenance", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "evidence", Type: field.TypeJSON},
+		{Name: "is_mock", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanPaperTable holds the schema information for the "glean_paper" table.
+	GleanPaperTable = &schema.Table{
+		Name:       "glean_paper",
+		Columns:    GleanPaperColumns,
+		PrimaryKey: []*schema.Column{GleanPaperColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleanpaper_year_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanPaperColumns[6], GleanPaperColumns[0]},
+			},
+			{
+				Name:    "gleanpaper_venue",
+				Unique:  false,
+				Columns: []*schema.Column{GleanPaperColumns[7]},
+			},
+			{
+				Name:    "gleanpaper_formal_online_date_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanPaperColumns[12], GleanPaperColumns[0]},
+			},
+		},
+	}
+	// GleanPaperStateColumns holds the columns for the "glean_paper_state" table.
+	GleanPaperStateColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "paper_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "hidden", Type: field.TypeBool, Default: false},
+		{Name: "read_status", Type: field.TypeString, Default: "unread"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanPaperStateTable holds the schema information for the "glean_paper_state" table.
+	GleanPaperStateTable = &schema.Table{
+		Name:       "glean_paper_state",
+		Columns:    GleanPaperStateColumns,
+		PrimaryKey: []*schema.Column{GleanPaperStateColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleanpaperstate_user_id_paper_id",
+				Unique:  true,
+				Columns: []*schema.Column{GleanPaperStateColumns[2], GleanPaperStateColumns[1]},
+			},
+			{
+				Name:    "gleanpaperstate_paper_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanPaperStateColumns[1]},
+			},
+		},
+	}
+	// GleanPreferenceColumns holds the columns for the "glean_preference" table.
+	GleanPreferenceColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "user_id", Type: field.TypeInt64, Unique: true},
+		{Name: "filters", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanPreferenceTable holds the schema information for the "glean_preference" table.
+	GleanPreferenceTable = &schema.Table{
+		Name:       "glean_preference",
+		Columns:    GleanPreferenceColumns,
+		PrimaryKey: []*schema.Column{GleanPreferenceColumns[0]},
+	}
+	// GleanVenueColumns holds the columns for the "glean_venue" table.
+	GleanVenueColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeString, Default: "journal"},
+		{Name: "jif", Type: field.TypeFloat64, Nullable: true},
+		{Name: "ccf", Type: field.TypeString, Default: ""},
+		{Name: "metric_year", Type: field.TypeInt, Default: 0},
+		{Name: "registry_version", Type: field.TypeString},
+		{Name: "source", Type: field.TypeString, Default: ""},
+		{Name: "evidence", Type: field.TypeJSON},
+		{Name: "eligible_topics", Type: field.TypeJSON},
+		{Name: "qualification_status", Type: field.TypeString, Default: "pending"},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanVenueTable holds the schema information for the "glean_venue" table.
+	GleanVenueTable = &schema.Table{
+		Name:       "glean_venue",
+		Columns:    GleanVenueColumns,
+		PrimaryKey: []*schema.Column{GleanVenueColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleanvenue_name_registry_version",
+				Unique:  true,
+				Columns: []*schema.Column{GleanVenueColumns[1], GleanVenueColumns[6]},
+			},
+		},
+	}
 	// SysConfigColumns holds the columns for the "sys_config" table.
 	SysConfigColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "雪花算法生成的主键 ID。"},
@@ -317,6 +500,12 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		GleanMembershipTable,
+		GleanMonitorStateTable,
+		GleanPaperTable,
+		GleanPaperStateTable,
+		GleanPreferenceTable,
+		GleanVenueTable,
 		SysConfigTable,
 		SysDictCollectionTable,
 		SysDictItemTable,
@@ -329,6 +518,24 @@ var (
 )
 
 func init() {
+	GleanMembershipTable.Annotation = &entsql.Annotation{
+		Table: "glean_membership",
+	}
+	GleanMonitorStateTable.Annotation = &entsql.Annotation{
+		Table: "glean_monitor_state",
+	}
+	GleanPaperTable.Annotation = &entsql.Annotation{
+		Table: "glean_paper",
+	}
+	GleanPaperStateTable.Annotation = &entsql.Annotation{
+		Table: "glean_paper_state",
+	}
+	GleanPreferenceTable.Annotation = &entsql.Annotation{
+		Table: "glean_preference",
+	}
+	GleanVenueTable.Annotation = &entsql.Annotation{
+		Table: "glean_venue",
+	}
 	SysConfigTable.Annotation = &entsql.Annotation{
 		Table: "sys_config",
 	}

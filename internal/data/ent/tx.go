@@ -12,6 +12,18 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// GleanMembership is the client for interacting with the GleanMembership builders.
+	GleanMembership *GleanMembershipClient
+	// GleanMonitorState is the client for interacting with the GleanMonitorState builders.
+	GleanMonitorState *GleanMonitorStateClient
+	// GleanPaper is the client for interacting with the GleanPaper builders.
+	GleanPaper *GleanPaperClient
+	// GleanPaperState is the client for interacting with the GleanPaperState builders.
+	GleanPaperState *GleanPaperStateClient
+	// GleanPreference is the client for interacting with the GleanPreference builders.
+	GleanPreference *GleanPreferenceClient
+	// GleanVenue is the client for interacting with the GleanVenue builders.
+	GleanVenue *GleanVenueClient
 	// SysConfig is the client for interacting with the SysConfig builders.
 	SysConfig *SysConfigClient
 	// SysDictCollection is the client for interacting with the SysDictCollection builders.
@@ -159,6 +171,12 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.GleanMembership = NewGleanMembershipClient(tx.config)
+	tx.GleanMonitorState = NewGleanMonitorStateClient(tx.config)
+	tx.GleanPaper = NewGleanPaperClient(tx.config)
+	tx.GleanPaperState = NewGleanPaperStateClient(tx.config)
+	tx.GleanPreference = NewGleanPreferenceClient(tx.config)
+	tx.GleanVenue = NewGleanVenueClient(tx.config)
 	tx.SysConfig = NewSysConfigClient(tx.config)
 	tx.SysDictCollection = NewSysDictCollectionClient(tx.config)
 	tx.SysDictItem = NewSysDictItemClient(tx.config)
@@ -176,7 +194,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: SysConfig.QueryXXX(), the query will be executed
+// applies a query, for example: GleanMembership.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

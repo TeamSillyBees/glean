@@ -6,6 +6,24 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// GleanMembership is the predicate function for gleanmembership builders.
+type GleanMembership func(*sql.Selector)
+
+// GleanMonitorState is the predicate function for gleanmonitorstate builders.
+type GleanMonitorState func(*sql.Selector)
+
+// GleanPaper is the predicate function for gleanpaper builders.
+type GleanPaper func(*sql.Selector)
+
+// GleanPaperState is the predicate function for gleanpaperstate builders.
+type GleanPaperState func(*sql.Selector)
+
+// GleanPreference is the predicate function for gleanpreference builders.
+type GleanPreference func(*sql.Selector)
+
+// GleanVenue is the predicate function for gleanvenue builders.
+type GleanVenue func(*sql.Selector)
+
 // SysConfig is the predicate function for sysconfig builders.
 type SysConfig func(*sql.Selector)
 
