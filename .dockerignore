@@ -15,3 +15,9 @@ coverage.out
 web/node_modules
 web/dist
 coverage
+
+__pycache__
+*.pyc
+server
+glean-monitor
+importbaseline

@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"strings"
 
 	"entgo.io/ent/dialect"
 	sql "entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqljson"
 	"github.com/teamsillybees/glean/internal/data/ent"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
+	"github.com/teamsillybees/glean/internal/data/ent/predicate"
 	"github.com/teamsillybees/glean/internal/modules/bizerrors"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 )
@@ -23,6 +26,22 @@ func membershipSelector(q PaperQuery) *sql.Selector {
 	selector := sql.Dialect(dialect.Postgres).Select(t.C(gleanmembership.FieldPaperID)).From(t)
 	if q.Topic != "" {
 		selector.Where(sql.EQ(t.C(gleanmembership.FieldTopic), q.Topic))
+	}
+	if q.CollectionScope == "pending" {
+		selector.Where(sql.EQ(t.C(gleanmembership.FieldInclusionStatus), "pending-review"))
+	} else if q.CollectionScope == "curated" {
+		selector.Where(sql.EQ(t.C(gleanmembership.FieldInclusionStatus), "historical"))
+		predicates := []*sql.Predicate{}
+		for _, topic := range topics {
+			if q.Topic != "" && q.Topic != topic.Slug {
+				continue
+			}
+			predicates = append(predicates, sql.And(sql.EQ(t.C(gleanmembership.FieldTopic), topic.Slug), sqljson.ValueContains(t.C(gleanmembership.FieldDimensions), historicalCuratedDimensions(topic.Slug))))
+		}
+		selector.Where(sql.Or(predicates...))
+	}
+	if q.InclusionStatus != "" {
+		selector.Where(sql.EQ(t.C(gleanmembership.FieldInclusionStatus), q.InclusionStatus))
 	}
 	if q.Tier != "" {
 		selector.Where(sql.EQ(t.C(gleanmembership.FieldTier), q.Tier))
@@ -65,8 +84,14 @@ func stateSelector(uid idgen.ID) *sql.Selector {
 }
 func (s *Service) paperQuery(q PaperQuery, uid idgen.ID) *ent.GleanPaperQuery {
 	query := s.client.GleanPaper.Query().Where(func(sel *sql.Selector) { sel.Where(sql.In(sel.C(gleanpaper.FieldID), membershipSelector(q))) })
+	if q.Source != "" {
+		query.Where(func(sel *sql.Selector) {
+			o := sql.Table(gleanobservation.Table)
+			sel.Where(sql.In(sel.C(gleanpaper.FieldID), sql.Dialect(dialect.Postgres).Select(o.C(gleanobservation.FieldPaperID)).From(o).Where(sql.EQ(o.C(gleanobservation.FieldSource), q.Source))))
+		})
+	}
 	if q.Q != "" {
-		query.Where(gleanpaper.Or(gleanpaper.TitleContainsFold(q.Q), gleanpaper.TitleZhContainsFold(q.Q), gleanpaper.AbstractContainsFold(q.Q), gleanpaper.DoiContainsFold(q.Q), gleanpaper.ArxivIDContainsFold(q.Q), gleanpaper.VenueContainsFold(q.Q)))
+		query.Where(gleanpaper.Or(gleanpaper.TitleContainsFold(q.Q), gleanpaper.TitleZhContainsFold(q.Q), gleanpaper.AbstractContainsFold(q.Q), gleanpaper.DoiContainsFold(q.Q), gleanpaper.ArxivIDContainsFold(q.Q), gleanpaper.VenueContainsFold(q.Q), observedTextPredicate(q.Q)))
 	}
 	if q.Year > 0 {
 		query.Where(gleanpaper.Year(q.Year))
@@ -100,6 +125,22 @@ func (s *Service) paperQuery(q PaperQuery, uid idgen.ID) *ent.GleanPaperQuery {
 	return query
 }
 
+func observedTextPredicate(text string) predicate.GleanPaper {
+	return func(sel *sql.Selector) {
+		o := sql.Table(gleanobservation.Table)
+		matches := []*sql.Predicate{}
+		// 仅搜索来源事实字段，不搜索 raw、模拟模型输出或用户提供的 JSON 路径。
+		for _, key := range []string{"title", "abstract", "doi", "arxivId", "pmid", "venue"} {
+			matches = append(matches, sql.P(func(b *sql.Builder) {
+				b.Ident(o.C(gleanobservation.FieldMetadata)).WriteString("->>'" + key + "'").Join(sql.ContainsFold("", text))
+			}))
+		}
+		sub := sql.Dialect(dialect.Postgres).Select(o.C(gleanobservation.FieldID)).From(o).Where(sql.And(sql.ColumnsEQ(o.C(gleanobservation.FieldPaperID), sel.C(gleanpaper.FieldID)), sql.Or(matches...)))
+		// EXISTS 保持一篇论文一行，多个来源或版本命中不会膨胀分页和分面计数。
+		sel.Where(sql.Exists(sub))
+	}
+}
+
 // Topics 返回固定主题和真实保存的成员数量。
 func (s *Service) Topics(ctx context.Context) ([]TopicVO, error) {
 	result := append([]TopicVO(nil), topics...)
@@ -109,6 +150,19 @@ func (s *Service) Topics(ctx context.Context) ([]TopicVO, error) {
 			return nil, bizerrors.WrapDBContext(ctx, err, "count topic papers failed")
 		}
 		result[i].MembershipCount = count
+		historical, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), gleanmembership.InclusionStatus("historical")).Count(ctx)
+		if err != nil {
+			return nil, bizerrors.WrapDBContext(ctx, err, "count historical members failed")
+		}
+		result[i].HistoricalCount = historical
+		result[i].CandidateCount = count - historical
+		curated, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), gleanmembership.InclusionStatus("historical"), func(sel *sql.Selector) {
+			sel.Where(sqljson.ValueContains(sel.C(gleanmembership.FieldDimensions), historicalCuratedDimensions(result[i].Slug)))
+		}).Count(ctx)
+		if err != nil {
+			return nil, bizerrors.WrapDBContext(ctx, err, "count curated historical members failed")
+		}
+		result[i].CuratedCount = curated
 	}
 	return result, nil
 }
@@ -128,6 +182,16 @@ func (s *Service) Papers(ctx context.Context, q PaperQuery) (PaperPageVO, error)
 		return PaperPageVO{}, bizerrors.WrapDBContext(ctx, err, "count papers failed")
 	}
 	switch q.Sort {
+	case "observed", "source-updated":
+		query.Order(func(sel *sql.Selector) {
+			o := sql.Table(gleanobservation.Table)
+			field := gleanobservation.FieldObservedAt
+			if q.Sort == "source-updated" {
+				field = gleanobservation.FieldSourceUpdatedAt
+			}
+			latest := sql.Dialect(dialect.Postgres).Select(sql.Max(o.C(field))).From(o).Where(sql.ColumnsEQ(o.C(gleanobservation.FieldPaperID), sel.C(gleanpaper.FieldID)))
+			sel.OrderExpr(sql.ExprFunc(func(b *sql.Builder) { b.WriteByte('(').Join(latest).WriteString(") DESC NULLS LAST") }))
+		}, ent.Desc(gleanpaper.FieldID))
 	case "title":
 		query.Order(ent.Asc(gleanpaper.FieldTitle), ent.Asc(gleanpaper.FieldID))
 	case "oldest":
@@ -176,7 +240,7 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 	}
 	mq := s.client.GleanMembership.Query().Where(gleanmembership.PaperIDIn(ids...)).Order(ent.Asc(gleanmembership.FieldTopic), ent.Asc(gleanmembership.FieldOriginalID))
 	if !detail {
-		mq.Select(gleanmembership.FieldID, gleanmembership.FieldPaperID, gleanmembership.FieldTopic, gleanmembership.FieldOriginalID, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldCategories, gleanmembership.FieldDimensions, gleanmembership.FieldReadStatus, gleanmembership.FieldSource, gleanmembership.FieldIsMock)
+		mq.Select(gleanmembership.FieldID, gleanmembership.FieldPaperID, gleanmembership.FieldTopic, gleanmembership.FieldOriginalID, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldCategories, gleanmembership.FieldDimensions, gleanmembership.FieldReadStatus, gleanmembership.FieldInclusionStatus, gleanmembership.FieldSource, gleanmembership.FieldIsMock, gleanmembership.FieldRaw)
 	}
 	members, err := mq.All(ctx)
 	if err != nil {
@@ -188,7 +252,11 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 		if raw == nil {
 			raw = map[string]any{}
 		}
-		memberships[m.PaperID] = append(memberships[m.PaperID], MembershipVO{Topic: m.Topic, OriginalID: m.OriginalID, Tier: m.Tier, PrimaryCategory: m.PrimaryCategory, Categories: m.Categories, Dimensions: m.Dimensions, ReadStatus: m.ReadStatus, Source: m.Source, IsMock: m.IsMock, Raw: raw})
+		notes := historicalReadingNotes(raw)
+		if !detail {
+			raw = map[string]any{}
+		}
+		memberships[m.PaperID] = append(memberships[m.PaperID], MembershipVO{ReadingNotes: notes, InclusionStatus: m.InclusionStatus, Topic: m.Topic, OriginalID: m.OriginalID, Tier: m.Tier, PrimaryCategory: m.PrimaryCategory, Categories: m.Categories, Dimensions: m.Dimensions, ReadStatus: m.ReadStatus, Source: m.Source, IsMock: m.IsMock, Raw: raw})
 	}
 	states, err := s.client.GleanPaperState.Query().Where(gleanpaperstate.UserID(uid), gleanpaperstate.PaperIDIn(ids...)).All(ctx)
 	if err != nil {
@@ -199,7 +267,13 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 		stateMap[state.PaperID] = state
 	}
 	for _, p := range papers {
-		item := PaperVO{ID: p.ID, Title: p.Title, TitleZh: p.TitleZh, Abstract: p.Abstract, Authors: p.Authors, Year: p.Year, Venue: p.Venue, PublicationType: p.PublicationType, URL: p.URL, FormalOnlineDate: p.FormalOnlineDate, IssueDate: p.IssueDate, DateProvenance: p.DateProvenance, ReadStatus: "unread", IsMock: p.IsMock, Memberships: memberships[p.ID], Evidence: []SourceEvidence{}}
+		item := PaperVO{Origin: p.Origin, ID: p.ID, Title: p.Title, TitleZh: p.TitleZh, Abstract: p.Abstract, Authors: p.Authors, Year: p.Year, Venue: p.Venue, PublicationType: p.PublicationType, URL: p.URL, FormalOnlineDate: p.FormalOnlineDate, IssueDate: p.IssueDate, DateProvenance: p.DateProvenance, ReadStatus: "unread", IsMock: p.IsMock, Memberships: memberships[p.ID], Evidence: []SourceEvidence{}}
+		created := p.CreatedAt
+		if p.Origin == "live" {
+			item.FirstSeenAt = &created
+		} else {
+			item.ImportedAt = &created
+		}
 		if p.Doi != nil {
 			item.DOI = *p.Doi
 		}
@@ -213,6 +287,13 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 			item.Memberships = []MembershipVO{}
 		}
 		if detail {
+			for _, membership := range item.Memberships {
+				if value, ok := membership.Raw["abstract_zh"].(string); ok && strings.TrimSpace(value) != "" {
+					item.AbstractZh = value
+					item.TranslationStatus = "historical-source-text"
+					break
+				}
+			}
 			encoded, err := json.Marshal(p.Evidence)
 			if err != nil {
 				return nil, bizerrors.WrapDBContext(ctx, err, "decode source evidence failed")
@@ -226,6 +307,9 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 			item.ReadStatus = state.ReadStatus
 		}
 		result = append(result, item)
+	}
+	if err := s.attachObservations(ctx, result, detail); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -250,7 +334,7 @@ func (s *Service) Venues(ctx context.Context, q, topic string) ([]VenueVO, error
 	}
 	result := make([]VenueVO, 0, len(records))
 	for _, v := range records {
-		result = append(result, VenueVO{ID: v.ID, Name: v.Name, Kind: v.Kind, JIF: v.Jif, CCF: v.Ccf, MetricYear: v.MetricYear, RegistryVersion: v.RegistryVersion, Source: v.Source, Evidence: v.Evidence, EligibleTopics: v.EligibleTopics, QualificationStatus: v.QualificationStatus})
+		result = append(result, VenueVO{ISSNs: v.Issns, Aliases: v.Aliases, ID: v.ID, Name: v.Name, Kind: v.Kind, JIF: v.Jif, CCF: v.Ccf, MetricYear: v.MetricYear, RegistryVersion: v.RegistryVersion, Source: v.Source, Evidence: v.Evidence, EligibleTopics: v.EligibleTopics, QualificationStatus: v.QualificationStatus})
 	}
 	return result, nil
 }
@@ -299,11 +383,12 @@ func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
 		if q.Topic != "" {
 			query.Where(gleanmembership.Topic(q.Topic))
 		}
-		records, err := query.Select(gleanmembership.FieldID, gleanmembership.FieldPaperID, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldCategories, gleanmembership.FieldDimensions).All(ctx)
+		records, err := query.Select(gleanmembership.FieldID, gleanmembership.FieldPaperID, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldCategories, gleanmembership.FieldDimensions, gleanmembership.FieldInclusionStatus).All(ctx)
 		if err != nil {
 			return FacetsVO{}, bizerrors.WrapDBContext(ctx, err, "load facet memberships failed")
 		}
 		for _, m := range records {
+			add("inclusionStatuses", m.InclusionStatus, m.PaperID)
 			add("tiers", m.Tier, m.PaperID)
 			add("categories", m.PrimaryCategory, m.PaperID)
 			for _, c := range m.Categories {
@@ -325,6 +410,17 @@ func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
 					}
 				}
 			}
+		}
+
+		var sourceRecords []struct {
+			PaperID idgen.ID `json:"paper_id"`
+			Source  string   `json:"source"`
+		}
+		if err := s.client.GleanObservation.Query().Where(gleanobservation.PaperIDIn(batch...)).GroupBy(gleanobservation.FieldPaperID, gleanobservation.FieldSource).Scan(ctx, &sourceRecords); err != nil {
+			return FacetsVO{}, bizerrors.WrapDBContext(ctx, err, "load source facets failed")
+		}
+		for _, source := range sourceRecords {
+			add("sources", source.Source, source.PaperID)
 		}
 		states, err := s.client.GleanPaperState.Query().Where(gleanpaperstate.UserID(uid), gleanpaperstate.PaperIDIn(batch...)).Select(gleanpaperstate.FieldID, gleanpaperstate.FieldPaperID, gleanpaperstate.FieldReadStatus).All(ctx)
 		if err != nil {
@@ -362,5 +458,15 @@ func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
 	for key := range dimensionKeys {
 		dimensions[key] = facets("dimension:" + key)
 	}
-	return FacetsVO{Years: facets("years"), Venues: facets("venues"), PublicationTypes: facets("publicationTypes"), Categories: facets("categories"), Tiers: facets("tiers"), ReadStatuses: facets("readStatuses"), Tasks: facets("tasks"), Roles: facets("roles"), Directions: facets("directions"), Methods: facets("methods"), Dimensions: dimensions}, nil
+	return FacetsVO{Sources: facets("sources"), InclusionStatuses: facets("inclusionStatuses"), Years: facets("years"), Venues: facets("venues"), PublicationTypes: facets("publicationTypes"), Categories: facets("categories"), Tiers: facets("tiers"), ReadStatuses: facets("readStatuses"), Tasks: facets("tasks"), Roles: facets("roles"), Directions: facets("directions"), Methods: facets("methods"), Dimensions: dimensions}, nil
+}
+
+func historicalReadingNotes(raw map[string]any) map[string]string {
+	notes := map[string]string{}
+	for _, key := range []string{"contribution", "method_summary", "evidence_note", "uncertainties", "summary", "review_notes"} {
+		if text, ok := raw[key].(string); ok && strings.TrimSpace(text) != "" {
+			notes[key] = text
+		}
+	}
+	return notes
 }

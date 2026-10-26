@@ -10,10 +10,14 @@ import (
 )
 
 type europePMCCursor struct {
-	Mark     string `json:"mark"`
-	Seen     int    `json:"seen"`
-	Total    int    `json:"total"`
-	Restarts int    `json:"restarts,omitempty"`
+	CoreFeed      int    `json:"core_feed,omitempty"`
+	CoreBatchSize int    `json:"core_batch_size,omitempty"`
+	CoreRegistry  string `json:"core_registry,omitempty"`
+	CoreFull      bool   `json:"core_full,omitempty"`
+	Mark          string `json:"mark"`
+	Seen          int    `json:"seen"`
+	Total         int    `json:"total"`
+	Restarts      int    `json:"restarts,omitempty"`
 }
 
 func (c europePMCCursor) encode() string {
@@ -26,7 +30,7 @@ func decodeEuropePMCCursor(value string) (europePMCCursor, error) {
 		return c, malformed("invalid Europe PMC cursor")
 	}
 	b, e := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(value, "ep1:"))
-	if e != nil || json.Unmarshal(b, &c) != nil || c.Mark == "" || c.Seen < 0 || c.Restarts < 0 || c.Restarts > 3 || (c.Total < 0 && !(c.Total == -1 && c.Mark == "*" && c.Seen == 0)) || (c.Total >= 0 && c.Seen >= c.Total) {
+	if e != nil || json.Unmarshal(b, &c) != nil || c.CoreFeed < 0 || c.CoreBatchSize < 0 || c.Mark == "" || c.Seen < 0 || c.Restarts < 0 || c.Restarts > 3 || (c.Total < 0 && !(c.Total == -1 && c.Mark == "*" && c.Seen == 0)) || (c.Total >= 0 && c.Seen >= c.Total) {
 		return c, malformed("invalid Europe PMC cursor")
 	}
 	return c, nil
@@ -35,7 +39,11 @@ func decodeEuropePMCCursor(value string) (europePMCCursor, error) {
 // europepmc 同时查询首次索引与更新日期，避免用发表日期漏掉回填记录。
 // firstPublicationDate 官方注明会填补缺失月/日，故不能用作精确正式出版证据。
 func (s *remoteSource) europepmc(ctx context.Context, req FetchRequest) (Page, error) {
-	c := europePMCCursor{Mark: "*", Total: -1}
+	feeds, registry, err := coreJournalFeeds(req)
+	if err != nil {
+		return Page{}, err
+	}
+	c := europePMCCursor{Mark: "*", Total: -1, CoreFull: req.Template.Core}
 	if req.Cursor != "" {
 		var e error
 		c, e = decodeEuropePMCCursor(req.Cursor)
@@ -43,17 +51,20 @@ func (s *remoteSource) europepmc(ctx context.Context, req FetchRequest) (Page, e
 			return Page{}, e
 		}
 	}
+	// 旧未分批的核心 cursor 或不同登记快照必须重放原固定窗口，而非继承不兼容的分页范围。
+	if req.Template.Core && (!c.CoreFull || c.CoreBatchSize != coreISSNBatchSize || c.CoreRegistry != registry) {
+		c = europePMCCursor{Mark: "*", Total: -1, CoreFull: true, CoreBatchSize: coreISSNBatchSize, CoreRegistry: registry}
+	}
+	if req.Template.Core && c.CoreFeed >= len(feeds) {
+		return Page{}, malformed("invalid Europe PMC core feed cursor")
+	}
 	query := req.Template.Query
 	if req.Template.Core {
-		issns, e := registryISSNs(req)
-		if e != nil {
-			return Page{}, e
-		}
-		terms := make([]string, 0, len(issns))
-		for _, v := range issns {
+		terms := make([]string, 0, len(feeds[c.CoreFeed]))
+		for _, v := range feeds[c.CoreFeed] {
 			terms = append(terms, "ISSN:"+strconv.Quote(v))
 		}
-		query = "(" + query + ") AND (" + strings.Join(terms, " OR ") + ")"
+		query = strings.Join(terms, " OR ")
 	}
 	span := "[" + dateOnly(req.Window.Start) + " TO " + dateOnly(req.Window.End.Add(-time.Nanosecond)) + "]"
 	query = "(" + query + ") AND (FIRST_IDATE:" + span + " OR UPDATE_DATE:" + span + ")"
@@ -75,7 +86,9 @@ func (s *remoteSource) europepmc(ctx context.Context, req FetchRequest) (Page, e
 		if c.Restarts >= 3 {
 			return Page{}, malformed("Europe PMC index changed during three restarts; incomplete fixed window retained")
 		}
-		return Page{NextCursor: (europePMCCursor{Mark: "*", Total: -1, Restarts: c.Restarts + 1}).encode()}, nil
+		c.Mark, c.Seen, c.Total = "*", 0, -1
+		c.Restarts++
+		return Page{NextCursor: c.encode()}, nil
 	}
 	seen := c.Seen + len(r.ResultList.Results)
 	if seen > *r.HitCount || (len(r.ResultList.Results) == 0 && seen < *r.HitCount) {
@@ -86,7 +99,13 @@ func (s *remoteSource) europepmc(ctx context.Context, req FetchRequest) (Page, e
 		if r.Next == "" || r.Next == c.Mark {
 			return Page{}, malformed("Europe PMC continuation missing or stalled")
 		}
-		page.NextCursor = (europePMCCursor{Mark: r.Next, Seen: seen, Total: *r.HitCount, Restarts: c.Restarts}).encode()
+		c.Mark, c.Seen, c.Total = r.Next, seen, *r.HitCount
+		page.NextCursor = c.encode()
+	} else if req.Template.Core && c.CoreFeed+1 < len(feeds) {
+		c.CoreFeed++
+		c.Mark, c.Seen, c.Total, c.Restarts = "*", 0, -1, 0
+		page.Complete = false
+		page.NextCursor = c.encode()
 	}
 	for _, raw := range r.ResultList.Results {
 		var a struct {
@@ -115,8 +134,9 @@ func (s *remoteSource) europepmc(ctx context.Context, req FetchRequest) (Page, e
 				} `json:"journal"`
 			} `json:"journalInfo"`
 		}
-		if json.Unmarshal(raw, &a) != nil || a.ID == "" || a.Source == "" || strings.TrimSpace(a.Title) == "" {
-			return Page{}, malformed("invalid Europe PMC article identity")
+		if json.Unmarshal(raw, &a) != nil || strings.TrimSpace(a.ID) == "" || strings.TrimSpace(a.Source) == "" || strings.TrimSpace(a.Title) == "" {
+			page.Records = append(page.Records, rejectedJSONRecord(s.name, raw))
+			continue
 		}
 		updated, _ := time.Parse("2006-01-02", a.FirstIndex)
 		revised, _ := time.Parse("2006-01-02", a.Revised)

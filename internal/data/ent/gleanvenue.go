@@ -22,6 +22,10 @@ type GleanVenue struct {
 	ID idgen.ID `json:"id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
+	// Issns holds the value of the "issns" field.
+	Issns []string `json:"issns,omitempty"`
+	// Aliases holds the value of the "aliases" field.
+	Aliases []string `json:"aliases,omitempty"`
 	// Kind holds the value of the "kind" field.
 	Kind string `json:"kind,omitempty"`
 	// Jif holds the value of the "jif" field.
@@ -56,7 +60,7 @@ func (*GleanVenue) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gleanvenue.FieldEvidence, gleanvenue.FieldEligibleTopics:
+		case gleanvenue.FieldIssns, gleanvenue.FieldAliases, gleanvenue.FieldEvidence, gleanvenue.FieldEligibleTopics:
 			values[i] = new([]byte)
 		case gleanvenue.FieldJif:
 			values[i] = new(sql.NullFloat64)
@@ -92,6 +96,22 @@ func (_m *GleanVenue) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
 				_m.Name = value.String
+			}
+		case gleanvenue.FieldIssns:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field issns", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Issns); err != nil {
+					return fmt.Errorf("unmarshal field issns: %w", err)
+				}
+			}
+		case gleanvenue.FieldAliases:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field aliases", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Aliases); err != nil {
+					return fmt.Errorf("unmarshal field aliases: %w", err)
+				}
 			}
 		case gleanvenue.FieldKind:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -216,6 +236,12 @@ func (_m *GleanVenue) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
+	builder.WriteString(", ")
+	builder.WriteString("issns=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Issns))
+	builder.WriteString(", ")
+	builder.WriteString("aliases=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Aliases))
 	builder.WriteString(", ")
 	builder.WriteString("kind=")
 	builder.WriteString(_m.Kind)

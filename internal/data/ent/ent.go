@@ -14,6 +14,8 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmonitorstate"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanobservationmatch"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
@@ -86,20 +88,22 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			gleanmembership.Table:   gleanmembership.ValidColumn,
-			gleanmonitorstate.Table: gleanmonitorstate.ValidColumn,
-			gleanpaper.Table:        gleanpaper.ValidColumn,
-			gleanpaperstate.Table:   gleanpaperstate.ValidColumn,
-			gleanpreference.Table:   gleanpreference.ValidColumn,
-			gleanvenue.Table:        gleanvenue.ValidColumn,
-			sysconfig.Table:         sysconfig.ValidColumn,
-			sysdictcollection.Table: sysdictcollection.ValidColumn,
-			sysdictitem.Table:       sysdictitem.ValidColumn,
-			sysmenu.Table:           sysmenu.ValidColumn,
-			sysrole.Table:           sysrole.ValidColumn,
-			sysrolemenu.Table:       sysrolemenu.ValidColumn,
-			sysuser.Table:           sysuser.ValidColumn,
-			sysuserrole.Table:       sysuserrole.ValidColumn,
+			gleanmembership.Table:       gleanmembership.ValidColumn,
+			gleanmonitorstate.Table:     gleanmonitorstate.ValidColumn,
+			gleanobservation.Table:      gleanobservation.ValidColumn,
+			gleanobservationmatch.Table: gleanobservationmatch.ValidColumn,
+			gleanpaper.Table:            gleanpaper.ValidColumn,
+			gleanpaperstate.Table:       gleanpaperstate.ValidColumn,
+			gleanpreference.Table:       gleanpreference.ValidColumn,
+			gleanvenue.Table:            gleanvenue.ValidColumn,
+			sysconfig.Table:             sysconfig.ValidColumn,
+			sysdictcollection.Table:     sysdictcollection.ValidColumn,
+			sysdictitem.Table:           sysdictitem.ValidColumn,
+			sysmenu.Table:               sysmenu.ValidColumn,
+			sysrole.Table:               sysrole.ValidColumn,
+			sysrolemenu.Table:           sysrolemenu.ValidColumn,
+			sysuser.Table:               sysuser.ValidColumn,
+			sysuserrole.Table:           sysuserrole.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

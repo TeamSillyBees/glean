@@ -12,6 +12,12 @@ type GleanMembership func(*sql.Selector)
 // GleanMonitorState is the predicate function for gleanmonitorstate builders.
 type GleanMonitorState func(*sql.Selector)
 
+// GleanObservation is the predicate function for gleanobservation builders.
+type GleanObservation func(*sql.Selector)
+
+// GleanObservationMatch is the predicate function for gleanobservationmatch builders.
+type GleanObservationMatch func(*sql.Selector)
+
 // GleanPaper is the predicate function for gleanpaper builders.
 type GleanPaper func(*sql.Selector)
 

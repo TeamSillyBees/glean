@@ -22,6 +22,8 @@ type GleanPaper struct {
 	ID idgen.ID `json:"id,omitempty"`
 	// IdentityKey holds the value of the "identity_key" field.
 	IdentityKey string `json:"identity_key,omitempty"`
+	// Origin holds the value of the "origin" field.
+	Origin string `json:"origin,omitempty"`
 	// Title holds the value of the "title" field.
 	Title string `json:"title,omitempty"`
 	// TitleZh holds the value of the "title_zh" field.
@@ -74,7 +76,7 @@ func (*GleanPaper) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case gleanpaper.FieldID, gleanpaper.FieldYear, gleanpaper.FieldCreatedBy, gleanpaper.FieldUpdatedBy:
 			values[i] = new(sql.NullInt64)
-		case gleanpaper.FieldIdentityKey, gleanpaper.FieldTitle, gleanpaper.FieldTitleZh, gleanpaper.FieldAbstract, gleanpaper.FieldVenue, gleanpaper.FieldPublicationType, gleanpaper.FieldDoi, gleanpaper.FieldArxivID, gleanpaper.FieldURL, gleanpaper.FieldDateProvenance:
+		case gleanpaper.FieldIdentityKey, gleanpaper.FieldOrigin, gleanpaper.FieldTitle, gleanpaper.FieldTitleZh, gleanpaper.FieldAbstract, gleanpaper.FieldVenue, gleanpaper.FieldPublicationType, gleanpaper.FieldDoi, gleanpaper.FieldArxivID, gleanpaper.FieldURL, gleanpaper.FieldDateProvenance:
 			values[i] = new(sql.NullString)
 		case gleanpaper.FieldFormalOnlineDate, gleanpaper.FieldIssueDate, gleanpaper.FieldCreatedAt, gleanpaper.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -104,6 +106,12 @@ func (_m *GleanPaper) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field identity_key", values[i])
 			} else if value.Valid {
 				_m.IdentityKey = value.String
+			}
+		case gleanpaper.FieldOrigin:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field origin", values[i])
+			} else if value.Valid {
+				_m.Origin = value.String
 			}
 		case gleanpaper.FieldTitle:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -267,6 +275,9 @@ func (_m *GleanPaper) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("identity_key=")
 	builder.WriteString(_m.IdentityKey)
+	builder.WriteString(", ")
+	builder.WriteString("origin=")
+	builder.WriteString(_m.Origin)
 	builder.WriteString(", ")
 	builder.WriteString("title=")
 	builder.WriteString(_m.Title)

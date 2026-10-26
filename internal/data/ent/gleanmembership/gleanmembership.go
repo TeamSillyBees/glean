@@ -20,6 +20,8 @@ const (
 	FieldTopic = "topic"
 	// FieldOriginalID holds the string denoting the original_id field in the database.
 	FieldOriginalID = "original_id"
+	// FieldInclusionStatus holds the string denoting the inclusion_status field in the database.
+	FieldInclusionStatus = "inclusion_status"
 	// FieldTier holds the string denoting the tier field in the database.
 	FieldTier = "tier"
 	// FieldPrimaryCategory holds the string denoting the primary_category field in the database.
@@ -54,6 +56,7 @@ var Columns = []string{
 	FieldPaperID,
 	FieldTopic,
 	FieldOriginalID,
+	FieldInclusionStatus,
 	FieldTier,
 	FieldPrimaryCategory,
 	FieldCategories,
@@ -85,6 +88,8 @@ var (
 	TopicValidator func(string) error
 	// OriginalIDValidator is a validator for the "original_id" field. It is called by the builders before save.
 	OriginalIDValidator func(string) error
+	// DefaultInclusionStatus holds the default value on creation for the "inclusion_status" field.
+	DefaultInclusionStatus string
 	// DefaultTier holds the default value on creation for the "tier" field.
 	DefaultTier string
 	// DefaultPrimaryCategory holds the default value on creation for the "primary_category" field.
@@ -134,6 +139,11 @@ func ByTopic(opts ...sql.OrderTermOption) OrderOption {
 // ByOriginalID orders the results by the original_id field.
 func ByOriginalID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOriginalID, opts...).ToFunc()
+}
+
+// ByInclusionStatus orders the results by the inclusion_status field.
+func ByInclusionStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInclusionStatus, opts...).ToFunc()
 }
 
 // ByTier orders the results by the tier field.

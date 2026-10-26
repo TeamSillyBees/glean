@@ -9,6 +9,7 @@ import (
 	platformauth "github.com/teamsillybees/glean/internal/platform/auth"
 	platformconfig "github.com/teamsillybees/glean/internal/platform/config"
 	"github.com/teamsillybees/glean/internal/platform/httpclient"
+	"github.com/teamsillybees/glean/internal/platform/idgen"
 	"github.com/teamsillybees/glean/internal/platform/logx"
 	"github.com/teamsillybees/glean/internal/platform/redisx"
 	platformserver "github.com/teamsillybees/glean/internal/platform/server"
@@ -34,9 +35,13 @@ type Config struct {
 	Monitor       MonitorConfig          `mapstructure:"monitor"`
 }
 
-// MonitorConfig 描述显式启用的模拟调度；默认不启动任何采集定时器。
+// MonitorConfig 描述显式启用的真实来源调度；默认不启动任何采集定时器。
 type MonitorConfig struct {
-	SchedulerEnabled bool `mapstructure:"scheduler_enabled"`
+	SchedulerEnabled bool     `mapstructure:"scheduler_enabled"`
+	Sources          []string `mapstructure:"sources"`
+	MaxPagesPerCall  int      `mapstructure:"max_pages_per_call"`
+	Contact          string   `mapstructure:"contact"`
+	OperatorID       string   `mapstructure:"operator_id"`
 }
 
 // AppConfig 描述应用基础元信息。
@@ -130,10 +135,38 @@ func (c *Config) Validate() error {
 	if err := c.Auth.LoginProtection.Validate(); err != nil {
 		return err
 	}
+	// monitor 的单一主开关集中启用任务依赖；不要求操作员猜测三个底层开关。
+	if c.Monitor.SchedulerEnabled {
+		c.Task.Enabled = true
+		c.Task.Worker.Enabled = true
+		c.Task.Scheduler.Enabled = true
+		c.Task.Scheduler.Timezone = "UTC"
+	}
 	taskConfig := c.Task.Normalize()
+	if c.Monitor.OperatorID != "" {
+		if _, err := idgen.Parse(c.Monitor.OperatorID); err != nil {
+			return fmt.Errorf("monitor.operator_id must be a valid explicit user ID")
+		}
+	}
+	if c.Monitor.SchedulerEnabled && c.Monitor.OperatorID == "" {
+		return fmt.Errorf("monitor.operator_id is required when scheduler is enabled")
+	}
+	if c.Monitor.MaxPagesPerCall < 0 || c.Monitor.MaxPagesPerCall > 100 {
+		return fmt.Errorf("monitor.max_pages_per_call must be 1..100 (zero uses default)")
+	}
+	if strings.ContainsAny(c.Monitor.Contact, "\r\n") {
+		return fmt.Errorf("monitor.contact must not contain header control characters")
+	}
+	supported := map[string]bool{"crossref": true, "pubmed": true, "arxiv": true, "biorxiv": true, "medrxiv": true, "europepmc": true}
+	seen := map[string]bool{}
+	for _, source := range c.Monitor.Sources {
+		if !supported[source] || seen[source] {
+			return fmt.Errorf("monitor.sources contains unknown or duplicate source")
+		}
+		seen[source] = true
+	}
+
 	switch {
-	case c.Monitor.SchedulerEnabled && (!taskConfig.Enabled || !taskConfig.Worker.Enabled || !taskConfig.Scheduler.Enabled):
-		return fmt.Errorf("monitor.scheduler_enabled requires task.enabled, task.worker.enabled and task.scheduler.enabled")
 	case c.App.Name == "":
 		return fmt.Errorf("app.name 不能为空")
 	case !isSafeAppSlug(c.App.Slug):
@@ -303,6 +336,10 @@ func configDefaults() map[string]any {
 		"http_client.enabled":                     true,
 		"http_client.services.httpbingo.base_url": "https://httpbingo.org",
 		"monitor.scheduler_enabled":               false,
+		"monitor.sources":                         []string{"crossref", "pubmed", "arxiv", "biorxiv", "europepmc", "medrxiv"},
+		"monitor.max_pages_per_call":              12,
+		"monitor.contact":                         "",
+		"monitor.operator_id":                     "",
 		"task.enabled":                            true,
 		"task.backend":                            string(task.BackendAsynq),
 		"task.redis.enabled":                      true,

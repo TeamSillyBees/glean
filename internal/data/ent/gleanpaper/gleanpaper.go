@@ -16,6 +16,8 @@ const (
 	FieldID = "id"
 	// FieldIdentityKey holds the string denoting the identity_key field in the database.
 	FieldIdentityKey = "identity_key"
+	// FieldOrigin holds the string denoting the origin field in the database.
+	FieldOrigin = "origin"
 	// FieldTitle holds the string denoting the title field in the database.
 	FieldTitle = "title"
 	// FieldTitleZh holds the string denoting the title_zh field in the database.
@@ -62,6 +64,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldIdentityKey,
+	FieldOrigin,
 	FieldTitle,
 	FieldTitleZh,
 	FieldAbstract,
@@ -96,6 +99,8 @@ func ValidColumn(column string) bool {
 var (
 	// IdentityKeyValidator is a validator for the "identity_key" field. It is called by the builders before save.
 	IdentityKeyValidator func(string) error
+	// DefaultOrigin holds the default value on creation for the "origin" field.
+	DefaultOrigin string
 	// TitleValidator is a validator for the "title" field. It is called by the builders before save.
 	TitleValidator func(string) error
 	// DefaultTitleZh holds the default value on creation for the "title_zh" field.
@@ -141,6 +146,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByIdentityKey orders the results by the identity_key field.
 func ByIdentityKey(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIdentityKey, opts...).ToFunc()
+}
+
+// ByOrigin orders the results by the origin field.
+func ByOrigin(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOrigin, opts...).ToFunc()
 }
 
 // ByTitle orders the results by the title field.

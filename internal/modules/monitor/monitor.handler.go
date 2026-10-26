@@ -23,7 +23,21 @@ func (h *Handler) sources(ctx context.Context, _ *sourcesRequest) (*sourcesRespo
 		items = append(items, *checkpoint)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Source < items[j].Source })
-	return &sourcesResponse{Body: response.OK(ctx, SourcesVO{Items: items, Schedule: snapshot.Schedule})}, nil
+	diagnostics, err := h.service.Doctor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts := StateCounts{RetainedRuns: len(snapshot.Runs)}
+	for _, candidate := range snapshot.Records {
+		if candidate.Quarantine != nil {
+			counts.QuarantinedCandidates++
+		} else if candidate.Published {
+			counts.PublishedCache++
+		} else {
+			counts.PendingCandidates++
+		}
+	}
+	return &sourcesResponse{Body: response.OK(ctx, SourcesVO{Items: items, Schedule: snapshot.Schedule, Diagnostics: diagnostics, Counts: counts})}, nil
 }
 func (h *Handler) runs(ctx context.Context, _ *runsRequest) (*runsResponse, error) {
 	snapshot, err := h.service.Snapshot(ctx)

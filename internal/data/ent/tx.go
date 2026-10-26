@@ -16,6 +16,10 @@ type Tx struct {
 	GleanMembership *GleanMembershipClient
 	// GleanMonitorState is the client for interacting with the GleanMonitorState builders.
 	GleanMonitorState *GleanMonitorStateClient
+	// GleanObservation is the client for interacting with the GleanObservation builders.
+	GleanObservation *GleanObservationClient
+	// GleanObservationMatch is the client for interacting with the GleanObservationMatch builders.
+	GleanObservationMatch *GleanObservationMatchClient
 	// GleanPaper is the client for interacting with the GleanPaper builders.
 	GleanPaper *GleanPaperClient
 	// GleanPaperState is the client for interacting with the GleanPaperState builders.
@@ -173,6 +177,8 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.GleanMembership = NewGleanMembershipClient(tx.config)
 	tx.GleanMonitorState = NewGleanMonitorStateClient(tx.config)
+	tx.GleanObservation = NewGleanObservationClient(tx.config)
+	tx.GleanObservationMatch = NewGleanObservationMatchClient(tx.config)
 	tx.GleanPaper = NewGleanPaperClient(tx.config)
 	tx.GleanPaperState = NewGleanPaperStateClient(tx.config)
 	tx.GleanPreference = NewGleanPreferenceClient(tx.config)

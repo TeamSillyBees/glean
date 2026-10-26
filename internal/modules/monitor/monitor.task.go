@@ -38,12 +38,15 @@ func (s *Service) NextWakeAt(ctx context.Context) (time.Time, error) {
 	}
 	run := activeRun(state)
 	if run == nil {
+		if !s.knownSources(state) {
+			return s.clock().UTC(), nil
+		}
 		return state.Schedule.NextRunUTC, nil
 	}
 	now := s.clock().UTC()
 	var next time.Time
 	for name, progress := range run.Sources {
-		if progress.Published || progress.Failed {
+		if progress.Handled || progress.Published || progress.Failed {
 			continue
 		}
 		ready := state.Sources[name].NextRetryAt
@@ -61,14 +64,14 @@ func (s *Service) NextWakeAt(ctx context.Context) (time.Time, error) {
 }
 
 // RegisterSchedule 显式注册分钟唤醒脉冲；持久化服务决定 72 小时 UTC 锚点、分页续跑和退避，不能用漂移的 @every72h 替代。
-// 此阶段仅支持模拟服务；调用方必须在启动前验证默认关闭的 scheduler_enabled 配置。
+// 调用方必须在启动前验证默认关闭的 scheduler_enabled、HTTP 来源和审计操作人配置。
 func (s *Service) RegisterSchedule(scheduler task.Scheduler) error {
 	if scheduler == nil {
 		return bizerrors.BadRequest("monitor task scheduler is required")
 	}
-	if s.config.RealFetchEnabled {
-		return bizerrors.BadRequest("automatic real harvesting is not enabled in this phase")
+	if s.requireOperator && s.operatorID <= 0 {
+		return bizerrors.BadRequest("scheduler requires an explicit audited operator")
 	}
-	item := task.Task{Type: TickTaskType, Payload: struct{}{}, Meta: task.TaskMeta{Name: "Glean mock monitor tick", Description: "显式启用的模拟监控唤醒；真实采集关闭", Module: "monitor", Owner: "glean", Scenario: "mock-scheduler", BizKey: "monitor:tick:" + s.config.StateKey, BizKeyRequired: true, SideEffect: true, CostLevel: task.CostLevelLow, Idempotent: true}}
+	item := task.Task{Type: TickTaskType, Payload: struct{}{}, Meta: task.TaskMeta{Name: "Glean literature monitor tick", Description: "显式启用的真实来源监控；LLM 审核明确模拟", Module: "monitor", Owner: "glean", Scenario: "literature-scheduler", BizKey: "monitor:tick:" + s.config.StateKey, BizKeyRequired: true, SideEffect: true, CostLevel: task.CostLevelLow, Idempotent: true}}
 	return scheduler.Register("* * * * *", item, task.WithMaxRetry(0), task.WithTimeout(2*time.Minute), task.WithUnique(45*time.Second))
 }

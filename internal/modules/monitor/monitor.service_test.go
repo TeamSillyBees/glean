@@ -251,6 +251,9 @@ func TestExhaustedReviewBacklogSurvivesOverlap(t *testing.T) {
 	// 记录早于 acquiredThrough-7d，下一轮不会重新发现，必须从持久化审核积压恢复。
 	recovered, err := service.RunOnce(context.Background(), scenarioTime.Add(30*24*time.Hour))
 	require.NoError(t, err)
+	require.Equal(t, "pending", recovered.Runs[1].Status, "first bounded step drains old review backlog")
+	recovered, err = service.RunOnce(context.Background(), scenarioTime.Add(30*24*time.Hour))
+	require.NoError(t, err)
 	require.Equal(t, "completed", recovered.Runs[1].Status)
 	require.Equal(t, 2, reviewer.calls)
 	for _, candidate := range recovered.Records {
@@ -292,7 +295,7 @@ func TestSingleRunLeaseAndFencing(t *testing.T) {
 	newOwner, err := second.acquire(context.Background())
 	require.NoError(t, err)
 	require.ErrorContains(t, first.save(context.Background(), old), "lease lost")
-	second.release(newOwner)
+	second.release(context.Background(), newOwner)
 	_, err = first.RunOnce(context.Background(), scenarioTime)
 	require.NoError(t, err)
 }
@@ -395,8 +398,9 @@ func TestLivePathPacesEveryRequestAndIsolatesState(t *testing.T) {
 	require.NoError(t, err)
 	cfg := DefaultConfig()
 	cfg.RealFetchEnabled = true
-	service, err := NewOfflineService(ids, cfg, []Source{source}, nil, nil)
+	service, err := NewOfflineService(ids, cfg, []Source{source}, nil, &flakyPublisher{})
 	require.NoError(t, err)
+	service.journals = coreCoverageRegistry{}
 	require.Equal(t, "glean-monitor-live-v1", service.config.StateKey)
 	first, err := service.RunOnce(context.Background(), scenarioTime)
 	require.NoError(t, err)
@@ -412,6 +416,12 @@ func TestLivePathPacesEveryRequestAndIsolatesState(t *testing.T) {
 	final, err := service.RunOnce(context.Background(), scenarioTime.Add(6*time.Second))
 	require.NoError(t, err)
 	require.Equal(t, 3, source.calls)
+	require.True(t, final.Sources[source.Name()].AcquiredThrough.IsZero())
+	for i := 3; i < 6; i++ {
+		final, err = service.RunOnce(context.Background(), scenarioTime.Add(time.Duration(i)*3*time.Second))
+		require.NoError(t, err)
+	}
+	require.Equal(t, 6, source.calls)
 	require.Equal(t, "completed", final.Runs[0].Status)
 	require.Equal(t, "live", final.Runs[0].Mode)
 	for _, candidate := range final.Records {

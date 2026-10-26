@@ -27,6 +27,18 @@ func (_c *GleanVenueCreate) SetName(v string) *GleanVenueCreate {
 	return _c
 }
 
+// SetIssns sets the "issns" field.
+func (_c *GleanVenueCreate) SetIssns(v []string) *GleanVenueCreate {
+	_c.mutation.SetIssns(v)
+	return _c
+}
+
+// SetAliases sets the "aliases" field.
+func (_c *GleanVenueCreate) SetAliases(v []string) *GleanVenueCreate {
+	_c.mutation.SetAliases(v)
+	return _c
+}
+
 // SetKind sets the "kind" field.
 func (_c *GleanVenueCreate) SetKind(v string) *GleanVenueCreate {
 	_c.mutation.SetKind(v)
@@ -234,6 +246,14 @@ func (_c *GleanVenueCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *GleanVenueCreate) defaults() {
+	if _, ok := _c.mutation.Issns(); !ok {
+		v := gleanvenue.DefaultIssns
+		_c.mutation.SetIssns(v)
+	}
+	if _, ok := _c.mutation.Aliases(); !ok {
+		v := gleanvenue.DefaultAliases
+		_c.mutation.SetAliases(v)
+	}
 	if _, ok := _c.mutation.Kind(); !ok {
 		v := gleanvenue.DefaultKind
 		_c.mutation.SetKind(v)
@@ -285,6 +305,12 @@ func (_c *GleanVenueCreate) check() error {
 		if err := gleanvenue.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "GleanVenue.name": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Issns(); !ok {
+		return &ValidationError{Name: "issns", err: errors.New(`ent: missing required field "GleanVenue.issns"`)}
+	}
+	if _, ok := _c.mutation.Aliases(); !ok {
+		return &ValidationError{Name: "aliases", err: errors.New(`ent: missing required field "GleanVenue.aliases"`)}
 	}
 	if _, ok := _c.mutation.Kind(); !ok {
 		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "GleanVenue.kind"`)}
@@ -361,6 +387,14 @@ func (_c *GleanVenueCreate) createSpec() (*GleanVenue, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(gleanvenue.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := _c.mutation.Issns(); ok {
+		_spec.SetField(gleanvenue.FieldIssns, field.TypeJSON, value)
+		_node.Issns = value
+	}
+	if value, ok := _c.mutation.Aliases(); ok {
+		_spec.SetField(gleanvenue.FieldAliases, field.TypeJSON, value)
+		_node.Aliases = value
 	}
 	if value, ok := _c.mutation.Kind(); ok {
 		_spec.SetField(gleanvenue.FieldKind, field.TypeString, value)

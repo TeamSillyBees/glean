@@ -46,6 +46,7 @@ func main() {
 }
 func run(args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("importbaseline", flag.ContinueOnError)
+	journalDir := flags.String("journals", "data/journals", "versioned historical journal registry directory")
 	mode := flags.String("mode", "verify", "verify | extract | import")
 	dir := flags.String("dir", "data/baselines", "snapshot output/input directory")
 	archive := flags.String("archive", ".baseline/archive", "private, ignored archive directory (extract only)")
@@ -140,6 +141,25 @@ func run(args []string, out io.Writer) error {
 	defer stop()
 	ctx = entx.WithOperatorID(importContext, operatorID)
 	registeredVenues := map[string]bool{}
+	journalEntries, err := baseline.ReadJournalRegistry(*journalDir)
+	if err != nil {
+		return fmt.Errorf("load verified historical journal registry: %w", err)
+	}
+	for _, entry := range journalEntries {
+		encoded, err := json.Marshal(entry)
+		if err != nil {
+			return err
+		}
+		var venue catalog.VenueVO
+		if err = json.Unmarshal(encoded, &venue); err != nil {
+			return err
+		}
+		if err = service.RegisterVenue(ctx, venue); err != nil {
+			return fmt.Errorf("persist journal registry failed")
+		}
+		registeredVenues[venue.Name+":"+venue.RegistryVersion] = true
+	}
+
 	report, importErr := baseline.Import(ctx, *dir, m, func(ctx context.Context, line json.RawMessage) (bool, error) {
 		var r catalog.ImportRecord
 		if err := json.Unmarshal(line, &r); err != nil {
@@ -192,13 +212,60 @@ func validateDSN(dsn string, allowLocal bool) error {
 	if err != nil || u == nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Hostname() == "" {
 		return fmt.Errorf("GLEAN_BASELINE_DATABASE_URL must be a PostgreSQL URL")
 	}
-	ssl := u.Query().Get("sslmode")
+	// URL.Query 会丢弃解析错误，且 pq 将查询键直接拼入连接参数；两者都不能作为安全边界。
+	if u.Fragment != "" {
+		return fmt.Errorf("database URL must not contain a fragment")
+	}
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return fmt.Errorf("database URL contains malformed query parameters")
+	}
+	seen := make(map[string]bool, len(query))
+	for key, values := range query {
+		if !validDSNQueryKey(key) {
+			return fmt.Errorf("database URL contains an invalid query parameter name")
+		}
+		canonical := strings.ToLower(key)
+		if len(values) != 1 || seen[canonical] {
+			return fmt.Errorf("database URL contains duplicate or ambiguous query parameters")
+		}
+		seen[canonical] = true
+		// 连接目标与账号只接受 URL authority/path，禁止查询参数或 service 间接覆盖。
+		switch canonical {
+		case "host", "hostaddr", "port", "user", "password", "dbname", "database", "service", "servicefile":
+			return fmt.Errorf("database URL query must not override connection identity or service routing")
+		}
+	}
+	ssl := query.Get("sslmode")
 	if ssl == "verify-full" {
 		return nil
 	}
 	host := u.Hostname()
 	if allowLocal && (host == "localhost" || host == "127.0.0.1" || host == "::1") && ssl == "disable" {
+		// 即使 URL 中没有覆盖，pq 仍会读取这些环境参数并可能绕过回环地址。
+		for _, key := range []string{"PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE"} {
+			if os.Getenv(key) != "" {
+				return fmt.Errorf("local insecure import forbids PGHOSTADDR, PGSERVICE and PGSERVICEFILE indirection")
+			}
+		}
 		return nil
 	}
 	return fmt.Errorf("database requires sslmode=verify-full; loopback development may opt in to sslmode=disable")
+}
+
+// validDSNQueryKey 限定可安全传给 pq 的 ASCII 参数名，值仍允许正常 URL 转义。
+func validDSNQueryKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i, c := range key {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' {
+			continue
+		}
+		if i > 0 && (c >= '0' && c <= '9' || c == '.') {
+			continue
+		}
+		return false
+	}
+	return true
 }

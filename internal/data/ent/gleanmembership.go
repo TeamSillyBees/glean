@@ -26,6 +26,8 @@ type GleanMembership struct {
 	Topic string `json:"topic,omitempty"`
 	// OriginalID holds the value of the "original_id" field.
 	OriginalID string `json:"original_id,omitempty"`
+	// InclusionStatus holds the value of the "inclusion_status" field.
+	InclusionStatus string `json:"inclusion_status,omitempty"`
 	// Tier holds the value of the "tier" field.
 	Tier string `json:"tier,omitempty"`
 	// PrimaryCategory holds the value of the "primary_category" field.
@@ -64,7 +66,7 @@ func (*GleanMembership) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case gleanmembership.FieldID, gleanmembership.FieldPaperID, gleanmembership.FieldCreatedBy, gleanmembership.FieldUpdatedBy:
 			values[i] = new(sql.NullInt64)
-		case gleanmembership.FieldTopic, gleanmembership.FieldOriginalID, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldReadStatus, gleanmembership.FieldSource:
+		case gleanmembership.FieldTopic, gleanmembership.FieldOriginalID, gleanmembership.FieldInclusionStatus, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldReadStatus, gleanmembership.FieldSource:
 			values[i] = new(sql.NullString)
 		case gleanmembership.FieldCreatedAt, gleanmembership.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -106,6 +108,12 @@ func (_m *GleanMembership) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field original_id", values[i])
 			} else if value.Valid {
 				_m.OriginalID = value.String
+			}
+		case gleanmembership.FieldInclusionStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field inclusion_status", values[i])
+			} else if value.Valid {
+				_m.InclusionStatus = value.String
 			}
 		case gleanmembership.FieldTier:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -231,6 +239,9 @@ func (_m *GleanMembership) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("original_id=")
 	builder.WriteString(_m.OriginalID)
+	builder.WriteString(", ")
+	builder.WriteString("inclusion_status=")
+	builder.WriteString(_m.InclusionStatus)
 	builder.WriteString(", ")
 	builder.WriteString("tier=")
 	builder.WriteString(_m.Tier)

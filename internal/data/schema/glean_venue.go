@@ -15,7 +15,8 @@ type GleanVenue struct{ ent.Schema }
 // Fields 返回字段定义。
 func (GleanVenue) Fields() []ent.Field {
 	fields := []ent.Field{fieldx.ID(),
-		field.String("name").NotEmpty(), field.String("kind").Default("journal"),
+		field.String("name").NotEmpty(),
+		field.JSON("issns", []string{}).Default([]string{}), field.JSON("aliases", []string{}).Default([]string{}), field.String("kind").Default("journal"),
 		field.Float("jif").Optional().Nillable(), field.String("ccf").Default(""), field.Int("metric_year").Default(0),
 		field.String("registry_version").NotEmpty(), field.String("source").Default(""),
 		field.JSON("evidence", map[string]any{}).Default(map[string]any{}),

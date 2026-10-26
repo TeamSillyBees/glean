@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
@@ -273,12 +274,14 @@ func (s *remoteSource) crossref(ctx context.Context, req FetchRequest) (Page, er
 			Print  crossrefDate `json:"published-print"`
 			Posted crossrefDate `json:"posted"`
 		}
-		if json.Unmarshal(raw, &item) != nil || item.DOI == "" || len(item.Title) == 0 {
-			return Page{}, malformed("invalid Crossref work identity")
+		if json.Unmarshal(raw, &item) != nil || strings.TrimSpace(item.DOI) == "" || strings.TrimSpace(strings.Join(item.Title, " ")) == "" {
+			page.Records = append(page.Records, rejectedJSONRecord(s.name, raw))
+			continue
 		}
 		updated, err := time.Parse(time.RFC3339, item.Indexed.Date)
 		if err != nil {
-			return Page{}, malformed("missing Crossref indexed timestamp")
+			page.Records = append(page.Records, rejectedJSONRecord(s.name, raw))
+			continue
 		}
 		if updated.Before(req.Window.Start) || !updated.Before(req.Window.End) {
 			continue
@@ -493,14 +496,13 @@ func (s *remoteSource) biorxiv(ctx context.Context, req FetchRequest) (Page, err
 			Published string `json:"published"`
 			Authors   string `json:"authors"`
 		}
-		if json.Unmarshal(raw, &item) != nil || item.DOI == "" || item.Title == "" {
-			return Page{}, malformed("invalid bioRxiv record identity")
+		if json.Unmarshal(raw, &item) != nil || strings.TrimSpace(item.DOI) == "" || strings.TrimSpace(item.Title) == "" {
+			page.Records = append(page.Records, rejectedJSONRecord(s.name, raw))
+			continue
 		}
-		updated, err := time.Parse("2006-01-02", item.Date)
-		if err != nil {
-			return Page{}, malformed("invalid bioRxiv posted date")
-		}
-		if updated.Before(dayStart(req.Window.Start)) || !updated.Before(req.Window.End) {
+		// 日期缺失或精度不足只意味着出版日期未知，不能因此隔离整篇论文。
+		updated, _ := time.Parse("2006-01-02", item.Date)
+		if !updated.IsZero() && (updated.Before(dayStart(req.Window.Start)) || !updated.Before(req.Window.End)) {
 			continue
 		}
 		// bioRxiv 无全文关键词参数。统一模板只作宽松发现，最终纳入仍由独立审核处理。
@@ -628,4 +630,60 @@ func crossrefFilterTime(value time.Time, upper bool) string {
 		value = value.Add(time.Second - time.Duration(value.Nanosecond()))
 	}
 	return value.Format("2006-01-02T15:04:05")
+}
+
+// rejectedJSONRecord 保存单条坏数据；标记必须先于审核/发布处理，哈希只作隔离身份而非论文标识。
+func rejectedJSONRecord(source string, raw json.RawMessage) Record {
+	r := Record{Source: source, Raw: append(json.RawMessage(nil), raw...), ValidationError: "invalid_source_record"}
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &fields)
+	stringField := func(key string) string {
+		var value string
+		_ = json.Unmarshal(fields[key], &value)
+		return strings.TrimSpace(value)
+	}
+	switch source {
+	case "crossref":
+		r.SourceID = cleanDOI(stringField("DOI"))
+		var titles []string
+		if json.Unmarshal(fields["title"], &titles) == nil {
+			r.Title = strings.Join(titles, " ")
+		}
+	case "biorxiv", "medrxiv":
+		r.SourceID = cleanDOI(stringField("doi"))
+		r.Title = stringField("title")
+	case "europepmc":
+		if id, origin := stringField("id"), stringField("source"); id != "" && origin != "" {
+			r.SourceID = origin + ":" + id
+		}
+		r.Title = stringField("title")
+	}
+	if r.SourceID == "" {
+		r.SourceID = fmt.Sprintf("unparsed-sha256:%x", sha256.Sum256(raw))
+	} else {
+		r.SourceURL = sourceRecordURL(source, r.SourceID)
+	}
+	return r
+}
+
+// coreISSNBatchSize 保守限制核心全刊查询的 OR 项数量，避免登记表扩展后 GET URL 过长。
+const coreISSNBatchSize = 40
+
+func coreJournalFeeds(req FetchRequest) ([][]string, string, error) {
+	if !req.Template.Core {
+		return nil, "", nil
+	}
+	issns, err := registryISSNs(req)
+	if err != nil {
+		return nil, "", err
+	}
+	feeds := make([][]string, 0, (len(issns)+coreISSNBatchSize-1)/coreISSNBatchSize)
+	for start := 0; start < len(issns); start += coreISSNBatchSize {
+		end := start + coreISSNBatchSize
+		if end > len(issns) {
+			end = len(issns)
+		}
+		feeds = append(feeds, issns[start:end])
+	}
+	return feeds, fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(issns, ",")))), nil
 }

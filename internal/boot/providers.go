@@ -31,7 +31,8 @@ import (
 
 func registerProviders(injector *do.Injector, cfg *Config, buildInfo observability.BuildInfoVO) {
 	logx.Register(injector, cfg.Log)
-	httpclient.Register(injector, cfg.HTTPClient)
+	sourceHTTPConfig, sourceHTTPHooks := monitorHTTPConfig(cfg)
+	httpclient.Register(injector, sourceHTTPConfig, sourceHTTPHooks...)
 	redisx.Register(injector, cfg.Redis)
 	asynqadapter.Register(injector, cfg.Task)
 	platformcache.Register(injector, platformcache.Config{
@@ -89,7 +90,29 @@ func registerModules(injector *do.Injector, cfg *Config) {
 	taskdemomodule.Provide(injector)
 	rbacmodule.Provide(injector)
 	catalogmodule.Provide(injector)
-	monitormodule.Provide(injector)
+	do.Provide(injector, func(i *do.Injector) (monitormodule.Publisher, error) {
+		var operator idgen.ID
+		if cfg.Monitor.OperatorID != "" {
+			parsed, err := idgen.Parse(cfg.Monitor.OperatorID)
+			if err != nil {
+				return nil, err
+			}
+			operator = parsed
+		}
+		return NewCatalogMonitorPublisher(do.MustInvoke[*catalogmodule.Service](i), operator), nil
+	})
+	do.Provide(injector, func(i *do.Injector) (monitormodule.JournalProvider, error) {
+		return NewMonitorJournalProvider(do.MustInvoke[*catalogmodule.Service](i)), nil
+	})
+	monitorConfig := monitormodule.RuntimeConfig()
+	if cfg.Monitor.MaxPagesPerCall > 0 {
+		monitorConfig.MaxPagesPerCall = cfg.Monitor.MaxPagesPerCall
+	}
+	var monitorOperator idgen.ID
+	if cfg.Monitor.OperatorID != "" {
+		monitorOperator, _ = idgen.Parse(cfg.Monitor.OperatorID)
+	}
+	monitormodule.Provide(injector, monitormodule.ProviderOptions{Config: monitorConfig, Sources: cfg.Monitor.Sources, SchedulerEnabled: cfg.Monitor.SchedulerEnabled, OperatorID: monitorOperator})
 }
 
 func storageproviderMaxFileSize(cfg *Config) int64 {

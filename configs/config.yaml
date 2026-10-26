@@ -156,6 +156,10 @@ task:
     sync_interval: 3m
     timezone: Asia/Shanghai
 
-# 模拟监控调度默认关闭；只有显式同时启用 task worker/scheduler 后才可开启。
+# 真实公共来源 + 真实目录持久化，仅 LLM 审核使用明确 mock。启用此主开关会集中启用 task worker/scheduler（UTC），须同时配置现有操作员 ID。
 monitor:
   scheduler_enabled: false
+  sources: [crossref, pubmed, arxiv, biorxiv, europepmc, medrxiv]
+  max_pages_per_call: 12
+  contact: ""
+  operator_id: ""

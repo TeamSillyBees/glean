@@ -24,6 +24,8 @@ type PublicationEvent struct {
 
 // Record 保存一条来源版本及原始证据，AcquiredAt 不表示正式发表日期。
 type Record struct {
+	CoreDiscovery   bool     `json:"coreDiscovery,omitempty"`
+	ValidationError string   `json:"validationError,omitempty"`
 	SourceURL       string   `json:"sourceUrl"`
 	PMID            string   `json:"pmid"`
 	IsMock          bool     `json:"isMock"`
@@ -121,43 +123,80 @@ type Publisher interface {
 
 // Candidate 持久化来源版本、审核和目录投影状态，避免失败重试丢失证据。
 type Candidate struct {
-	ID        idgen.ID `json:"id"`
-	Key       string   `json:"key"`
-	Identity  string   `json:"identity"`
-	Record    Record   `json:"record"`
-	Review    *Review  `json:"review,omitempty"`
-	Published bool     `json:"published"`
+	Quarantine *Quarantine `json:"quarantine,omitempty"`
+	Compacted  bool        `json:"compacted"`
+	ID         idgen.ID    `json:"id"`
+	Key        string      `json:"key"`
+	Identity   string      `json:"identity"`
+	Record     Record      `json:"record"`
+	Review     *Review     `json:"review,omitempty"`
+	Published  bool        `json:"published"`
+}
+
+// RejectedRecordError 标识单条永久无效或身份冲突；不包含原始错误和敏感信息。
+type RejectedRecordError struct{ Kind string }
+
+// Error 返回安全的隔离原因，不将数据库或来源响应细节暴露给查询端。
+func (e *RejectedRecordError) Error() string { return "record rejected: " + e.Kind }
+
+// Quarantine 保留被隔离记录和安全原因；非法 JSON 原文使用字节编码以避免破坏状态序列化。
+type Quarantine struct {
+	Reason      string    `json:"reason"`
+	At          time.Time `json:"at"`
+	RawEvidence []byte    `json:"rawEvidence,omitempty"`
 }
 
 // Checkpoint 分离采集、审核与目录投影水位。
 type Checkpoint struct {
-	Source              string    `json:"source"`
-	BootstrapFrom       time.Time `json:"bootstrapFrom"`
-	AcquiredThrough     time.Time `json:"acquiredThrough"`
-	ReviewedThrough     time.Time `json:"reviewedThrough"`
-	PublishedThrough    time.Time `json:"publishedThrough"`
-	NextRetryAt         time.Time `json:"nextRetryAt"`
-	LastError           string    `json:"lastError,omitempty"`
-	ConsecutiveFailures int       `json:"consecutiveFailures"`
+	Quarantined          int                  `json:"quarantined"`
+	HandledThrough       time.Time            `json:"handledThrough"`
+	CoreBackfillPending  bool                 `json:"coreBackfillPending"`
+	Blocked              bool                 `json:"blocked"`
+	LastStatusCode       int                  `json:"lastStatusCode,omitempty"`
+	Enabled              bool                 `json:"enabled"`
+	AcquisitionMode      string               `json:"acquisitionMode"`
+	TopicAcquiredThrough map[string]time.Time `json:"topicAcquiredThrough"`
+	LagSeconds           *int64               `json:"lagSeconds,omitempty"`
+	Source               string               `json:"source"`
+	BootstrapFrom        time.Time            `json:"bootstrapFrom"`
+	AcquiredThrough      time.Time            `json:"acquiredThrough"`
+	ReviewedThrough      time.Time            `json:"reviewedThrough"`
+	PublishedThrough     time.Time            `json:"publishedThrough"`
+	NextRetryAt          time.Time            `json:"nextRetryAt"`
+	LastError            string               `json:"lastError,omitempty"`
+	ConsecutiveFailures  int                  `json:"consecutiveFailures"`
 }
 
 // SourceProgress 保存单次运行每个来源的可恢复游标。
 type SourceProgress struct {
-	Window        Window   `json:"window"`
-	TemplateIndex int      `json:"templateIndex"`
-	Cursor        string   `json:"cursor,omitempty"`
-	CandidateKeys []string `json:"candidateKeys"`
-	Acquired      bool     `json:"acquired"`
-	Reviewed      bool     `json:"reviewed"`
-	Published     bool     `json:"published"`
-	Failed        bool     `json:"failed"`
-	Attempts      int      `json:"attempts"`
-	Pages         int      `json:"pages"`
-	LastError     string   `json:"lastError,omitempty"`
+	RegistryByTopic   map[string][]string `json:"registryByTopic,omitempty"`
+	CoreWide          bool                `json:"coreWide"`
+	IncrementalWindow Window              `json:"incrementalWindow"`
+	Quarantined       int                 `json:"quarantined"`
+	Handled           bool                `json:"handled"`
+	Observed          int                 `json:"observed"`
+	ReviewedCount     int                 `json:"reviewedCount"`
+	Projected         int                 `json:"projected"`
+	CoreBackfill      bool                `json:"coreBackfill"`
+	RegistryISSNs     []string            `json:"registryIssns,omitempty"`
+	AdvanceCheckpoint bool                `json:"advanceCheckpoint"`
+	Window            Window              `json:"window"`
+	TemplateIndex     int                 `json:"templateIndex"`
+	Cursor            string              `json:"cursor,omitempty"`
+	CandidateKeys     []string            `json:"candidateKeys"`
+	Acquired          bool                `json:"acquired"`
+	Reviewed          bool                `json:"reviewed"`
+	Published         bool                `json:"published"`
+	Failed            bool                `json:"failed"`
+	Attempts          int                 `json:"attempts"`
+	Pages             int                 `json:"pages"`
+	LastError         string              `json:"lastError,omitempty"`
 }
 
 // Run 保存一次固定水位的运行，取消或退避后恢复同一 ID。
 type Run struct {
+	Requests        int                        `json:"requests"`
+	RequestKey      string                     `json:"requestKey,omitempty"`
 	ID              idgen.ID                   `json:"id"`
 	Number          int                        `json:"number"`
 	StartedAt       time.Time                  `json:"startedAt"`
@@ -171,6 +210,9 @@ type Run struct {
 
 // Schedule 保存 UTC 锚点，防止进程重启或运行耗时造成计划漂移。
 type Schedule struct {
+	AcquisitionMode  string    `json:"acquisitionMode"`
+	ReviewMode       string    `json:"reviewMode"`
+	SchedulerEnabled bool      `json:"schedulerEnabled"`
 	AnchorUTC        time.Time `json:"anchorUtc"`
 	NextRunUTC       time.Time `json:"nextRunUtc"`
 	EveryHours       int       `json:"everyHours"`
@@ -191,18 +233,22 @@ type Snapshot struct {
 
 // JournalEntry 以 ISSN 为稳定匹配键，指标必须带可追溯年份与来源。
 type JournalEntry struct {
-	Name         string   `json:"name"`
-	ISSNs        []string `json:"issns"`
-	JIF          *float64 `json:"jif,omitempty"`
-	MetricYear   int      `json:"metricYear,omitempty"`
-	MetricSource string   `json:"metricSource,omitempty"`
-	IsMock       bool     `json:"isMock"`
+	DiscoveryTopics       []string `json:"discoveryTopics,omitempty"`
+	QualificationVerified bool     `json:"qualificationVerified"`
+	Name                  string   `json:"name"`
+	ISSNs                 []string `json:"issns"`
+	JIF                   *float64 `json:"jif,omitempty"`
+	MetricYear            int      `json:"metricYear,omitempty"`
+	MetricSource          string   `json:"metricSource,omitempty"`
+	IsMock                bool     `json:"isMock"`
 }
 
 // SourcesVO 返回来源进度及不会自动启用外部采集的计划。
 type SourcesVO struct {
-	Items    []Checkpoint `json:"items"`
-	Schedule Schedule     `json:"schedule"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+	Counts      StateCounts  `json:"counts"`
+	Items       []Checkpoint `json:"items"`
+	Schedule    Schedule     `json:"schedule"`
 }
 
 // RunsVO 返回运行历史，包含失败与恢复信息。
@@ -225,3 +271,22 @@ type templatesResponse struct {
 	Body response.SuccessVO[TemplatesVO]
 }
 
+// JournalProvider 从真实目录登记表提供可追溯核心期刊 ISSN，不生成猜测指标。
+type JournalProvider interface {
+	CoreJournals(context.Context) ([]JournalEntry, error)
+}
+
+// Diagnostic 只包含不泄露凭据的运行准备情况与可执行修复提示。
+type Diagnostic struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+}
+
+// StateCounts 汇总队列与缓存规模，不向 HTTP 暴露原始采集快照。
+type StateCounts struct {
+	QuarantinedCandidates int `json:"quarantinedCandidates"`
+	PendingCandidates     int `json:"pendingCandidates"`
+	PublishedCache        int `json:"publishedCache"`
+	RetainedRuns          int `json:"retainedRuns"`
+}

@@ -2,9 +2,11 @@ package monitor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -19,12 +21,16 @@ type pubmedPartition struct {
 }
 
 type pubmedCursor struct {
-	Offset   int               `json:"offset"`
-	Count    int               `json:"count"`
-	WebEnv   string            `json:"web_env"`
-	Key      string            `json:"key"`
-	Pending  []pubmedPartition `json:"pending,omitempty"`
-	Restarts int               `json:"restarts,omitempty"`
+	CoreFeed      int               `json:"core_feed,omitempty"`
+	CoreBatchSize int               `json:"core_batch_size,omitempty"`
+	CoreRegistry  string            `json:"core_registry,omitempty"`
+	CoreFull      bool              `json:"core_full,omitempty"`
+	Offset        int               `json:"offset"`
+	Count         int               `json:"count"`
+	WebEnv        string            `json:"web_env"`
+	Key           string            `json:"key"`
+	Pending       []pubmedPartition `json:"pending,omitempty"`
+	Restarts      int               `json:"restarts,omitempty"`
 }
 
 func (c pubmedCursor) encode() string {
@@ -37,7 +43,7 @@ func decodePubmedCursor(value string) (pubmedCursor, error) {
 		return c, malformed("invalid PubMed cursor")
 	}
 	b, e := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(value, "pm2:"))
-	if e != nil || json.Unmarshal(b, &c) != nil || c.Offset < 0 || c.Count < 0 || c.Count > 9999 || c.Offset > c.Count || (c.Count > 0 && (c.Offset == c.Count || c.WebEnv == "" || c.Key == "")) || c.Restarts < 0 || c.Restarts > 3 || len(c.Pending) > 128 {
+	if e != nil || json.Unmarshal(b, &c) != nil || c.CoreFeed < 0 || c.CoreBatchSize < 0 || c.Offset < 0 || c.Count < 0 || c.Count > 9999 || c.Offset > c.Count || (c.Count > 0 && (c.Offset == c.Count || c.WebEnv == "" || c.Key == "")) || c.Restarts < 0 || c.Restarts > 3 || len(c.Pending) > 128 {
 		return c, malformed("invalid PubMed cursor")
 	}
 	for _, p := range c.Pending {
@@ -50,9 +56,15 @@ func decodePubmedCursor(value string) (pubmedCursor, error) {
 	return c, nil
 }
 
-func pubmedNext(c pubmedCursor) Page {
+func pubmedNext(c pubmedCursor, req FetchRequest, feedCount int) Page {
 	if len(c.Pending) == 0 {
-		return Page{Complete: true}
+		if !req.Template.Core || c.CoreFeed+1 >= feedCount {
+			return Page{Complete: true}
+		}
+		c.CoreFeed++
+		c.Pending = []pubmedPartition{{From: dateOnly(req.Window.Start), Until: dateOnly(req.Window.End.Add(-time.Nanosecond))}}
+		c.Offset, c.Count, c.Restarts = 0, 0, 0
+		c.Key, c.WebEnv = "", ""
 	}
 	return Page{NextCursor: c.encode()}
 }
@@ -60,7 +72,11 @@ func pubmedNext(c pubmedCursor) Page {
 // pubmed 逐页查询 CRDT/LR，超 9999 条时先二分日期，再按 UID 分区；每个 Fetch 至多一次 HTTP。
 // UID 范围由 NCBI 官方确认支持：https://ncbiinsights.ncbi.nlm.nih.gov/2022/11/22/updated-pubmed-eutilities-live/
 func (s *remoteSource) pubmed(ctx context.Context, req FetchRequest) (Page, error) {
-	c := pubmedCursor{Pending: []pubmedPartition{{From: dateOnly(req.Window.Start), Until: dateOnly(req.Window.End.Add(-time.Nanosecond))}}}
+	feeds, registry, err := coreJournalFeeds(req)
+	if err != nil {
+		return Page{}, err
+	}
+	c := pubmedCursor{CoreFull: req.Template.Core, Pending: []pubmedPartition{{From: dateOnly(req.Window.Start), Until: dateOnly(req.Window.End.Add(-time.Nanosecond))}}}
 	if req.Cursor != "" {
 		var e error
 		c, e = decodePubmedCursor(req.Cursor)
@@ -71,20 +87,23 @@ func (s *remoteSource) pubmed(ctx context.Context, req FetchRequest) (Page, erro
 			return Page{}, malformed("PubMed cursor has no unfinished partition")
 		}
 	}
+	// 旧核心 history 未分批或登记快照改变时，从原固定窗口重新开始，不能跳过任何 ISSN feed。
+	if req.Template.Core && (!c.CoreFull || c.CoreBatchSize != coreISSNBatchSize || c.CoreRegistry != registry) {
+		c = pubmedCursor{CoreFull: true, CoreBatchSize: coreISSNBatchSize, CoreRegistry: registry, Pending: []pubmedPartition{{From: dateOnly(req.Window.Start), Until: dateOnly(req.Window.End.Add(-time.Nanosecond))}}}
+	}
+	if req.Template.Core && c.CoreFeed >= len(feeds) {
+		return Page{}, malformed("invalid PubMed core feed cursor")
+	}
 	if c.Count == 0 {
 		p := c.Pending[0]
 		span := strings.ReplaceAll(p.From, "-", "/") + ":" + strings.ReplaceAll(p.Until, "-", "/")
 		query := req.Template.Query
 		if req.Template.Core {
-			issns, e := registryISSNs(req)
-			if e != nil {
-				return Page{}, e
-			}
-			parts := make([]string, 0, len(issns))
-			for _, v := range issns {
+			parts := make([]string, 0, len(feeds[c.CoreFeed]))
+			for _, v := range feeds[c.CoreFeed] {
 				parts = append(parts, strconv.Quote(v)+"[issn]")
 			}
-			query = "(" + query + ") AND (" + strings.Join(parts, " OR ") + ")"
+			query = strings.Join(parts, " OR ")
 		}
 		term := "(" + query + ") AND (" + span + "[crdt] OR " + span + "[lr])"
 		if p.High > 0 {
@@ -148,11 +167,11 @@ func (s *remoteSource) pubmed(ctx context.Context, req FetchRequest) (Page, erro
 				right.Low = pivot + 1
 			}
 			c.Pending = append([]pubmedPartition{left, right}, c.Pending[1:]...)
-			return pubmedNext(c), nil
+			return pubmedNext(c, req, len(feeds)), nil
 		}
 		if count == 0 {
 			c.Pending = c.Pending[1:]
-			return pubmedNext(c), nil
+			return pubmedNext(c, req, len(feeds)), nil
 		}
 		if r.Result.WebEnv == "" || r.Result.Key == "" {
 			return Page{}, malformed("PubMed history missing")
@@ -160,16 +179,19 @@ func (s *remoteSource) pubmed(ctx context.Context, req FetchRequest) (Page, erro
 		c.Count = count
 		c.WebEnv = r.Result.WebEnv
 		c.Key = r.Result.Key
-		return pubmedNext(c), nil
+		return pubmedNext(c, req, len(feeds)), nil
 	}
 	body, e := s.get(ctx, "/entrez/eutils/efetch.fcgi", map[string]string{"db": "pubmed", "retmode": "xml", "rettype": "abstract", "retstart": strconv.Itoa(c.Offset), "retmax": strconv.Itoa(requestPageSize(req)), "WebEnv": c.WebEnv, "query_key": c.Key, "tool": "glean"})
 	if e != nil {
 		return Page{}, e
 	}
 	var r struct {
-		XMLName  xml.Name        `xml:"PubmedArticleSet"`
-		Articles []pubmedArticle `xml:"PubmedArticle"`
-		Error    string          `xml:"ERROR"`
+		XMLName xml.Name `xml:"PubmedArticleSet"`
+		Items   []struct {
+			XMLName xml.Name
+			Raw     string `xml:",innerxml"`
+		} `xml:",any"`
+		Error string `xml:"ERROR"`
 	}
 	if xml.Unmarshal(body, &r) != nil {
 		return Page{}, malformed("invalid PubMed EFetch XML")
@@ -183,20 +205,36 @@ func (s *remoteSource) pubmed(ctx context.Context, req FetchRequest) (Page, erro
 		c.Key = ""
 		c.WebEnv = ""
 		c.Restarts++
-		return pubmedNext(c), nil
+		return pubmedNext(c, req, len(feeds)), nil
 	}
-	if len(r.Articles) == 0 {
+	if len(r.Items) == 0 {
 		return Page{}, malformed("invalid or prematurely empty PubMed EFetch page")
 	}
-	if len(r.Articles) > c.Count-c.Offset {
+	if len(r.Items) > c.Count-c.Offset {
 		return Page{}, malformed("PubMed history count changed")
 	}
+	// 页级结构仍失败关闭；书籍是 EFetch 的合法记录，必须计入原始 retstart 进度。
+	for _, entry := range r.Items {
+		if entry.XMLName.Local != "PubmedArticle" && entry.XMLName.Local != "PubmedBookArticle" {
+			return Page{}, malformed("unexpected PubMed EFetch envelope element")
+		}
+	}
 	page := Page{}
-	for _, item := range r.Articles {
+	for _, entry := range r.Items {
+		if entry.XMLName.Local == "PubmedBookArticle" {
+			page.Records = append(page.Records, rejectedPubmedRecord(entry.Raw, "PubmedBookArticle", "unsupported_record_type"))
+			continue
+		}
+		var item pubmedArticle
+		if xml.Unmarshal([]byte("<PubmedArticle>"+entry.Raw+"</PubmedArticle>"), &item) != nil {
+			page.Records = append(page.Records, rejectedPubmedRecord(entry.Raw, "PubmedArticle", "invalid_source_record"))
+			continue
+		}
 		pmid := strings.TrimSpace(item.Citation.PMID.Value)
 		a := item.Citation.Article
-		if pmid == "" || a.Title.Value == "" {
-			return Page{}, malformed("invalid PubMed article identity")
+		if pmid == "" || strings.TrimSpace(xmlText(a.Title.Value)) == "" {
+			page.Records = append(page.Records, rejectedPubmedRecord(entry.Raw, "PubmedArticle", "invalid_source_record"))
+			continue
 		}
 		record := Record{Source: s.name, SourceID: pmid, PMID: pmid, Title: xmlText(a.Title.Value), Journal: a.Journal.Title, URL: "https://pubmed.ncbi.nlm.nih.gov/" + pmid + "/", SourceUpdatedAt: item.Citation.Revised.exact(), Topics: []string{req.Template.Topic}, Raw: rawXML(item.Raw), PublicationType: strings.Join(a.Types, "; ")}
 		preprint := false
@@ -263,7 +301,7 @@ func (s *remoteSource) pubmed(ctx context.Context, req FetchRequest) (Page, erro
 		record.SourceURL = sourceRecordURL(s.name, record.SourceID)
 		page.Records = append(page.Records, record)
 	}
-	c.Offset += len(r.Articles)
+	c.Offset += len(r.Items)
 	if c.Offset >= c.Count {
 		c.Pending = c.Pending[1:]
 		c.Restarts = 0
@@ -272,8 +310,28 @@ func (s *remoteSource) pubmed(ctx context.Context, req FetchRequest) (Page, erro
 		c.WebEnv = ""
 		c.Key = ""
 	}
-	next := pubmedNext(c)
+	next := pubmedNext(c, req, len(feeds))
 	page.Complete = next.Complete
 	page.NextCursor = next.NextCursor
 	return page, nil
+}
+
+// rejectedPubmedRecord 不把书籍猜成论文，保留原始 XML 和可读出的 PMID，仅供隔离审计。
+func rejectedPubmedRecord(raw, element, reason string) Record {
+	var identity struct {
+		ArticlePMID string `xml:"MedlineCitation>PMID"`
+		BookPMID    string `xml:"BookDocument>PMID"`
+	}
+	_ = xml.Unmarshal([]byte("<"+element+">"+raw+"</"+element+">"), &identity)
+	pmid := strings.TrimSpace(identity.ArticlePMID)
+	if element == "PubmedBookArticle" {
+		pmid = strings.TrimSpace(identity.BookPMID)
+	}
+	r := Record{Source: "pubmed", SourceID: pmid, PMID: pmid, PublicationType: element, Raw: rawXML(raw), ValidationError: reason}
+	if pmid == "" {
+		r.SourceID = fmt.Sprintf("unparsed-sha256:%x", sha256.Sum256([]byte(raw)))
+	} else {
+		r.SourceURL = sourceRecordURL("pubmed", pmid)
+	}
+	return r
 }

@@ -69,12 +69,14 @@ func TestMockScheduleUsesDurableAnchorAndNoQueueRetry(t *testing.T) {
 	require.Equal(t, now, snapshot.Runs[1].FixedEnd)
 }
 
-// TestScheduleRejectsLiveAndDisabledDependencies 验证当前自动调度仅允许 mock，显式禁用依赖不被绕过。
-func TestScheduleRejectsLiveAndDisabledDependencies(t *testing.T) {
+// TestScheduleRequiresAuditAndEnabledDependencies 验证真实自动调度可执行，但显式禁用依赖和缺失审计操作人不被绕过。
+func TestScheduleRequiresAuditAndEnabledDependencies(t *testing.T) {
 	service := offline(t, DemoSources(scenarioTime, false), nil, nil)
 	require.Error(t, service.RegisterSchedule(nil))
 	require.Error(t, service.RegisterTasks(nil))
 	require.ErrorIs(t, service.RegisterSchedule(task.NewDisabledScheduler()), task.ErrDisabled)
 	service.config.RealFetchEnabled = true
-	require.ErrorContains(t, service.RegisterSchedule(&recordingScheduler{}), "real harvesting")
+	require.NoError(t, service.RegisterSchedule(&recordingScheduler{}))
+	service.requireOperator = true
+	require.ErrorContains(t, service.RegisterSchedule(&recordingScheduler{}), "operator")
 }

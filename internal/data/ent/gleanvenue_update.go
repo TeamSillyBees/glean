@@ -44,6 +44,30 @@ func (_u *GleanVenueUpdate) SetNillableName(v *string) *GleanVenueUpdate {
 	return _u
 }
 
+// SetIssns sets the "issns" field.
+func (_u *GleanVenueUpdate) SetIssns(v []string) *GleanVenueUpdate {
+	_u.mutation.SetIssns(v)
+	return _u
+}
+
+// AppendIssns appends value to the "issns" field.
+func (_u *GleanVenueUpdate) AppendIssns(v []string) *GleanVenueUpdate {
+	_u.mutation.AppendIssns(v)
+	return _u
+}
+
+// SetAliases sets the "aliases" field.
+func (_u *GleanVenueUpdate) SetAliases(v []string) *GleanVenueUpdate {
+	_u.mutation.SetAliases(v)
+	return _u
+}
+
+// AppendAliases appends value to the "aliases" field.
+func (_u *GleanVenueUpdate) AppendAliases(v []string) *GleanVenueUpdate {
+	_u.mutation.AppendAliases(v)
+	return _u
+}
+
 // SetKind sets the "kind" field.
 func (_u *GleanVenueUpdate) SetKind(v string) *GleanVenueUpdate {
 	_u.mutation.SetKind(v)
@@ -311,6 +335,22 @@ func (_u *GleanVenueUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(gleanvenue.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Issns(); ok {
+		_spec.SetField(gleanvenue.FieldIssns, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedIssns(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gleanvenue.FieldIssns, value)
+		})
+	}
+	if value, ok := _u.mutation.Aliases(); ok {
+		_spec.SetField(gleanvenue.FieldAliases, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAliases(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gleanvenue.FieldAliases, value)
+		})
+	}
 	if value, ok := _u.mutation.Kind(); ok {
 		_spec.SetField(gleanvenue.FieldKind, field.TypeString, value)
 	}
@@ -404,6 +444,30 @@ func (_u *GleanVenueUpdateOne) SetNillableName(v *string) *GleanVenueUpdateOne {
 	if v != nil {
 		_u.SetName(*v)
 	}
+	return _u
+}
+
+// SetIssns sets the "issns" field.
+func (_u *GleanVenueUpdateOne) SetIssns(v []string) *GleanVenueUpdateOne {
+	_u.mutation.SetIssns(v)
+	return _u
+}
+
+// AppendIssns appends value to the "issns" field.
+func (_u *GleanVenueUpdateOne) AppendIssns(v []string) *GleanVenueUpdateOne {
+	_u.mutation.AppendIssns(v)
+	return _u
+}
+
+// SetAliases sets the "aliases" field.
+func (_u *GleanVenueUpdateOne) SetAliases(v []string) *GleanVenueUpdateOne {
+	_u.mutation.SetAliases(v)
+	return _u
+}
+
+// AppendAliases appends value to the "aliases" field.
+func (_u *GleanVenueUpdateOne) AppendAliases(v []string) *GleanVenueUpdateOne {
+	_u.mutation.AppendAliases(v)
 	return _u
 }
 
@@ -703,6 +767,22 @@ func (_u *GleanVenueUpdateOne) sqlSave(ctx context.Context) (_node *GleanVenue, 
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(gleanvenue.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Issns(); ok {
+		_spec.SetField(gleanvenue.FieldIssns, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedIssns(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gleanvenue.FieldIssns, value)
+		})
+	}
+	if value, ok := _u.mutation.Aliases(); ok {
+		_spec.SetField(gleanvenue.FieldAliases, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAliases(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gleanvenue.FieldAliases, value)
+		})
 	}
 	if value, ok := _u.mutation.Kind(); ok {
 		_spec.SetField(gleanvenue.FieldKind, field.TypeString, value)

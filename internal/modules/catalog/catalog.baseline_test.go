@@ -26,6 +26,7 @@ func TestCommittedBaselineCatalogCompatibility(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(manifestBytes, &manifest))
 	counts := map[string]int{}
+	curated := map[string]int{}
 	all := 0
 	for _, shard := range manifest.Shards {
 		t.Run(shard.File, func(t *testing.T) {
@@ -50,6 +51,14 @@ func TestCommittedBaselineCatalogCompatibility(t *testing.T) {
 				require.NotEmpty(t, record.Raw)
 				require.False(t, record.IsMock)
 				counts[record.Topic]++
+				for key, allowed := range historicalCuratedDimensions(record.Topic) {
+					for _, value := range record.Dimensions[key] {
+						if value == allowed[0] {
+							curated[record.Topic]++
+							break
+						}
+					}
+				}
 				count++
 			}
 			require.Equal(t, shard.Records, count)
@@ -59,4 +68,5 @@ func TestCommittedBaselineCatalogCompatibility(t *testing.T) {
 	require.Equal(t, 39495, all)
 	require.Equal(t, manifest.Memberships, all)
 	require.Equal(t, map[string]int{"biomed-ai": 31399, "llm-agent": 4059, "biomed-worldmodel": 4037}, counts)
+	require.Equal(t, map[string]int{"biomed-ai": 8556, "llm-agent": 1204, "biomed-worldmodel": 1210}, curated)
 }

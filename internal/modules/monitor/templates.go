@@ -2,19 +2,46 @@ package monitor
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 // TemplateVersion 固定此次部署采用的统一检索模板版本。
-const TemplateVersion = "2026-10-26.1"
+const TemplateVersion = "2026-10-26.3"
 
 // SearchTemplates 返回三个主题共用的检索定义；纳入策略留在审核阶段。
 func SearchTemplates() []SearchTemplate {
-	return []SearchTemplate{
-		{ID: "biomed-ai-core", Version: TemplateVersion, Topic: "biomed-ai", TermGroups: [][]string{{"artificial intelligence", "machine learning", "deep learning", "foundation model"}, {"biomedical", "medicine", "clinical", "biology"}}, Query: `("artificial intelligence" OR "machine learning" OR "deep learning" OR "foundation model") AND (biomedical OR medicine OR clinical OR biology)`, Terms: []string{"artificial intelligence", "machine learning", "deep learning", "foundation model", "biomedical", "clinical"}, Core: true, Policy: InclusionPolicy{JIFMinimum: 10, JIFStrict: true, CCF: []string{"A"}, FullPaperRequired: true, MainTrackRequired: true}},
-		{ID: "llm-agent-core", Version: TemplateVersion, Topic: "llm-agent", TermGroups: [][]string{{"large language model", "LLM", "language agent"}, {"agent", "tool use", "planning", "reasoning"}}, Query: `("large language model" OR LLM OR "language agent") AND (agent OR "tool use" OR planning OR reasoning)`, Terms: []string{"large language model", "LLM", "language agent", "tool use", "planning"}, Core: true, Policy: InclusionPolicy{JIFMinimum: 4, CCF: []string{"A", "B", "C"}, FullPaperRequired: true}},
-		{ID: "biomed-worldmodel-core", Version: TemplateVersion, Topic: "biomed-worldmodel", TermGroups: [][]string{{"world model", "digital twin", "virtual cell", "generative simulation"}, {"biomedical", "biology", "clinical", "medicine"}}, Query: `("world model" OR "digital twin" OR "virtual cell" OR "generative simulation") AND (biomedical OR biology OR clinical OR medicine)`, Terms: []string{"world model", "digital twin", "virtual cell", "generative simulation", "biomedical"}, Core: true, Policy: InclusionPolicy{JIFMinimum: 4, CCF: []string{"A", "B", "C"}, FullPaperRequired: true}},
+	templates := []SearchTemplate{
+		{ID: "biomed-ai-core", Topic: "biomed-ai", TermGroups: [][]string{
+			{"artificial intelligence", "machine learning", "deep learning", "foundation model", "neural network", "graph neural network", "reinforcement learning", "generative model", "diffusion model", "transformer", "self-supervised", "representation learning", "random forest", "gradient boosting", "support vector machine"},
+			{"biomedical", "medicine", "clinical", "biology", "medical", "patient", "disease", "cancer", "drug", "protein", "molecular", "cell", "cellular", "genomic", "omics", "tissue", "organ", "physiological", "neuroscience", "brain", "imaging", "radiology", "pathology"},
+		}, Policy: InclusionPolicy{JIFMinimum: 10, JIFStrict: true, CCF: []string{"A"}, FullPaperRequired: true, MainTrackRequired: true}},
+		{ID: "llm-agent-core", Topic: "llm-agent", TermGroups: [][]string{
+			{"large language model", "language model", "LLM", "LLMs", "ChatGPT", "GPT", "T5", "text-to-text", "generative language model", "language agent", "agentic"},
+			{"knowledge graph", "knowledge construction", "knowledge extraction", "knowledge integration", "knowledge fusion", "knowledge completion", "knowledge verification", "knowledge acquisition", "knowledge engineering", "structured knowledge", "ontology", "ontologies", "information extraction", "relation extraction", "entity extraction", "entity linking", "schema induction"},
+		}, Policy: InclusionPolicy{JIFMinimum: 4, CCF: []string{"A", "B", "C"}, FullPaperRequired: true}},
+		{ID: "biomed-worldmodel-core", Topic: "biomed-worldmodel", TermGroups: [][]string{
+			{"world model", "digital twin", "virtual cell", "generative simulation", "JEPA", "joint embedding predictive", "state transition", "perturbation prediction", "perturbation response", "cell state", "latent dynamics", "dynamics model", "dynamical model", "molecular dynamics", "cellular simulation", "counterfactual simulation", "foundation model"},
+			{"biomedical", "biological", "biology", "clinical", "medicine", "medical", "cell", "cellular", "protein", "molecular", "genomic", "omics", "drug", "tissue", "organ", "physiological", "neuroscience", "brain", "patient"},
+		}, Policy: InclusionPolicy{JIFMinimum: 4, CCF: []string{"A", "B", "C"}, FullPaperRequired: true}},
 	}
+	for i := range templates {
+		templates[i].Version = TemplateVersion
+		templates[i].Core = true
+		groups := make([]string, 0, len(templates[i].TermGroups))
+		terms := []string{}
+		for _, group := range templates[i].TermGroups {
+			quoted := make([]string, 0, len(group))
+			for _, term := range group {
+				quoted = append(quoted, strconv.Quote(term))
+				terms = append(terms, term)
+			}
+			groups = append(groups, "("+strings.Join(quoted, " OR ")+")")
+		}
+		templates[i].Query = strings.Join(groups, " AND ")
+		templates[i].Terms = uniqueStrings(terms)
+	}
+	return templates
 }
 
 // NormalizeISSN 校验 ISSN 校验位并规范为 xxxx-xxxx；未知值不能猜测匹配。

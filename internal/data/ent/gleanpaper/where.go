@@ -60,6 +60,11 @@ func IdentityKey(v string) predicate.GleanPaper {
 	return predicate.GleanPaper(sql.FieldEQ(FieldIdentityKey, v))
 }
 
+// Origin applies equality check predicate on the "origin" field. It's identical to OriginEQ.
+func Origin(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldEQ(FieldOrigin, v))
+}
+
 // Title applies equality check predicate on the "title" field. It's identical to TitleEQ.
 func Title(v string) predicate.GleanPaper {
 	return predicate.GleanPaper(sql.FieldEQ(FieldTitle, v))
@@ -210,6 +215,71 @@ func IdentityKeyEqualFold(v string) predicate.GleanPaper {
 // IdentityKeyContainsFold applies the ContainsFold predicate on the "identity_key" field.
 func IdentityKeyContainsFold(v string) predicate.GleanPaper {
 	return predicate.GleanPaper(sql.FieldContainsFold(FieldIdentityKey, v))
+}
+
+// OriginEQ applies the EQ predicate on the "origin" field.
+func OriginEQ(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldEQ(FieldOrigin, v))
+}
+
+// OriginNEQ applies the NEQ predicate on the "origin" field.
+func OriginNEQ(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldNEQ(FieldOrigin, v))
+}
+
+// OriginIn applies the In predicate on the "origin" field.
+func OriginIn(vs ...string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldIn(FieldOrigin, vs...))
+}
+
+// OriginNotIn applies the NotIn predicate on the "origin" field.
+func OriginNotIn(vs ...string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldNotIn(FieldOrigin, vs...))
+}
+
+// OriginGT applies the GT predicate on the "origin" field.
+func OriginGT(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldGT(FieldOrigin, v))
+}
+
+// OriginGTE applies the GTE predicate on the "origin" field.
+func OriginGTE(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldGTE(FieldOrigin, v))
+}
+
+// OriginLT applies the LT predicate on the "origin" field.
+func OriginLT(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldLT(FieldOrigin, v))
+}
+
+// OriginLTE applies the LTE predicate on the "origin" field.
+func OriginLTE(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldLTE(FieldOrigin, v))
+}
+
+// OriginContains applies the Contains predicate on the "origin" field.
+func OriginContains(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldContains(FieldOrigin, v))
+}
+
+// OriginHasPrefix applies the HasPrefix predicate on the "origin" field.
+func OriginHasPrefix(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldHasPrefix(FieldOrigin, v))
+}
+
+// OriginHasSuffix applies the HasSuffix predicate on the "origin" field.
+func OriginHasSuffix(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldHasSuffix(FieldOrigin, v))
+}
+
+// OriginEqualFold applies the EqualFold predicate on the "origin" field.
+func OriginEqualFold(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldEqualFold(FieldOrigin, v))
+}
+
+// OriginContainsFold applies the ContainsFold predicate on the "origin" field.
+func OriginContainsFold(v string) predicate.GleanPaper {
+	return predicate.GleanPaper(sql.FieldContainsFold(FieldOrigin, v))
 }
 
 // TitleEQ applies the EQ predicate on the "title" field.

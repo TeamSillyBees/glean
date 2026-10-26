@@ -16,6 +16,10 @@ const (
 	FieldID = "id"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
+	// FieldIssns holds the string denoting the issns field in the database.
+	FieldIssns = "issns"
+	// FieldAliases holds the string denoting the aliases field in the database.
+	FieldAliases = "aliases"
 	// FieldKind holds the string denoting the kind field in the database.
 	FieldKind = "kind"
 	// FieldJif holds the string denoting the jif field in the database.
@@ -50,6 +54,8 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldName,
+	FieldIssns,
+	FieldAliases,
 	FieldKind,
 	FieldJif,
 	FieldCcf,
@@ -78,6 +84,10 @@ func ValidColumn(column string) bool {
 var (
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
+	// DefaultIssns holds the default value on creation for the "issns" field.
+	DefaultIssns []string
+	// DefaultAliases holds the default value on creation for the "aliases" field.
+	DefaultAliases []string
 	// DefaultKind holds the default value on creation for the "kind" field.
 	DefaultKind string
 	// DefaultCcf holds the default value on creation for the "ccf" field.

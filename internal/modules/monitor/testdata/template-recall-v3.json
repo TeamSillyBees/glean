@@ -1,0 +1,15 @@
+[
+  {"name":"kg-construction-without-agent","topic":"llm-agent","title":"Knowledge construction using large language models","abstract":"Synthetic recall fixture: structured knowledge and ontology construction.","match":true},
+  {"name":"t5-relation-extraction","topic":"llm-agent","title":"T5 for relation extraction and entity linking","abstract":"Synthetic recall fixture, not a scientific paper.","match":true},
+  {"name":"chatgpt-schema-induction","topic":"llm-agent","title":"ChatGPT schema induction for knowledge integration","abstract":"Synthetic recall fixture.","match":true},
+  {"name":"generic-agent-is-not-knowledge-engineering","topic":"llm-agent","title":"Large language model agent planning and tool use","abstract":"Synthetic fixture about reasoning only.","match":false},
+  {"name":"graph-without-language-method","topic":"llm-agent","title":"Knowledge graph construction with graph algorithms","abstract":"Synthetic fixture without a qualifying language method.","match":false},
+  {"name":"jepa-for-cells","topic":"biomed-worldmodel","title":"JEPA representation of cell state transitions","abstract":"Synthetic recall fixture for cellular trajectories.","match":true},
+  {"name":"perturbation-prediction","topic":"biomed-worldmodel","title":"Perturbation prediction in genomic systems","abstract":"Synthetic recall fixture for biological perturbation response.","match":true},
+  {"name":"cell-latent-dynamics","topic":"biomed-worldmodel","title":"Latent dynamics model of cellular state","abstract":"Synthetic recall fixture for biological simulation.","match":true},
+  {"name":"molecular-dynamics","topic":"biomed-worldmodel","title":"Molecular dynamics of protein transitions","abstract":"Synthetic recall fixture.","match":true},
+  {"name":"world-model-non-biomedical","topic":"biomed-worldmodel","title":"World model for automobile navigation","abstract":"Synthetic fixture for road lane estimation.","match":false},
+  {"name":"classical-ml-pathology","topic":"biomed-ai","title":"Random forest and gradient boosting in pathology","abstract":"Synthetic recall fixture for disease detection.","match":true},
+  {"name":"gnn-drug-discovery","topic":"biomed-ai","title":"Graph neural network for molecular drug discovery","abstract":"Synthetic recall fixture.","match":true},
+  {"name":"diffusion-radiology","topic":"biomed-ai","title":"Diffusion model for radiology imaging","abstract":"Synthetic recall fixture.","match":true}
+]

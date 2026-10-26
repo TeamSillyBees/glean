@@ -71,6 +71,11 @@ func OriginalID(v string) predicate.GleanMembership {
 	return predicate.GleanMembership(sql.FieldEQ(FieldOriginalID, v))
 }
 
+// InclusionStatus applies equality check predicate on the "inclusion_status" field. It's identical to InclusionStatusEQ.
+func InclusionStatus(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldEQ(FieldInclusionStatus, v))
+}
+
 // Tier applies equality check predicate on the "tier" field. It's identical to TierEQ.
 func Tier(v string) predicate.GleanMembership {
 	return predicate.GleanMembership(sql.FieldEQ(FieldTier, v))
@@ -300,6 +305,71 @@ func OriginalIDEqualFold(v string) predicate.GleanMembership {
 // OriginalIDContainsFold applies the ContainsFold predicate on the "original_id" field.
 func OriginalIDContainsFold(v string) predicate.GleanMembership {
 	return predicate.GleanMembership(sql.FieldContainsFold(FieldOriginalID, v))
+}
+
+// InclusionStatusEQ applies the EQ predicate on the "inclusion_status" field.
+func InclusionStatusEQ(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldEQ(FieldInclusionStatus, v))
+}
+
+// InclusionStatusNEQ applies the NEQ predicate on the "inclusion_status" field.
+func InclusionStatusNEQ(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldNEQ(FieldInclusionStatus, v))
+}
+
+// InclusionStatusIn applies the In predicate on the "inclusion_status" field.
+func InclusionStatusIn(vs ...string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldIn(FieldInclusionStatus, vs...))
+}
+
+// InclusionStatusNotIn applies the NotIn predicate on the "inclusion_status" field.
+func InclusionStatusNotIn(vs ...string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldNotIn(FieldInclusionStatus, vs...))
+}
+
+// InclusionStatusGT applies the GT predicate on the "inclusion_status" field.
+func InclusionStatusGT(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldGT(FieldInclusionStatus, v))
+}
+
+// InclusionStatusGTE applies the GTE predicate on the "inclusion_status" field.
+func InclusionStatusGTE(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldGTE(FieldInclusionStatus, v))
+}
+
+// InclusionStatusLT applies the LT predicate on the "inclusion_status" field.
+func InclusionStatusLT(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldLT(FieldInclusionStatus, v))
+}
+
+// InclusionStatusLTE applies the LTE predicate on the "inclusion_status" field.
+func InclusionStatusLTE(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldLTE(FieldInclusionStatus, v))
+}
+
+// InclusionStatusContains applies the Contains predicate on the "inclusion_status" field.
+func InclusionStatusContains(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldContains(FieldInclusionStatus, v))
+}
+
+// InclusionStatusHasPrefix applies the HasPrefix predicate on the "inclusion_status" field.
+func InclusionStatusHasPrefix(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldHasPrefix(FieldInclusionStatus, v))
+}
+
+// InclusionStatusHasSuffix applies the HasSuffix predicate on the "inclusion_status" field.
+func InclusionStatusHasSuffix(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldHasSuffix(FieldInclusionStatus, v))
+}
+
+// InclusionStatusEqualFold applies the EqualFold predicate on the "inclusion_status" field.
+func InclusionStatusEqualFold(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldEqualFold(FieldInclusionStatus, v))
+}
+
+// InclusionStatusContainsFold applies the ContainsFold predicate on the "inclusion_status" field.
+func InclusionStatusContainsFold(v string) predicate.GleanMembership {
+	return predicate.GleanMembership(sql.FieldContainsFold(FieldInclusionStatus, v))
 }
 
 // TierEQ applies the EQ predicate on the "tier" field.

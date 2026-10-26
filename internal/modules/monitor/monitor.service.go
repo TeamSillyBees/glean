@@ -12,47 +12,65 @@ import (
 	"time"
 
 	"github.com/teamsillybees/glean/internal/data/ent"
+	"github.com/teamsillybees/glean/internal/data/ent/sysuser"
 	"github.com/teamsillybees/glean/internal/modules/bizerrors"
+	"github.com/teamsillybees/glean/internal/platform/entx"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 )
 
-// Config 限制一次执行的工作量；真实采集默认关闭，调度由调用方显式触发。
+// Config 限制一次执行的工作量；正常装配采用 RuntimeConfig，调度由调用方显式触发。
 type Config struct {
-	StateKey         string
-	AnchorUTC        time.Time
-	RealFetchEnabled bool
-	MaxPagesPerCall  int
-	RetryBudget      int
-	BaseBackoff      time.Duration
-	MaxBackoff       time.Duration
-	LeaseDuration    time.Duration
-	RequestTimeout   time.Duration
-	SourceInterval   time.Duration
+	StateKey            string
+	AnchorUTC           time.Time
+	RealFetchEnabled    bool
+	MaxPagesPerCall     int
+	PageSize            int
+	MaxReviewPerCall    int
+	CompactPublished    bool
+	PublishedCacheLimit int
+	CompletedRunLimit   int
+	RetryBudget         int
+	BaseBackoff         time.Duration
+	MaxBackoff          time.Duration
+	LeaseDuration       time.Duration
+	RequestTimeout      time.Duration
+	SourceInterval      time.Duration
 }
 
 // DefaultConfig 返回不会启动外部采集的保守配置。
 func DefaultConfig() Config {
-	return Config{StateKey: "glean-monitor-mock-v1", AnchorUTC: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), MaxPagesPerCall: 12, RetryBudget: 5, BaseBackoff: time.Minute, MaxBackoff: 24 * time.Hour, LeaseDuration: 5 * time.Minute, RequestTimeout: 45 * time.Second, SourceInterval: 3 * time.Second}
+	return Config{StateKey: "glean-monitor-mock-v1", AnchorUTC: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), MaxPagesPerCall: 12, MaxReviewPerCall: 200, RetryBudget: 5, BaseBackoff: time.Minute, MaxBackoff: 24 * time.Hour, LeaseDuration: 5 * time.Minute, RequestTimeout: 45 * time.Second, SourceInterval: 3 * time.Second}
 }
 
 // Service 协调采集、审核和目录投影，数据库状态通过修订号 CAS 防止并发覆盖。
 type Service struct {
-	client    *ent.Client
-	memory    *memoryState
-	ids       *idgen.Generator
-	config    Config
-	sources   []Source
-	reviewer  Reviewer
-	publisher Publisher
-	clock     func() time.Time
+	client           *ent.Client
+	memory           *memoryState
+	ids              *idgen.Generator
+	config           Config
+	sources          []Source
+	reviewer         Reviewer
+	publisher        Publisher
+	clock            func() time.Time
+	journals         JournalProvider
+	schedulerEnabled bool
+	operatorID       idgen.ID
+	requireOperator  bool
 }
 
 // NewService 创建使用 Ent 的持久化监控服务；不自行启动后台任务。
-func NewService(client *ent.Client, ids *idgen.Generator, cfg Config, sources []Source, reviewer Reviewer, publisher Publisher) (*Service, error) {
+func NewService(client *ent.Client, ids *idgen.Generator, cfg Config, sources []Source, reviewer Reviewer, publisher Publisher, journals ...JournalProvider) (*Service, error) {
 	if client == nil {
 		return nil, bizerrors.BadRequest("monitor database is required")
 	}
-	return newService(client, nil, ids, cfg, sources, reviewer, publisher)
+	if len(journals) > 1 {
+		return nil, bizerrors.BadRequest("at most one journal registry provider is allowed")
+	}
+	service, err := newService(client, nil, ids, cfg, sources, reviewer, publisher)
+	if err == nil && len(journals) == 1 {
+		service.journals = journals[0]
+	}
+	return service, err
 }
 
 // NewOfflineService 创建仅用于演示和测试的内存服务，不用于生产持久化。
@@ -75,6 +93,9 @@ func newService(client *ent.Client, memory *memoryState, ids *idgen.Generator, c
 	if cfg.MaxPagesPerCall == 0 {
 		cfg.MaxPagesPerCall = defaults.MaxPagesPerCall
 	}
+	if cfg.MaxReviewPerCall == 0 {
+		cfg.MaxReviewPerCall = defaults.MaxReviewPerCall
+	}
 	if cfg.RetryBudget == 0 {
 		cfg.RetryBudget = defaults.RetryBudget
 	}
@@ -93,7 +114,7 @@ func newService(client *ent.Client, memory *memoryState, ids *idgen.Generator, c
 	if cfg.SourceInterval == 0 {
 		cfg.SourceInterval = defaults.SourceInterval
 	}
-	if cfg.MaxPagesPerCall < 1 || cfg.RetryBudget < 1 || cfg.BaseBackoff < time.Second || cfg.MaxBackoff < cfg.BaseBackoff || cfg.RequestTimeout <= 0 || cfg.LeaseDuration < 2*cfg.RequestTimeout || cfg.SourceInterval < 0 {
+	if cfg.PageSize < 0 || cfg.PageSize > 1000 || cfg.MaxReviewPerCall < 1 || cfg.MaxPagesPerCall < 1 || cfg.RetryBudget < 1 || cfg.BaseBackoff < time.Second || cfg.MaxBackoff < cfg.BaseBackoff || cfg.RequestTimeout <= 0 || cfg.LeaseDuration < 2*cfg.RequestTimeout || cfg.SourceInterval < 0 {
 		return nil, bizerrors.BadRequest("invalid monitor budgets")
 	}
 	names := map[string]bool{}
@@ -120,7 +141,13 @@ func newService(client *ent.Client, memory *memoryState, ids *idgen.Generator, c
 		reviewer = MockReviewer{}
 	}
 	if publisher == nil {
+		if liveSources {
+			return nil, bizerrors.BadRequest("real sources require a real catalog publisher")
+		}
 		publisher = MockPublisher{}
+	}
+	if _, mock := publisher.(MockPublisher); mock && liveSources {
+		return nil, bizerrors.BadRequest("real sources cannot use a mock catalog publisher")
 	}
 	return &Service{client: client, memory: memory, ids: ids, config: cfg, sources: sources, reviewer: reviewer, publisher: publisher, clock: time.Now}, nil
 }
@@ -133,72 +160,150 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	s.decorateSnapshot(&state.Snapshot)
 	return state.Snapshot, nil
 }
 
 // RunOnce 执行一个有预算的工作片段，退避未到期时立即返回而不忙循环。
 // 未完成的运行恢复同一固定 End；来源分页全部成功前不推进采集水位。
 func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) {
+	return s.runOnce(ctx, now, nil)
+}
+
+// RunWindow 执行显式有界真实扫描窗口，重试保持同一窗口与运行 ID，不跨越未覆盖的来源缺口。
+func (s *Service) RunWindow(ctx context.Context, window Window) (Snapshot, error) {
+	window.Start = window.Start.UTC()
+	window.End = window.End.UTC()
+	if window.Start.IsZero() || !window.Start.Before(window.End) || window.End.Sub(window.Start) > 90*24*time.Hour || (s.config.RealFetchEnabled && window.End.After(s.clock().UTC())) {
+		return Snapshot{}, bizerrors.BadRequest("scan window must be positive and at most 90 days")
+	}
+	return s.runOnce(ctx, s.clock().UTC(), &window)
+}
+
+func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window) (Snapshot, error) {
+	if s.requireOperator && s.operatorID <= 0 {
+		return Snapshot{}, bizerrors.BadRequest("real scan requires an explicit audited operator")
+	}
+	if s.requireOperator {
+		if err := s.validateOperator(ctx); err != nil {
+			return Snapshot{}, err
+		}
+	}
+	if s.operatorID > 0 {
+		ctx = entx.WithOperatorID(ctx, s.operatorID)
+	}
 	now = now.UTC()
 	state, err := s.acquire(ctx)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	defer s.release(state)
+	defer s.release(ctx, state)
 	run := activeRun(state)
 	if run != nil {
 		if run.TemplateVersion != TemplateVersion {
 			return state.Snapshot, bizerrors.BadRequest("active monitor run requires its original template version")
 		}
-		if len(run.Sources) != len(s.sources) {
-			return state.Snapshot, bizerrors.BadRequest("active monitor run requires its original source set")
-		}
+		names := map[string]bool{}
 		for _, source := range s.sources {
-			if _, ok := run.Sources[source.Name()]; !ok {
-				return state.Snapshot, bizerrors.BadRequest("active monitor source set changed")
+			names[source.Name()] = true
+		}
+		for name := range run.Sources {
+			if !names[name] {
+				return state.Snapshot, bizerrors.BadRequest("active run needs its original sources; resume with those sources")
 			}
+		}
+		if requested != nil && run.RequestKey != s.windowKey(*requested) {
+			return state.Snapshot, bizerrors.BadRequest("another window is active; resume its original window first")
 		}
 	}
 	if run == nil {
-		if now.Before(state.Schedule.NextRunUTC) {
+		if requested != nil {
+			key := s.windowKey(*requested)
+			for _, previous := range state.Runs {
+				if previous.RequestKey == key {
+					return state.Snapshot, nil
+				}
+			}
+		} else if now.Before(state.Schedule.NextRunUTC) && s.knownSources(state) {
 			return state.Snapshot, nil
 		}
-		run = s.startRun(state, now)
+		registry := []string{}
+		registryByTopic := map[string][]string{}
+		if s.journals != nil {
+			entries, registryErr := s.journals.CoreJournals(ctx)
+			if registryErr != nil {
+				return state.Snapshot, registryErr
+			}
+			registry, registryByTopic = compileRegistry(entries)
+		}
+		run = s.startRun(state, now, requested, registry, registryByTopic)
 		if err = s.save(ctx, state); err != nil {
 			return Snapshot{}, err
 		}
 	}
 	run.Status = "running"
 	pages := 0
+	reviewsUsed := 0
 	templates := SearchTemplates()
-	for _, source := range s.sources {
+	offset := run.Requests % len(s.sources)
+	ordered := append(append([]Source{}, s.sources[offset:]...), s.sources[:offset]...)
+	for _, source := range ordered {
 		progress, ok := run.Sources[source.Name()]
 		if !ok {
 			continue
 		}
 		checkpoint := state.Sources[source.Name()]
-		if progress.Failed || progress.Published || now.Before(checkpoint.NextRetryAt) {
+		if !isMockSource(source) {
+			s.shareProviderCooldown(state, source.Name(), checkpoint)
+			if checkpoint.Blocked {
+				progress.Failed = true
+				progress.LastError = "provider_forbidden"
+			}
+		}
+		if progress.Failed || progress.Handled || progress.Published || now.Before(checkpoint.NextRetryAt) {
 			continue
 		}
-		if !progress.Acquired && pages >= s.config.MaxPagesPerCall {
+		if !progress.Acquired && pages >= s.config.MaxPagesPerCall && !pendingCandidates(state, progress) {
 			continue
 		}
 		checkpoint.LastError = ""
 		checkpoint.NextRetryAt = time.Time{}
-		for !progress.Acquired && pages < s.config.MaxPagesPerCall {
+		drainFirst := pendingCandidates(state, progress)
+		for !progress.Acquired && pages < s.config.MaxPagesPerCall && !drainFirst {
 			if err = ctx.Err(); err != nil {
-				return s.cancelRun(state, run, err)
+				return s.cancelRun(ctx, state, run, err)
 			}
-			template := templates[progress.TemplateIndex]
+			template := templates[progress.TemplateIndex%len(templates)]
+			template.Core = progress.CoreBackfill && progress.TemplateIndex >= len(templates)
+			fetchWindow := progress.Window
+			if progress.CoreBackfill && !template.Core && !progress.IncrementalWindow.Start.IsZero() {
+				fetchWindow = progress.IncrementalWindow
+			}
+			registryISSNs := progress.RegistryISSNs
+			if template.Core && len(progress.RegistryByTopic) > 0 {
+				registryISSNs = progress.RegistryByTopic[template.Topic]
+			}
+			if template.Core && len(registryISSNs) == 0 {
+				s.fail(progress, checkpoint, &SourceError{Kind: "missing_registry", Message: "core journal registry has no registered ISSNs for this topic"}, now)
+				if err = s.save(ctx, state); err != nil {
+					return Snapshot{}, err
+				}
+				break
+			}
 			fetchCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
-			page, fetchErr := source.Fetch(fetchCtx, FetchRequest{Window: progress.Window, Cursor: progress.Cursor, Template: template})
+			page, fetchErr := source.Fetch(fetchCtx, FetchRequest{PageSize: s.config.PageSize, Window: fetchWindow, Cursor: progress.Cursor, Template: template, RegistryISSNs: registryISSNs})
 			cancel()
 			pages++
+			run.Requests++
 			if fetchErr != nil {
 				if ctx.Err() != nil {
-					return s.cancelRun(state, run, ctx.Err())
+					return s.cancelRun(ctx, state, run, ctx.Err())
 				}
-				s.fail(progress, checkpoint, fetchErr, now)
+				failureAt := now
+				if !isMockSource(source) {
+					failureAt = s.clock().UTC()
+				}
+				s.fail(progress, checkpoint, fetchErr, failureAt)
 				if err = s.save(ctx, state); err != nil {
 					return Snapshot{}, err
 				}
@@ -212,16 +317,29 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) 
 				break
 			}
 			for _, record := range page.Records {
-				if (len(record.Raw) > 0 && !json.Valid(record.Raw)) || strings.TrimSpace(record.Title) == "" {
-					s.fail(progress, checkpoint, &SourceError{Kind: "invalid_record", Message: "record metadata is malformed"}, now)
-					break
-				}
+				progress.Observed++
+				record.IsMock = isMockSource(source)
+				record.CoreDiscovery = template.Core
 				record.Source = source.Name()
 				record.AcquiredAt = now
+				if !isMockSource(source) {
+					record.AcquiredAt = s.clock().UTC()
+				}
 				record.Topics = uniqueStrings(append(record.Topics, template.Topic))
-				if strings.TrimSpace(record.SourceID) == "" && strings.TrimSpace(record.DOI) == "" {
-					s.fail(progress, checkpoint, &SourceError{Kind: "identity", Message: "record lacks source identity", Retryable: false}, now)
-					break
+				reason := ""
+				if record.ValidationError != "" {
+					reason = safeRejectionKind(record.ValidationError)
+					record.ValidationError = reason
+				}
+				if reason == "" && ((len(record.Raw) > 0 && !json.Valid(record.Raw)) || strings.TrimSpace(record.Title) == "") {
+					reason = "invalid_record"
+				}
+				if reason == "" && strings.TrimSpace(record.SourceID) == "" && strings.TrimSpace(record.DOI) == "" {
+					reason = "missing_identity"
+				}
+				if reason != "" {
+					s.quarantineRecord(state, progress, checkpoint, record, reason, now)
+					continue
 				}
 				key, identity := recordIdentity(record)
 				candidate, exists := state.Records[key]
@@ -230,13 +348,22 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) 
 					state.Records[key] = candidate
 				} else {
 					topics := uniqueStrings(append(candidate.Record.Topics, record.Topics...))
-					if len(topics) != len(candidate.Record.Topics) {
+					topicsChanged := len(topics) != len(candidate.Record.Topics)
+					if candidate.Compacted && topicsChanged {
+						candidate.Record = record
+						candidate.Compacted = false
+					}
+					if topicsChanged {
 						candidate.Review = nil
 						candidate.Published = false
 					}
 					candidate.Record.Topics = topics
 				}
+				beforeKeys := len(progress.CandidateKeys)
 				progress.CandidateKeys = appendUnique(progress.CandidateKeys, key)
+				if candidate.Quarantine != nil && len(progress.CandidateKeys) > beforeKeys {
+					progress.Quarantined++
+				}
 			}
 			if progress.Failed {
 				if err = s.save(ctx, state); err != nil {
@@ -248,13 +375,29 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) 
 			progress.Cursor = page.NextCursor
 			checkpoint.LastError = ""
 			checkpoint.ConsecutiveFailures = 0
+			checkpoint.LastStatusCode = 0
 			checkpoint.NextRetryAt = time.Time{}
 			if page.Complete {
+				if checkpoint.TopicAcquiredThrough == nil {
+					checkpoint.TopicAcquiredThrough = map[string]time.Time{}
+				}
+				if (!progress.CoreBackfill || template.Core) && (progress.AdvanceCheckpoint || run.RequestKey == "") {
+					checkpoint.TopicAcquiredThrough[template.Topic] = later(checkpoint.TopicAcquiredThrough[template.Topic], run.FixedEnd)
+				}
 				progress.TemplateIndex++
 				progress.Cursor = ""
-				if progress.TemplateIndex == len(templates) {
+				templateCount := len(templates)
+				if progress.CoreBackfill {
+					templateCount *= 2
+				}
+				if progress.TemplateIndex == templateCount {
 					progress.Acquired = true
-					checkpoint.AcquiredThrough = run.FixedEnd
+					if progress.AdvanceCheckpoint || run.RequestKey == "" {
+						checkpoint.AcquiredThrough = later(checkpoint.AcquiredThrough, run.FixedEnd)
+					}
+					if progress.CoreWide {
+						checkpoint.CoreBackfillPending = false
+					}
 				}
 			}
 			if err = s.save(ctx, state); err != nil {
@@ -269,18 +412,25 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) 
 				break
 			}
 		}
-		if progress.Acquired && !progress.Reviewed && !progress.Failed {
+		if !progress.Reviewed && !progress.Failed && checkpoint.LastError == "" {
+			sourceReviews := 0
+			quota := max(1, s.config.MaxReviewPerCall/len(run.Sources))
 			for _, key := range progress.CandidateKeys {
 				candidate := state.Records[key]
-				if candidate.Review != nil {
+				if candidate.Review != nil || candidate.Quarantine != nil {
 					continue
 				}
+				if reviewsUsed >= s.config.MaxReviewPerCall || sourceReviews >= quota {
+					break
+				}
+				reviewsUsed++
+				sourceReviews++
 				reviewCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
 				review, reviewErr := s.reviewer.Review(reviewCtx, candidate.Record)
 				cancel()
 				if reviewErr != nil {
 					if ctx.Err() != nil {
-						return s.cancelRun(state, run, ctx.Err())
+						return s.cancelRun(ctx, state, run, ctx.Err())
 					}
 					s.fail(progress, checkpoint, reviewErr, now)
 					break
@@ -290,64 +440,97 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) 
 					review.InclusionStatus = "pending"
 				}
 				review.ReviewedAt = now
-				candidate.Review = &review
-				if err = s.save(ctx, state); err != nil {
-					return Snapshot{}, err
+				if !isMockSource(source) {
+					review.ReviewedAt = s.clock().UTC()
 				}
+				candidate.Review = &review
+				progress.ReviewedCount++
 			}
-			if checkpoint.LastError == "" {
+			if err = s.save(ctx, state); err != nil {
+				return Snapshot{}, err
+			}
+			allReviewed := true
+			for _, key := range progress.CandidateKeys {
+				allReviewed = allReviewed && (state.Records[key].Review != nil || state.Records[key].Quarantine != nil)
+			}
+			if checkpoint.LastError == "" && progress.Acquired && allReviewed {
 				progress.Reviewed = true
 				progress.LastError = ""
 				checkpoint.ConsecutiveFailures = 0
-				checkpoint.ReviewedThrough = run.FixedEnd
+				if checkpoint.Quarantined == 0 && (progress.AdvanceCheckpoint || run.RequestKey == "") {
+					checkpoint.ReviewedThrough = later(checkpoint.ReviewedThrough, run.FixedEnd)
+				}
 				if err = s.save(ctx, state); err != nil {
 					return Snapshot{}, err
 				}
 			}
 		}
-		if progress.Reviewed && !progress.Published && !progress.Failed && checkpoint.LastError == "" {
+		if !progress.Published && !progress.Failed && checkpoint.LastError == "" {
 			publications := make([]Publication, 0, len(progress.CandidateKeys))
 			for _, key := range progress.CandidateKeys {
 				candidate := state.Records[key]
-				if !candidate.Published {
+				if !candidate.Published && candidate.Quarantine == nil && candidate.Review != nil {
 					publications = append(publications, Publication{Key: key, Record: candidate.Record, Review: *candidate.Review})
 				}
 			}
-			publishCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
-			publishErr := s.publisher.Publish(publishCtx, run.ID, publications)
-			cancel()
+			var publishErr error
+			for _, publication := range publications {
+				publishCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
+				publishErr = s.publisher.Publish(publishCtx, run.ID, []Publication{publication})
+				cancel()
+				if publishErr != nil {
+					var rejected *RejectedRecordError
+					if errors.As(publishErr, &rejected) {
+						state.Records[publication.Key].Quarantine = &Quarantine{Reason: safeRejectionKind(rejected.Kind), At: s.clock().UTC()}
+						progress.Quarantined++
+						checkpoint.Quarantined++
+						publishErr = nil
+						continue
+					}
+					break
+				}
+				state.Records[publication.Key].Published = true
+				progress.Projected++
+			}
 			if publishErr != nil {
 				if ctx.Err() != nil {
-					return s.cancelRun(state, run, ctx.Err())
+					return s.cancelRun(ctx, state, run, ctx.Err())
 				}
 				s.fail(progress, checkpoint, publishErr, now)
 			} else {
-				for _, publication := range publications {
-					state.Records[publication.Key].Published = true
-				}
-				progress.Published = true
+				progress.Handled = progress.Acquired && !pendingCandidates(state, progress)
+				progress.Published = progress.Handled && progress.Quarantined == 0
 				progress.LastError = ""
 				checkpoint.ConsecutiveFailures = 0
-				checkpoint.PublishedThrough = run.FixedEnd
+				if progress.Handled && (progress.AdvanceCheckpoint || run.RequestKey == "") {
+					checkpoint.HandledThrough = later(checkpoint.HandledThrough, run.FixedEnd)
+					if checkpoint.Quarantined == 0 {
+						checkpoint.PublishedThrough = later(checkpoint.PublishedThrough, run.FixedEnd)
+					}
+				}
 			}
 			if err = s.save(ctx, state); err != nil {
 				return Snapshot{}, err
 			}
 		}
 	}
-	terminal, failed := true, false
+	terminal, failed, quarantined := true, false, false
 	for _, progress := range run.Sources {
-		terminal = terminal && (progress.Published || progress.Failed)
+		terminal = terminal && (progress.Handled || progress.Published || progress.Failed)
+		quarantined = quarantined || progress.Quarantined > 0
 		failed = failed || progress.Failed
 	}
 	if terminal {
 		run.Status = "completed"
+		if quarantined {
+			run.Status = "completed_with_quarantine"
+		}
 		if failed {
 			run.Status = "completed_with_errors"
 		}
 		run.FinishedAt = now
 		state.Schedule.CompletedRuns++
-		state.Schedule.NextRunUTC = nextAnchor(state.Schedule.AnchorUTC, run.FixedEnd)
+		state.Schedule.NextRunUTC = later(state.Schedule.NextRunUTC, nextAnchor(state.Schedule.AnchorUTC, run.FixedEnd))
 	} else {
 		run.Status = "pending"
 		for _, checkpoint := range state.Sources {
@@ -357,15 +540,17 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) 
 			}
 		}
 	}
+	s.compact(state)
 	if err = s.save(ctx, state); err != nil {
 		return Snapshot{}, err
 	}
+	s.decorateSnapshot(&state.Snapshot)
 	return state.Snapshot, nil
 }
 
-func (s *Service) cancelRun(state *monitorState, run *Run, cause error) (Snapshot, error) {
+func (s *Service) cancelRun(parent context.Context, state *monitorState, run *Run, cause error) (Snapshot, error) {
 	run.Status = "canceled"
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 3*time.Second)
 	defer cancel()
 	if err := s.save(ctx, state); err != nil {
 		return state.Snapshot, err
@@ -384,7 +569,7 @@ func activeRun(state *monitorState) *Run {
 	return nil
 }
 
-func (s *Service) startRun(state *monitorState, now time.Time) *Run {
+func (s *Service) startRun(state *monitorState, now time.Time, requested *Window, registry []string, registryByTopic map[string][]string) *Run {
 	number := state.Schedule.CompletedRuns + 1
 	mode := "mock"
 	for _, source := range s.sources {
@@ -393,6 +578,10 @@ func (s *Service) startRun(state *monitorState, now time.Time) *Run {
 		}
 	}
 	run := Run{ID: s.ids.NextID(), Number: number, StartedAt: now, FixedEnd: now, Status: "running", Mode: mode, TemplateVersion: TemplateVersion, Sources: map[string]*SourceProgress{}}
+	if requested != nil {
+		run.FixedEnd = requested.End
+		run.RequestKey = s.windowKey(*requested)
+	}
 	for _, source := range s.sources {
 		checkpoint := state.Sources[source.Name()]
 		if checkpoint == nil {
@@ -406,18 +595,31 @@ func (s *Service) startRun(state *monitorState, now time.Time) *Run {
 			}
 			start = checkpoint.BootstrapFrom
 		}
-		if number%10 == 0 && now.Add(-90*24*time.Hour).Before(start) {
+		incrementalStart := start
+		core := !isMockSource(source) && journalSource(source.Name())
+		wideCore := core && (number%10 == 0 || checkpoint.CoreBackfillPending)
+		if (number%10 == 0 || wideCore) && now.Add(-90*24*time.Hour).Before(start) {
 			start = now.Add(-90 * 24 * time.Hour)
+		}
+		if wideCore {
+			checkpoint.CoreBackfillPending = true
+		}
+		if requested != nil {
+			start = requested.Start
+			incrementalStart = start
+			if checkpoint.AcquiredThrough.IsZero() {
+				checkpoint.BootstrapFrom = start
+			}
 		}
 		// A delayed trigger starts at the old checkpoint, preserving every missed interval.
 		keys := []string{}
 		for key, candidate := range state.Records {
-			if candidate.Record.Source == source.Name() && (!candidate.Published || candidate.Review == nil) {
+			if candidate.Record.Source == source.Name() && candidate.Quarantine == nil && (!candidate.Published || candidate.Review == nil) {
 				keys = append(keys, key)
 			}
 		}
 		sort.Strings(keys)
-		run.Sources[source.Name()] = &SourceProgress{Window: Window{Start: start, End: now}, CandidateKeys: keys}
+		run.Sources[source.Name()] = &SourceProgress{RegistryByTopic: registryByTopic, CoreWide: wideCore && requested == nil, IncrementalWindow: Window{Start: incrementalStart, End: run.FixedEnd}, Window: Window{Start: start, End: run.FixedEnd}, CandidateKeys: keys, RegistryISSNs: append([]string(nil), registry...), CoreBackfill: core, AdvanceCheckpoint: checkpoint.AcquiredThrough.IsZero() || !start.After(checkpoint.AcquiredThrough), Failed: checkpoint.Blocked}
 	}
 	state.Runs = append(state.Runs, run)
 	return &state.Runs[len(state.Runs)-1]
@@ -450,6 +652,14 @@ func (s *Service) fail(progress *SourceProgress, checkpoint *Checkpoint, cause e
 	var sourceErr *SourceError
 	if errors.As(cause, &sourceErr) {
 		retryable = sourceErr.Retryable
+		checkpoint.LastStatusCode = sourceErr.StatusCode
+		if sourceErr.StatusCode == 403 {
+			if sourceErr.RetryAfter > 0 {
+				retryable = true
+			} else {
+				checkpoint.Blocked = true
+			}
+		}
 		kind = sourceErr.Kind
 		if sourceErr.RetryAfter > delay {
 			delay = sourceErr.RetryAfter
@@ -461,6 +671,9 @@ func (s *Service) fail(progress *SourceProgress, checkpoint *Checkpoint, cause e
 	if !retryable || progress.Attempts >= s.config.RetryBudget {
 		progress.Failed = true
 		checkpoint.NextRetryAt = time.Time{}
+		if sourceErr != nil && sourceErr.RetryAfter > 0 {
+			checkpoint.NextRetryAt = now.Add(delay)
+		}
 	} else {
 		checkpoint.NextRetryAt = now.Add(delay)
 	}
@@ -479,6 +692,7 @@ func recordIdentity(record Record) (string, string) {
 	copy.DOI = doi
 	copy.AcquiredAt = time.Time{}
 	copy.Topics = nil
+	copy.CoreDiscovery = false
 	var rawEvidence any
 	if json.Unmarshal(record.Raw, &rawEvidence) == nil {
 		copy.Raw, _ = json.Marshal(rawEvidence)
@@ -538,4 +752,165 @@ func RunPersistentDemo(ctx context.Context, client *ent.Client, ids *idgen.Gener
 		return Snapshot{}, err
 	}
 	return runDemoScenario(ctx, service, now, scenario)
+}
+
+func later(first, second time.Time) time.Time {
+	if second.After(first) {
+		return second
+	}
+	return first
+}
+func journalSource(name string) bool {
+	return name == "crossref" || name == "pubmed" || name == "europepmc"
+}
+func (s *Service) windowKey(window Window) string {
+	names := []string{}
+	for _, source := range s.sources {
+		names = append(names, source.Name())
+	}
+	sort.Strings(names)
+	raw, _ := json.Marshal(struct {
+		Window  Window
+		Sources []string
+		Version string
+	}{window, names, TemplateVersion})
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+func (s *Service) decorateSnapshot(snapshot *Snapshot) {
+	snapshot.Schedule.SchedulerEnabled = s.schedulerEnabled
+	snapshot.Schedule.AcquisitionMode = "demo"
+	for _, source := range s.sources {
+		if !isMockSource(source) {
+			snapshot.Schedule.AcquisitionMode = "live"
+		}
+	}
+	snapshot.Schedule.ReviewMode = "unknown"
+	if _, ok := s.reviewer.(MockReviewer); ok {
+		snapshot.Schedule.ReviewMode = "mock"
+	}
+	for _, checkpoint := range snapshot.Sources {
+		checkpoint.Enabled = false
+	}
+	for _, source := range s.sources {
+		checkpoint := snapshot.Sources[source.Name()]
+		if checkpoint == nil {
+			checkpoint = &Checkpoint{Source: source.Name()}
+			snapshot.Sources[source.Name()] = checkpoint
+		}
+		checkpoint.Enabled = true
+		checkpoint.AcquisitionMode = "live"
+		if isMockSource(source) {
+			checkpoint.AcquisitionMode = "demo"
+		}
+		if !checkpoint.AcquiredThrough.IsZero() {
+			lag := int64(s.clock().UTC().Sub(checkpoint.AcquiredThrough).Seconds())
+			if lag < 0 {
+				lag = 0
+			}
+			checkpoint.LagSeconds = &lag
+		}
+	}
+}
+
+func pendingCandidates(state *monitorState, progress *SourceProgress) bool {
+	for _, key := range progress.CandidateKeys {
+		candidate := state.Records[key]
+		if candidate.Quarantine == nil && (candidate.Review == nil || !candidate.Published) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) validateOperator(ctx context.Context) error {
+	if s.operatorID <= 0 {
+		return bizerrors.BadRequest("configure an enabled monitor operator ID before scanning")
+	}
+	if s.client == nil {
+		return bizerrors.BadRequest("real operator validation requires PostgreSQL")
+	}
+	exists, err := s.client.SysUser.Query().Where(sysuser.IDEQ(s.operatorID), sysuser.DeletedAtIsNil(), sysuser.IsEnableEQ(true)).Exist(ctx)
+	if err != nil {
+		return bizerrors.WrapDBContext(ctx, err, "monitor operator lookup failed")
+	}
+	if !exists {
+		return bizerrors.BadRequest("monitor operator is missing or disabled")
+	}
+	return nil
+}
+
+// Doctor 检查真实运行配置和操作人，不请求任何外部论文 API。
+func (s *Service) Doctor(ctx context.Context) ([]Diagnostic, error) {
+	diagnostics := []Diagnostic{{Code: "SOURCES_CONFIGURED", Severity: "info", Message: fmt.Sprintf("%d sources configured; no network request made by this diagnostic", len(s.sources))}}
+	if s.requireOperator {
+		if s.operatorID <= 0 {
+			diagnostics = append(diagnostics, Diagnostic{Code: "OPERATOR_REQUIRED", Severity: "error", Message: "Set monitor.operator_id to an existing enabled user; required for audited ingestion"})
+		} else if err := s.validateOperator(ctx); err != nil {
+			diagnostics = append(diagnostics, Diagnostic{Code: "OPERATOR_UNAVAILABLE", Severity: "error", Message: "Configured monitor operator is unavailable; verify database and enabled user"})
+		} else {
+			diagnostics = append(diagnostics, Diagnostic{Code: "OPERATOR_READY", Severity: "info", Message: "Existing enabled audit operator verified"})
+		}
+	}
+	if s.journals != nil {
+		entries, registryErr := s.journals.CoreJournals(ctx)
+		valid := 0
+		for _, entry := range entries {
+			if entry.IsMock {
+				continue
+			}
+			for _, issn := range entry.ISSNs {
+				if _, e := NormalizeISSN(issn); e == nil {
+					valid++
+				}
+			}
+		}
+		if registryErr != nil {
+			diagnostics = append(diagnostics, Diagnostic{Code: "CORE_REGISTRY_UNAVAILABLE", Severity: "error", Message: "Core journal registry could not be read"})
+		} else if valid > 0 {
+			diagnostics = append(diagnostics, Diagnostic{Code: "CORE_REGISTRY_PARTIAL_SEED", Severity: "warning", Message: "Core journal coverage is an incomplete historical seed, not a complete journal universe; ordinary keyword discovery is not limited to that seed"})
+		} else if valid == 0 {
+			diagnostics = append(diagnostics, Diagnostic{Code: "CORE_REGISTRY_EMPTY", Severity: "warning", Message: "Ordinary discovery is available; each scheduled core journal scan requires verified registry ISSNs"})
+		}
+	}
+	if !s.schedulerEnabled {
+		diagnostics = append(diagnostics, Diagnostic{Code: "SCHEDULER_DISABLED", Severity: "warning", Message: "Scheduled scans are disabled; use the finite real scan CLI or explicitly enable monitor.scheduler_enabled"})
+	}
+	if _, mock := s.reviewer.(MockReviewer); mock {
+		diagnostics = append(diagnostics, Diagnostic{Code: "LLM_MOCK", Severity: "info", Message: "LLM review is mocked; no scientific inclusion decision has been made"})
+	}
+	return diagnostics, nil
+}
+
+func (s *Service) knownSources(state *monitorState) bool {
+	for _, source := range s.sources {
+		if state.Sources[source.Name()] == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func sourceProvider(name string) string {
+	if name == "medrxiv" {
+		return "biorxiv"
+	}
+	return name
+}
+func (s *Service) shareProviderCooldown(state *monitorState, name string, target *Checkpoint) {
+	for other, checkpoint := range state.Sources {
+		if other == name || sourceProvider(other) != sourceProvider(name) {
+			continue
+		}
+		if checkpoint.Blocked {
+			target.Blocked = true
+			target.LastStatusCode = 403
+			target.LastError = "provider_forbidden"
+		}
+		if (checkpoint.LastStatusCode == 429 || checkpoint.LastStatusCode == 503 || checkpoint.LastStatusCode == 403) && checkpoint.NextRetryAt.After(target.NextRetryAt) {
+			target.NextRetryAt = checkpoint.NextRetryAt
+			target.LastStatusCode = checkpoint.LastStatusCode
+			target.LastError = "provider_backoff"
+		}
+	}
 }

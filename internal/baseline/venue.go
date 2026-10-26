@@ -7,6 +7,8 @@ import (
 
 // Venue 是已有载体证据的逐主题版本，不自行推断指标年份或纳入资格。
 type Venue struct {
+	ISSNs               []string       `json:"issns"`
+	Aliases             []string       `json:"aliases"`
 	Name                string         `json:"name"`
 	Kind                string         `json:"kind"`
 	JIF                 *float64       `json:"jif"`
@@ -22,6 +24,11 @@ type Venue struct {
 // VenueFromRecord 提取原指标与来源；显式核验旗标缺失时保持待核。
 func VenueFromRecord(r Record) (Venue, bool) {
 	v := Venue{Name: r.Venue, Kind: firstText(r.Raw, "venue_kind", "verified_venue_kind"), CCF: text(r.Raw["ccf"]), MetricYear: integer(r.Raw["jif_year"]), Source: firstText(r.Raw, "metric_url", "jif_url", "ccf_source"), Evidence: map[string]any{"sourceTopics": []string{r.Topic}, "baselineDate": "2026-10-26", "reviewStatus": "historical evidence imported; not reverified by this importer"}, EligibleTopics: []string{}, QualificationStatus: "pending"}
+	v.ISSNs = list(r.Raw["journal_issns"])
+	if len(v.ISSNs) == 0 {
+		v.ISSNs = list(r.Raw["issn"])
+	}
+	v.Aliases = list(r.Raw["venue_aliases"])
 	if strings.TrimSpace(v.Name) == "" {
 		return v, false
 	}

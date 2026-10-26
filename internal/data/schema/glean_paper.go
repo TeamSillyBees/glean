@@ -16,6 +16,7 @@ type GleanPaper struct{ ent.Schema }
 func (GleanPaper) Fields() []ent.Field {
 	fields := []ent.Field{fieldx.ID(),
 		field.String("identity_key").NotEmpty().Unique(),
+		field.String("origin").Default("historical"),
 		field.String("title").NotEmpty(), field.Text("title_zh").Default(""), field.Text("abstract").Default(""),
 		field.JSON("authors", []string{}).Default([]string{}), field.Int("year").Default(0),
 		field.String("venue").Default(""), field.String("publication_type").Default(""),

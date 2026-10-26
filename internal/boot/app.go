@@ -122,7 +122,7 @@ func Bootstrap(options Options) (*Application, error) {
 	}, nil
 }
 
-// registerMonitorTasks 在 Worker 构建处理器快照前完成显式模拟调度装配。
+// registerMonitorTasks 在 Worker 构建处理器快照前完成显式真实来源调度装配。
 func registerMonitorTasks(injector *do.Injector, cfg *Config) error {
 	if !cfg.Monitor.SchedulerEnabled {
 		return nil

@@ -34,14 +34,15 @@ func TestMonitorConfigDefaultsOff(t *testing.T) {
 	require.False(t, cfg.Monitor.SchedulerEnabled)
 	require.NoError(t, cfg.Validate())
 	cfg.Monitor.SchedulerEnabled = true
-	require.ErrorContains(t, cfg.Validate(), "monitor.scheduler_enabled")
-	cfg.Task.Enabled = true
-	require.ErrorContains(t, cfg.Validate(), "monitor.scheduler_enabled")
-	cfg.Task.Worker.Enabled = true
-	require.ErrorContains(t, cfg.Validate(), "monitor.scheduler_enabled")
-	cfg.Task.Scheduler.Enabled = true
+	require.ErrorContains(t, cfg.Validate(), "monitor.operator_id")
+	cfg.Monitor.OperatorID = "7"
 	cfg.Server.ShutdownTimeout = time.Minute
 	require.NoError(t, cfg.Validate())
+	require.True(t, cfg.Task.Enabled)
+	require.True(t, cfg.Task.Worker.Enabled)
+	require.True(t, cfg.Task.Scheduler.Enabled)
+	require.Equal(t, "UTC", cfg.Task.Scheduler.Timezone)
+
 }
 
 // TestDisabledMonitorDoesNotResolveDependencies 验证关闭调度时不解析监控、队列或调度器依赖。

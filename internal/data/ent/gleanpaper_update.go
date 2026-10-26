@@ -44,6 +44,20 @@ func (_u *GleanPaperUpdate) SetNillableIdentityKey(v *string) *GleanPaperUpdate 
 	return _u
 }
 
+// SetOrigin sets the "origin" field.
+func (_u *GleanPaperUpdate) SetOrigin(v string) *GleanPaperUpdate {
+	_u.mutation.SetOrigin(v)
+	return _u
+}
+
+// SetNillableOrigin sets the "origin" field if the given value is not nil.
+func (_u *GleanPaperUpdate) SetNillableOrigin(v *string) *GleanPaperUpdate {
+	if v != nil {
+		_u.SetOrigin(*v)
+	}
+	return _u
+}
+
 // SetTitle sets the "title" field.
 func (_u *GleanPaperUpdate) SetTitle(v string) *GleanPaperUpdate {
 	_u.mutation.SetTitle(v)
@@ -412,6 +426,9 @@ func (_u *GleanPaperUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.IdentityKey(); ok {
 		_spec.SetField(gleanpaper.FieldIdentityKey, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Origin(); ok {
+		_spec.SetField(gleanpaper.FieldOrigin, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Title(); ok {
 		_spec.SetField(gleanpaper.FieldTitle, field.TypeString, value)
 	}
@@ -533,6 +550,20 @@ func (_u *GleanPaperUpdateOne) SetIdentityKey(v string) *GleanPaperUpdateOne {
 func (_u *GleanPaperUpdateOne) SetNillableIdentityKey(v *string) *GleanPaperUpdateOne {
 	if v != nil {
 		_u.SetIdentityKey(*v)
+	}
+	return _u
+}
+
+// SetOrigin sets the "origin" field.
+func (_u *GleanPaperUpdateOne) SetOrigin(v string) *GleanPaperUpdateOne {
+	_u.mutation.SetOrigin(v)
+	return _u
+}
+
+// SetNillableOrigin sets the "origin" field if the given value is not nil.
+func (_u *GleanPaperUpdateOne) SetNillableOrigin(v *string) *GleanPaperUpdateOne {
+	if v != nil {
+		_u.SetOrigin(*v)
 	}
 	return _u
 }
@@ -934,6 +965,9 @@ func (_u *GleanPaperUpdateOne) sqlSave(ctx context.Context) (_node *GleanPaper, 
 	}
 	if value, ok := _u.mutation.IdentityKey(); ok {
 		_spec.SetField(gleanpaper.FieldIdentityKey, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Origin(); ok {
+		_spec.SetField(gleanpaper.FieldOrigin, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Title(); ok {
 		_spec.SetField(gleanpaper.FieldTitle, field.TypeString, value)

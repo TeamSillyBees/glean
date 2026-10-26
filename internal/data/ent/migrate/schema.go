@@ -15,6 +15,7 @@ var (
 		{Name: "paper_id", Type: field.TypeInt64},
 		{Name: "topic", Type: field.TypeString},
 		{Name: "original_id", Type: field.TypeString},
+		{Name: "inclusion_status", Type: field.TypeString, Default: "historical"},
 		{Name: "tier", Type: field.TypeString, Default: ""},
 		{Name: "primary_category", Type: field.TypeString, Default: ""},
 		{Name: "categories", Type: field.TypeJSON},
@@ -47,7 +48,7 @@ var (
 			{
 				Name:    "gleanmembership_tier",
 				Unique:  false,
-				Columns: []*schema.Column{GleanMembershipColumns[4]},
+				Columns: []*schema.Column{GleanMembershipColumns[5]},
 			},
 		},
 	}
@@ -68,10 +69,82 @@ var (
 		Columns:    GleanMonitorStateColumns,
 		PrimaryKey: []*schema.Column{GleanMonitorStateColumns[0]},
 	}
+	// GleanObservationColumns holds the columns for the "glean_observation" table.
+	GleanObservationColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "paper_id", Type: field.TypeInt64},
+		{Name: "run_id", Type: field.TypeInt64},
+		{Name: "source", Type: field.TypeString},
+		{Name: "source_id", Type: field.TypeString},
+		{Name: "version", Type: field.TypeString, Default: ""},
+		{Name: "content_hash", Type: field.TypeString},
+		{Name: "observed_at", Type: field.TypeTime},
+		{Name: "source_updated_at", Type: field.TypeTime, Nullable: true},
+		{Name: "metadata", Type: field.TypeJSON},
+		{Name: "publication_events", Type: field.TypeJSON},
+		{Name: "review", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanObservationTable holds the schema information for the "glean_observation" table.
+	GleanObservationTable = &schema.Table{
+		Name:       "glean_observation",
+		Columns:    GleanObservationColumns,
+		PrimaryKey: []*schema.Column{GleanObservationColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleanobservation_source_source_id_content_hash",
+				Unique:  true,
+				Columns: []*schema.Column{GleanObservationColumns[3], GleanObservationColumns[4], GleanObservationColumns[6]},
+			},
+			{
+				Name:    "gleanobservation_paper_id_observed_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanObservationColumns[1], GleanObservationColumns[7], GleanObservationColumns[0]},
+			},
+			{
+				Name:    "gleanobservation_run_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanObservationColumns[2]},
+			},
+		},
+	}
+	// GleanObservationMatchColumns holds the columns for the "glean_observation_match" table.
+	GleanObservationMatchColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "observation_id", Type: field.TypeInt64},
+		{Name: "topic", Type: field.TypeString},
+		{Name: "template_version", Type: field.TypeString, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanObservationMatchTable holds the schema information for the "glean_observation_match" table.
+	GleanObservationMatchTable = &schema.Table{
+		Name:       "glean_observation_match",
+		Columns:    GleanObservationMatchColumns,
+		PrimaryKey: []*schema.Column{GleanObservationMatchColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleanobservationmatch_observation_id_topic",
+				Unique:  true,
+				Columns: []*schema.Column{GleanObservationMatchColumns[1], GleanObservationMatchColumns[2]},
+			},
+			{
+				Name:    "gleanobservationmatch_topic",
+				Unique:  false,
+				Columns: []*schema.Column{GleanObservationMatchColumns[2]},
+			},
+		},
+	}
 	// GleanPaperColumns holds the columns for the "glean_paper" table.
 	GleanPaperColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "identity_key", Type: field.TypeString, Unique: true},
+		{Name: "origin", Type: field.TypeString, Default: "historical"},
 		{Name: "title", Type: field.TypeString},
 		{Name: "title_zh", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "abstract", Type: field.TypeString, Size: 2147483647, Default: ""},
@@ -101,17 +174,17 @@ var (
 			{
 				Name:    "gleanpaper_year_id",
 				Unique:  false,
-				Columns: []*schema.Column{GleanPaperColumns[6], GleanPaperColumns[0]},
+				Columns: []*schema.Column{GleanPaperColumns[7], GleanPaperColumns[0]},
 			},
 			{
 				Name:    "gleanpaper_venue",
 				Unique:  false,
-				Columns: []*schema.Column{GleanPaperColumns[7]},
+				Columns: []*schema.Column{GleanPaperColumns[8]},
 			},
 			{
 				Name:    "gleanpaper_formal_online_date_id",
 				Unique:  false,
-				Columns: []*schema.Column{GleanPaperColumns[12], GleanPaperColumns[0]},
+				Columns: []*schema.Column{GleanPaperColumns[13], GleanPaperColumns[0]},
 			},
 		},
 	}
@@ -165,6 +238,8 @@ var (
 	GleanVenueColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "name", Type: field.TypeString},
+		{Name: "issns", Type: field.TypeJSON},
+		{Name: "aliases", Type: field.TypeJSON},
 		{Name: "kind", Type: field.TypeString, Default: "journal"},
 		{Name: "jif", Type: field.TypeFloat64, Nullable: true},
 		{Name: "ccf", Type: field.TypeString, Default: ""},
@@ -188,7 +263,7 @@ var (
 			{
 				Name:    "gleanvenue_name_registry_version",
 				Unique:  true,
-				Columns: []*schema.Column{GleanVenueColumns[1], GleanVenueColumns[6]},
+				Columns: []*schema.Column{GleanVenueColumns[1], GleanVenueColumns[8]},
 			},
 		},
 	}
@@ -502,6 +577,8 @@ var (
 	Tables = []*schema.Table{
 		GleanMembershipTable,
 		GleanMonitorStateTable,
+		GleanObservationTable,
+		GleanObservationMatchTable,
 		GleanPaperTable,
 		GleanPaperStateTable,
 		GleanPreferenceTable,
@@ -523,6 +600,12 @@ func init() {
 	}
 	GleanMonitorStateTable.Annotation = &entsql.Annotation{
 		Table: "glean_monitor_state",
+	}
+	GleanObservationTable.Annotation = &entsql.Annotation{
+		Table: "glean_observation",
+	}
+	GleanObservationMatchTable.Annotation = &entsql.Annotation{
+		Table: "glean_observation_match",
 	}
 	GleanPaperTable.Annotation = &entsql.Annotation{
 		Table: "glean_paper",

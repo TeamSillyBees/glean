@@ -18,6 +18,8 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmonitorstate"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanobservationmatch"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
@@ -41,6 +43,10 @@ type Client struct {
 	GleanMembership *GleanMembershipClient
 	// GleanMonitorState is the client for interacting with the GleanMonitorState builders.
 	GleanMonitorState *GleanMonitorStateClient
+	// GleanObservation is the client for interacting with the GleanObservation builders.
+	GleanObservation *GleanObservationClient
+	// GleanObservationMatch is the client for interacting with the GleanObservationMatch builders.
+	GleanObservationMatch *GleanObservationMatchClient
 	// GleanPaper is the client for interacting with the GleanPaper builders.
 	GleanPaper *GleanPaperClient
 	// GleanPaperState is the client for interacting with the GleanPaperState builders.
@@ -78,6 +84,8 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.GleanMembership = NewGleanMembershipClient(c.config)
 	c.GleanMonitorState = NewGleanMonitorStateClient(c.config)
+	c.GleanObservation = NewGleanObservationClient(c.config)
+	c.GleanObservationMatch = NewGleanObservationMatchClient(c.config)
 	c.GleanPaper = NewGleanPaperClient(c.config)
 	c.GleanPaperState = NewGleanPaperStateClient(c.config)
 	c.GleanPreference = NewGleanPreferenceClient(c.config)
@@ -180,22 +188,24 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:               ctx,
-		config:            cfg,
-		GleanMembership:   NewGleanMembershipClient(cfg),
-		GleanMonitorState: NewGleanMonitorStateClient(cfg),
-		GleanPaper:        NewGleanPaperClient(cfg),
-		GleanPaperState:   NewGleanPaperStateClient(cfg),
-		GleanPreference:   NewGleanPreferenceClient(cfg),
-		GleanVenue:        NewGleanVenueClient(cfg),
-		SysConfig:         NewSysConfigClient(cfg),
-		SysDictCollection: NewSysDictCollectionClient(cfg),
-		SysDictItem:       NewSysDictItemClient(cfg),
-		SysMenu:           NewSysMenuClient(cfg),
-		SysRole:           NewSysRoleClient(cfg),
-		SysRoleMenu:       NewSysRoleMenuClient(cfg),
-		SysUser:           NewSysUserClient(cfg),
-		SysUserRole:       NewSysUserRoleClient(cfg),
+		ctx:                   ctx,
+		config:                cfg,
+		GleanMembership:       NewGleanMembershipClient(cfg),
+		GleanMonitorState:     NewGleanMonitorStateClient(cfg),
+		GleanObservation:      NewGleanObservationClient(cfg),
+		GleanObservationMatch: NewGleanObservationMatchClient(cfg),
+		GleanPaper:            NewGleanPaperClient(cfg),
+		GleanPaperState:       NewGleanPaperStateClient(cfg),
+		GleanPreference:       NewGleanPreferenceClient(cfg),
+		GleanVenue:            NewGleanVenueClient(cfg),
+		SysConfig:             NewSysConfigClient(cfg),
+		SysDictCollection:     NewSysDictCollectionClient(cfg),
+		SysDictItem:           NewSysDictItemClient(cfg),
+		SysMenu:               NewSysMenuClient(cfg),
+		SysRole:               NewSysRoleClient(cfg),
+		SysRoleMenu:           NewSysRoleMenuClient(cfg),
+		SysUser:               NewSysUserClient(cfg),
+		SysUserRole:           NewSysUserRoleClient(cfg),
 	}, nil
 }
 
@@ -213,22 +223,24 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:               ctx,
-		config:            cfg,
-		GleanMembership:   NewGleanMembershipClient(cfg),
-		GleanMonitorState: NewGleanMonitorStateClient(cfg),
-		GleanPaper:        NewGleanPaperClient(cfg),
-		GleanPaperState:   NewGleanPaperStateClient(cfg),
-		GleanPreference:   NewGleanPreferenceClient(cfg),
-		GleanVenue:        NewGleanVenueClient(cfg),
-		SysConfig:         NewSysConfigClient(cfg),
-		SysDictCollection: NewSysDictCollectionClient(cfg),
-		SysDictItem:       NewSysDictItemClient(cfg),
-		SysMenu:           NewSysMenuClient(cfg),
-		SysRole:           NewSysRoleClient(cfg),
-		SysRoleMenu:       NewSysRoleMenuClient(cfg),
-		SysUser:           NewSysUserClient(cfg),
-		SysUserRole:       NewSysUserRoleClient(cfg),
+		ctx:                   ctx,
+		config:                cfg,
+		GleanMembership:       NewGleanMembershipClient(cfg),
+		GleanMonitorState:     NewGleanMonitorStateClient(cfg),
+		GleanObservation:      NewGleanObservationClient(cfg),
+		GleanObservationMatch: NewGleanObservationMatchClient(cfg),
+		GleanPaper:            NewGleanPaperClient(cfg),
+		GleanPaperState:       NewGleanPaperStateClient(cfg),
+		GleanPreference:       NewGleanPreferenceClient(cfg),
+		GleanVenue:            NewGleanVenueClient(cfg),
+		SysConfig:             NewSysConfigClient(cfg),
+		SysDictCollection:     NewSysDictCollectionClient(cfg),
+		SysDictItem:           NewSysDictItemClient(cfg),
+		SysMenu:               NewSysMenuClient(cfg),
+		SysRole:               NewSysRoleClient(cfg),
+		SysRoleMenu:           NewSysRoleMenuClient(cfg),
+		SysUser:               NewSysUserClient(cfg),
+		SysUserRole:           NewSysUserRoleClient(cfg),
 	}, nil
 }
 
@@ -258,9 +270,10 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.GleanMembership, c.GleanMonitorState, c.GleanPaper, c.GleanPaperState,
-		c.GleanPreference, c.GleanVenue, c.SysConfig, c.SysDictCollection,
-		c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu, c.SysUser, c.SysUserRole,
+		c.GleanMembership, c.GleanMonitorState, c.GleanObservation,
+		c.GleanObservationMatch, c.GleanPaper, c.GleanPaperState, c.GleanPreference,
+		c.GleanVenue, c.SysConfig, c.SysDictCollection, c.SysDictItem, c.SysMenu,
+		c.SysRole, c.SysRoleMenu, c.SysUser, c.SysUserRole,
 	} {
 		n.Use(hooks...)
 	}
@@ -270,9 +283,10 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.GleanMembership, c.GleanMonitorState, c.GleanPaper, c.GleanPaperState,
-		c.GleanPreference, c.GleanVenue, c.SysConfig, c.SysDictCollection,
-		c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu, c.SysUser, c.SysUserRole,
+		c.GleanMembership, c.GleanMonitorState, c.GleanObservation,
+		c.GleanObservationMatch, c.GleanPaper, c.GleanPaperState, c.GleanPreference,
+		c.GleanVenue, c.SysConfig, c.SysDictCollection, c.SysDictItem, c.SysMenu,
+		c.SysRole, c.SysRoleMenu, c.SysUser, c.SysUserRole,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -285,6 +299,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.GleanMembership.mutate(ctx, m)
 	case *GleanMonitorStateMutation:
 		return c.GleanMonitorState.mutate(ctx, m)
+	case *GleanObservationMutation:
+		return c.GleanObservation.mutate(ctx, m)
+	case *GleanObservationMatchMutation:
+		return c.GleanObservationMatch.mutate(ctx, m)
 	case *GleanPaperMutation:
 		return c.GleanPaper.mutate(ctx, m)
 	case *GleanPaperStateMutation:
@@ -577,6 +595,272 @@ func (c *GleanMonitorStateClient) mutate(ctx context.Context, m *GleanMonitorSta
 		return (&GleanMonitorStateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GleanMonitorState mutation op: %q", m.Op())
+	}
+}
+
+// GleanObservationClient is a client for the GleanObservation schema.
+type GleanObservationClient struct {
+	config
+}
+
+// NewGleanObservationClient returns a client for the GleanObservation from the given config.
+func NewGleanObservationClient(c config) *GleanObservationClient {
+	return &GleanObservationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleanobservation.Hooks(f(g(h())))`.
+func (c *GleanObservationClient) Use(hooks ...Hook) {
+	c.hooks.GleanObservation = append(c.hooks.GleanObservation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleanobservation.Intercept(f(g(h())))`.
+func (c *GleanObservationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanObservation = append(c.inters.GleanObservation, interceptors...)
+}
+
+// Create returns a builder for creating a GleanObservation entity.
+func (c *GleanObservationClient) Create() *GleanObservationCreate {
+	mutation := newGleanObservationMutation(c.config, OpCreate)
+	return &GleanObservationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanObservation entities.
+func (c *GleanObservationClient) CreateBulk(builders ...*GleanObservationCreate) *GleanObservationCreateBulk {
+	return &GleanObservationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanObservationClient) MapCreateBulk(slice any, setFunc func(*GleanObservationCreate, int)) *GleanObservationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanObservationCreateBulk{err: fmt.Errorf("calling to GleanObservationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanObservationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanObservationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanObservation.
+func (c *GleanObservationClient) Update() *GleanObservationUpdate {
+	mutation := newGleanObservationMutation(c.config, OpUpdate)
+	return &GleanObservationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanObservationClient) UpdateOne(_m *GleanObservation) *GleanObservationUpdateOne {
+	mutation := newGleanObservationMutation(c.config, OpUpdateOne, withGleanObservation(_m))
+	return &GleanObservationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanObservationClient) UpdateOneID(id idgen.ID) *GleanObservationUpdateOne {
+	mutation := newGleanObservationMutation(c.config, OpUpdateOne, withGleanObservationID(id))
+	return &GleanObservationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanObservation.
+func (c *GleanObservationClient) Delete() *GleanObservationDelete {
+	mutation := newGleanObservationMutation(c.config, OpDelete)
+	return &GleanObservationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanObservationClient) DeleteOne(_m *GleanObservation) *GleanObservationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanObservationClient) DeleteOneID(id idgen.ID) *GleanObservationDeleteOne {
+	builder := c.Delete().Where(gleanobservation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanObservationDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanObservation.
+func (c *GleanObservationClient) Query() *GleanObservationQuery {
+	return &GleanObservationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanObservation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanObservation entity by its id.
+func (c *GleanObservationClient) Get(ctx context.Context, id idgen.ID) (*GleanObservation, error) {
+	return c.Query().Where(gleanobservation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanObservationClient) GetX(ctx context.Context, id idgen.ID) *GleanObservation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanObservationClient) Hooks() []Hook {
+	return c.hooks.GleanObservation
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanObservationClient) Interceptors() []Interceptor {
+	return c.inters.GleanObservation
+}
+
+func (c *GleanObservationClient) mutate(ctx context.Context, m *GleanObservationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanObservationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanObservationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanObservationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanObservationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanObservation mutation op: %q", m.Op())
+	}
+}
+
+// GleanObservationMatchClient is a client for the GleanObservationMatch schema.
+type GleanObservationMatchClient struct {
+	config
+}
+
+// NewGleanObservationMatchClient returns a client for the GleanObservationMatch from the given config.
+func NewGleanObservationMatchClient(c config) *GleanObservationMatchClient {
+	return &GleanObservationMatchClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleanobservationmatch.Hooks(f(g(h())))`.
+func (c *GleanObservationMatchClient) Use(hooks ...Hook) {
+	c.hooks.GleanObservationMatch = append(c.hooks.GleanObservationMatch, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleanobservationmatch.Intercept(f(g(h())))`.
+func (c *GleanObservationMatchClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanObservationMatch = append(c.inters.GleanObservationMatch, interceptors...)
+}
+
+// Create returns a builder for creating a GleanObservationMatch entity.
+func (c *GleanObservationMatchClient) Create() *GleanObservationMatchCreate {
+	mutation := newGleanObservationMatchMutation(c.config, OpCreate)
+	return &GleanObservationMatchCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanObservationMatch entities.
+func (c *GleanObservationMatchClient) CreateBulk(builders ...*GleanObservationMatchCreate) *GleanObservationMatchCreateBulk {
+	return &GleanObservationMatchCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanObservationMatchClient) MapCreateBulk(slice any, setFunc func(*GleanObservationMatchCreate, int)) *GleanObservationMatchCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanObservationMatchCreateBulk{err: fmt.Errorf("calling to GleanObservationMatchClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanObservationMatchCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanObservationMatchCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanObservationMatch.
+func (c *GleanObservationMatchClient) Update() *GleanObservationMatchUpdate {
+	mutation := newGleanObservationMatchMutation(c.config, OpUpdate)
+	return &GleanObservationMatchUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanObservationMatchClient) UpdateOne(_m *GleanObservationMatch) *GleanObservationMatchUpdateOne {
+	mutation := newGleanObservationMatchMutation(c.config, OpUpdateOne, withGleanObservationMatch(_m))
+	return &GleanObservationMatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanObservationMatchClient) UpdateOneID(id idgen.ID) *GleanObservationMatchUpdateOne {
+	mutation := newGleanObservationMatchMutation(c.config, OpUpdateOne, withGleanObservationMatchID(id))
+	return &GleanObservationMatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanObservationMatch.
+func (c *GleanObservationMatchClient) Delete() *GleanObservationMatchDelete {
+	mutation := newGleanObservationMatchMutation(c.config, OpDelete)
+	return &GleanObservationMatchDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanObservationMatchClient) DeleteOne(_m *GleanObservationMatch) *GleanObservationMatchDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanObservationMatchClient) DeleteOneID(id idgen.ID) *GleanObservationMatchDeleteOne {
+	builder := c.Delete().Where(gleanobservationmatch.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanObservationMatchDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanObservationMatch.
+func (c *GleanObservationMatchClient) Query() *GleanObservationMatchQuery {
+	return &GleanObservationMatchQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanObservationMatch},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanObservationMatch entity by its id.
+func (c *GleanObservationMatchClient) Get(ctx context.Context, id idgen.ID) (*GleanObservationMatch, error) {
+	return c.Query().Where(gleanobservationmatch.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanObservationMatchClient) GetX(ctx context.Context, id idgen.ID) *GleanObservationMatch {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanObservationMatchClient) Hooks() []Hook {
+	return c.hooks.GleanObservationMatch
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanObservationMatchClient) Interceptors() []Interceptor {
+	return c.inters.GleanObservationMatch
+}
+
+func (c *GleanObservationMatchClient) mutate(ctx context.Context, m *GleanObservationMatchMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanObservationMatchCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanObservationMatchUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanObservationMatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanObservationMatchDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanObservationMatch mutation op: %q", m.Op())
 	}
 }
 
@@ -2371,13 +2655,15 @@ func (c *SysUserRoleClient) mutate(ctx context.Context, m *SysUserRoleMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		GleanMembership, GleanMonitorState, GleanPaper, GleanPaperState,
-		GleanPreference, GleanVenue, SysConfig, SysDictCollection, SysDictItem,
-		SysMenu, SysRole, SysRoleMenu, SysUser, SysUserRole []ent.Hook
+		GleanMembership, GleanMonitorState, GleanObservation, GleanObservationMatch,
+		GleanPaper, GleanPaperState, GleanPreference, GleanVenue, SysConfig,
+		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
+		SysUserRole []ent.Hook
 	}
 	inters struct {
-		GleanMembership, GleanMonitorState, GleanPaper, GleanPaperState,
-		GleanPreference, GleanVenue, SysConfig, SysDictCollection, SysDictItem,
-		SysMenu, SysRole, SysRoleMenu, SysUser, SysUserRole []ent.Interceptor
+		GleanMembership, GleanMonitorState, GleanObservation, GleanObservationMatch,
+		GleanPaper, GleanPaperState, GleanPreference, GleanVenue, SysConfig,
+		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
+		SysUserRole []ent.Interceptor
 	}
 )

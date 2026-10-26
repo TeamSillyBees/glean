@@ -1,6 +1,6 @@
 # Glean
 
-**持续生长的文献库。**
+**持续生长的文献库。只有 LLM 调用暂用 mock，其他运行链路均为真实实现。**
 
 Glean 将历史论文、增量发现与证据核验分开管理：一个 Go 后端，三个主题视图，一个中文优先的 React 阅读与查询工作台。基于 [initra](https://github.com/TeamSillyBees/initra) 源码模板构建，沿用认证、权限、Ent/PostgreSQL、Redis 和任务抽象，而不是另起平行基础框架。
 
@@ -8,10 +8,10 @@ Glean 将历史论文、增量发现与证据核验分开管理：一个 Go 后�
 
 - 历史快照：生物医学 AI **31,399**、LLM / Agent 知识工程 **4,059**、生物医学世界模型 **4,037**，共 **39,495 条主题成员关系**。包含已纳入、范围外、预印本及待核记录，不假装全部已核实。
 - 文献检索、主题筛选、精确历史分类、来源证据、正式在线/卷期日期、版本化载体证据；个人阅读/隐藏与原科学结论相互独立。
-- 72 小时扫描窗口、重叠补漏、分页断点、重试预算、并发租约与采集/审核/投影分离；Crossref、PubMed、arXiv、bioRxiv 适配器以 fixture 验证。
+- 72 小时扫描窗口、重叠补漏、分页断点、重试预算、并发租约与采集/模型处理/入库分离；Crossref、PubMed、arXiv OAI、bioRxiv、Europe PMC、medRxiv 均为真实公开 API，已通过有界真实 Go 请求验证和离线回归。
 - 模型阅读与总结目前为**明确标识的 mock**。Mock 不构成科学核验，不将模拟论文插入历史文献库。真实模型密钥未配置。
 - 前端只访问本服务 API，不自行调用外部文献库、运行模型或修改科学分类。
-- 自动调度默认关闭。可明确启用**模拟**调度；当前版本不启用真实全网抓取。尚无外部部署。
+- 只有 LLM API 暂用 mock。正常服务和监控命令使用真实数据源、真实 PostgreSQL 与真实目录入库；合成来源仅存在于测试或显式 `--demo`。自动调度默认关闭，配置运行账号后可用一个开关启用真实采集。尚无外部部署。
 
 完整历史数据已打包，不等于已经导入你自己的数据库；实际导入数量以导入报告为准。源码测试、CI 数据库测试和真实浏览器视觉验收是不同的验证层。
 
@@ -81,15 +81,26 @@ npm run dev
 
 可先启动服务获取用户 ID，再完成步骤 2；在导入前，页面显示真实空状态，不会偷偷显示假数据。
 
-### 4. 验证模拟监控
+### 4. 运行真实增量采集
 
-无需数据库的有限演示：
+在同一私有终端配置 `INITRA_MONITOR_DATABASE_URL`（与服务相同的数据库）和 `INITRA_MONITOR_OPERATOR_ID`（已有启用账号的 ID）。无需文献来源 API key 或 LLM key；不自动发送用户邮箱。
 
 ```sh
-go run ./cmd/glean-monitor --node 11 --scenario incremental
+# 仅检查数据库、运行身份与来源配置，不请求外部源。
+go run ./cmd/glean-monitor --node 11 --doctor --allow-local-insecure
+
+# 有界真实请求；窗口可按实际需要调整，不应晚于当前时间。
+go run ./cmd/glean-monitor --node 11 \
+  --sources crossref,pubmed,europepmc \
+  --since 2026-10-23T00:00:00Z --until 2026-10-26T00:00:00Z \
+  --max-pages 6 --allow-local-insecure
 ```
 
-这会演练新记录、版本更新、正式发表事件和明确标记的 mock 审核。要在真实前端的监控页面看到持久模拟运行，显式设置 `INITRA_MONITOR_DATABASE_URL` 后按 [监控命令说明](cmd/glean-monitor/README.md) 运行 `--persist-mock --operator ...`。不默认开启后台扫描，不需要真实 LLM 密钥。
+真实来源记录随已获取页面写入真实目录，位于“新发现待审”，不是演示论文。只有模型阅读/总结结果明确标识为占位；不会因此获得科学核验或正式纳入资格。有限命令可能因预算、退避或尚有分页返回待继续状态，不冒充完整扫描。
+
+省略时间窗可恢复未完成任务或启动到期任务。需要持续每 72 小时更新时，为后端配置 `INITRA_MONITOR_OPERATOR_ID`，并开启 `INITRA_MONITOR_SCHEDULER_ENABLED=true`；这一个主开关统一装配所需任务 worker/scheduler。每分钟只是检查持久化进度的唤醒，不是每分钟全量抓取。默认不开启，是为了在账号、数据库和来源配置确认前不静默启动网络任务。
+
+[真实采集运行说明](cmd/glean-monitor/README.md) 包含恢复、请求预算、限流、隔离记录、真实端到端 canary 和单独的显式离线测试模式。不要用 `--demo` 或模拟数据库作为正常部署方案。
 
 ## 可选容器前后端
 
@@ -113,9 +124,9 @@ docker compose --profile app up --build -d
 ```sh
 go test ./... -count=1
 go vet ./...
-go build ./cmd/server
-go build ./cmd/glean-monitor
-go build ./tools/importbaseline
+go build -o ./tmp/glean-server ./cmd/server
+go build -o ./tmp/glean-monitor ./cmd/glean-monitor
+go build -o ./tmp/glean-importbaseline ./tools/importbaseline
 cd web
 npm test
 npm run typecheck
@@ -124,7 +135,15 @@ npm run build
 npm run format:check
 ```
 
-CI 启动隔离 PostgreSQL 16，强制检查真实迁移、文献导入/查询、监控持久化和完整历史快照测试，不能用跳过数据库测试冒充通过。本地未设置 `INITRA_TEST_DATABASE_URL` 时，相关测试会明确跳过。真实源/LLM 联调与浏览器视觉验收不由 mock 或 DOM 测试替代。
+CI 启动隔离 PostgreSQL 16，强制检查真实迁移、文献导入/查询、监控持久化和完整历史快照测试，不能用跳过数据库测试冒充通过。本地未设置 `INITRA_TEST_DATABASE_URL` 时，相关测试会明确跳过。浏览器任务使用真实 Go API、PostgreSQL 和完整历史导入，分别验证桌面/手机；其后执行一条真实 Europe PMC 记录从采集、入库到网页证据的有界测试，不使用路由伪造数据。外部源不可用时明确失败，不回退到模拟记录。报告在上传前清理临时认证信息；截图用于实际布局检查。真实 LLM 接入仍待后续配置。
+
+## 来源与覆盖
+
+[真实来源说明](docs/glean/real-sources.md) 区分 API 增量日期、正式出版日期、分页完整性及真实请求验证；[期刊登记表](data/journals/README.md) 保存历史指标证据、ISSN 与覆盖缺口。核心期刊抓取完整题录再等待语义审核，不用狭窄关键词把潜在相关论文提前丢弃。扩展主题检索不受核心名单限制。
+
+同一论文的来源更新、科学版本、正式出版事件与模型处理分别记录。后来的题名、摘要、DOI 来源信息也可搜索；它们不会静默覆盖原始历史核验。永久的单条身份冲突/坏记录隔离，其他记录继续；来源失败、长 Retry-After、隔离数和覆盖水位都可观察。
+
+默认阅读范围是经过核验的历史纳入集合，另有新发现待审与全部记录。个人隐藏目前明确作用于所有主题，和科学结论无关；隐藏可恢复。
 
 ## 设计原则
 

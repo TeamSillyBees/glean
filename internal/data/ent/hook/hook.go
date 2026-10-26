@@ -33,6 +33,30 @@ func (f GleanMonitorStateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanMonitorStateMutation", m)
 }
 
+// The GleanObservationFunc type is an adapter to allow the use of ordinary
+// function as GleanObservation mutator.
+type GleanObservationFunc func(context.Context, *ent.GleanObservationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanObservationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanObservationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanObservationMutation", m)
+}
+
+// The GleanObservationMatchFunc type is an adapter to allow the use of ordinary
+// function as GleanObservationMatch mutator.
+type GleanObservationMatchFunc func(context.Context, *ent.GleanObservationMatchMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanObservationMatchFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanObservationMatchMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanObservationMatchMutation", m)
+}
+
 // The GleanPaperFunc type is an adapter to allow the use of ordinary
 // function as GleanPaper mutator.
 type GleanPaperFunc func(context.Context, *ent.GleanPaperMutation) (ent.Value, error)

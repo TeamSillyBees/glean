@@ -136,7 +136,7 @@ func (s *Service) RegisterVenue(ctx context.Context, v VenueVO) error {
 	if v.EligibleTopics == nil {
 		v.EligibleTopics = []string{}
 	}
-	_, err = s.client.GleanVenue.Create().SetName(v.Name).SetKind(v.Kind).SetNillableJif(v.JIF).SetCcf(v.CCF).SetMetricYear(v.MetricYear).SetRegistryVersion(v.RegistryVersion).SetSource(v.Source).SetEvidence(v.Evidence).SetEligibleTopics(v.EligibleTopics).SetQualificationStatus(v.QualificationStatus).Save(ctx)
+	_, err = s.client.GleanVenue.Create().SetName(v.Name).SetIssns(normalizeISSNs(v.ISSNs)).SetAliases(uniqueSorted(v.Aliases)).SetKind(v.Kind).SetNillableJif(v.JIF).SetCcf(v.CCF).SetMetricYear(v.MetricYear).SetRegistryVersion(v.RegistryVersion).SetSource(v.Source).SetEvidence(v.Evidence).SetEligibleTopics(v.EligibleTopics).SetQualificationStatus(v.QualificationStatus).Save(ctx)
 	if ent.IsConstraintError(err) {
 		exists, lookupErr := s.client.GleanVenue.Query().Where(gleanvenue.Name(v.Name), gleanvenue.RegistryVersion(v.RegistryVersion)).Exist(ctx)
 		if lookupErr == nil && exists {

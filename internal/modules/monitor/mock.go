@@ -18,7 +18,11 @@ func (MockReviewer) Review(ctx context.Context, record Record) (Review, error) {
 	if err := ctx.Err(); err != nil {
 		return Review{}, err
 	}
-	return Review{Provider: "deterministic-mock", Model: "mock-no-model", PromptVersion: "mock-v1", IsMock: true, ScientificReviewed: false, InclusionStatus: "pending", Summary: "模拟流程已完成；尚未进行真实科学审核。"}, nil
+	summary := "模型阅读占位输出；尚未进行真实科学审核。"
+	if record.CoreDiscovery {
+		summary = "核心期刊发现，主题相关性和科学纳入均待真实审核；当前仅为模型占位输出。"
+	}
+	return Review{Provider: "deterministic-mock", Model: "mock-no-model", PromptVersion: "mock-v1", IsMock: true, ScientificReviewed: false, InclusionStatus: "pending", Summary: summary}, nil
 }
 
 // MockPublisher 仅允许模拟输出投影到监控快照，不写历史论文目录。
@@ -30,7 +34,7 @@ func (MockPublisher) Publish(ctx context.Context, _ idgen.ID, records []Publicat
 		return err
 	}
 	for _, record := range records {
-		if !record.Review.IsMock || record.Review.ScientificReviewed || record.Review.InclusionStatus != "pending" {
+		if !record.Record.IsMock || !record.Review.IsMock || record.Review.ScientificReviewed || record.Review.InclusionStatus != "pending" {
 			return fmt.Errorf("mock publisher refuses non-mock scientific conclusions")
 		}
 	}

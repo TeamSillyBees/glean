@@ -27,6 +27,20 @@ func (_c *GleanPaperCreate) SetIdentityKey(v string) *GleanPaperCreate {
 	return _c
 }
 
+// SetOrigin sets the "origin" field.
+func (_c *GleanPaperCreate) SetOrigin(v string) *GleanPaperCreate {
+	_c.mutation.SetOrigin(v)
+	return _c
+}
+
+// SetNillableOrigin sets the "origin" field if the given value is not nil.
+func (_c *GleanPaperCreate) SetNillableOrigin(v *string) *GleanPaperCreate {
+	if v != nil {
+		_c.SetOrigin(*v)
+	}
+	return _c
+}
+
 // SetTitle sets the "title" field.
 func (_c *GleanPaperCreate) SetTitle(v string) *GleanPaperCreate {
 	_c.mutation.SetTitle(v)
@@ -318,6 +332,10 @@ func (_c *GleanPaperCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *GleanPaperCreate) defaults() {
+	if _, ok := _c.mutation.Origin(); !ok {
+		v := gleanpaper.DefaultOrigin
+		_c.mutation.SetOrigin(v)
+	}
 	if _, ok := _c.mutation.TitleZh(); !ok {
 		v := gleanpaper.DefaultTitleZh
 		_c.mutation.SetTitleZh(v)
@@ -381,6 +399,9 @@ func (_c *GleanPaperCreate) check() error {
 		if err := gleanpaper.IdentityKeyValidator(v); err != nil {
 			return &ValidationError{Name: "identity_key", err: fmt.Errorf(`ent: validator failed for field "GleanPaper.identity_key": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.Origin(); !ok {
+		return &ValidationError{Name: "origin", err: errors.New(`ent: missing required field "GleanPaper.origin"`)}
 	}
 	if _, ok := _c.mutation.Title(); !ok {
 		return &ValidationError{Name: "title", err: errors.New(`ent: missing required field "GleanPaper.title"`)}
@@ -466,6 +487,10 @@ func (_c *GleanPaperCreate) createSpec() (*GleanPaper, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IdentityKey(); ok {
 		_spec.SetField(gleanpaper.FieldIdentityKey, field.TypeString, value)
 		_node.IdentityKey = value
+	}
+	if value, ok := _c.mutation.Origin(); ok {
+		_spec.SetField(gleanpaper.FieldOrigin, field.TypeString, value)
+		_node.Origin = value
 	}
 	if value, ok := _c.mutation.Title(); ok {
 		_spec.SetField(gleanpaper.FieldTitle, field.TypeString, value)

@@ -38,6 +38,7 @@ func (s *Service) emptyState() *monitorState {
 	for _, source := range s.sources {
 		state.Sources[source.Name()] = &Checkpoint{Source: source.Name()}
 	}
+	s.decorateSnapshot(&state.Snapshot)
 	return state
 }
 
@@ -140,11 +141,11 @@ func (s *Service) acquire(ctx context.Context) (*monitorState, error) {
 	return state, nil
 }
 
-func (s *Service) release(state *monitorState) {
+func (s *Service) release(parent context.Context, state *monitorState) {
 	// Revision CAS fences an expired worker: release cannot overwrite a newer owner.
 	state.leaseOwner = ""
 	state.leaseUntil = time.Time{}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 3*time.Second)
 	defer cancel()
 	_ = s.save(ctx, state)
 }

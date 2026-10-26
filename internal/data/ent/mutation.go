@@ -14,6 +14,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmonitorstate"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanobservationmatch"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
@@ -39,20 +41,22 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeGleanMembership   = "GleanMembership"
-	TypeGleanMonitorState = "GleanMonitorState"
-	TypeGleanPaper        = "GleanPaper"
-	TypeGleanPaperState   = "GleanPaperState"
-	TypeGleanPreference   = "GleanPreference"
-	TypeGleanVenue        = "GleanVenue"
-	TypeSysConfig         = "SysConfig"
-	TypeSysDictCollection = "SysDictCollection"
-	TypeSysDictItem       = "SysDictItem"
-	TypeSysMenu           = "SysMenu"
-	TypeSysRole           = "SysRole"
-	TypeSysRoleMenu       = "SysRoleMenu"
-	TypeSysUser           = "SysUser"
-	TypeSysUserRole       = "SysUserRole"
+	TypeGleanMembership       = "GleanMembership"
+	TypeGleanMonitorState     = "GleanMonitorState"
+	TypeGleanObservation      = "GleanObservation"
+	TypeGleanObservationMatch = "GleanObservationMatch"
+	TypeGleanPaper            = "GleanPaper"
+	TypeGleanPaperState       = "GleanPaperState"
+	TypeGleanPreference       = "GleanPreference"
+	TypeGleanVenue            = "GleanVenue"
+	TypeSysConfig             = "SysConfig"
+	TypeSysDictCollection     = "SysDictCollection"
+	TypeSysDictItem           = "SysDictItem"
+	TypeSysMenu               = "SysMenu"
+	TypeSysRole               = "SysRole"
+	TypeSysRoleMenu           = "SysRoleMenu"
+	TypeSysUser               = "SysUser"
+	TypeSysUserRole           = "SysUserRole"
 )
 
 // GleanMembershipMutation represents an operation that mutates the GleanMembership nodes in the graph.
@@ -65,6 +69,7 @@ type GleanMembershipMutation struct {
 	addpaper_id      *idgen.ID
 	topic            *string
 	original_id      *string
+	inclusion_status *string
 	tier             *string
 	primary_category *string
 	categories       *[]string
@@ -316,6 +321,42 @@ func (m *GleanMembershipMutation) OldOriginalID(ctx context.Context) (v string, 
 // ResetOriginalID resets all changes to the "original_id" field.
 func (m *GleanMembershipMutation) ResetOriginalID() {
 	m.original_id = nil
+}
+
+// SetInclusionStatus sets the "inclusion_status" field.
+func (m *GleanMembershipMutation) SetInclusionStatus(s string) {
+	m.inclusion_status = &s
+}
+
+// InclusionStatus returns the value of the "inclusion_status" field in the mutation.
+func (m *GleanMembershipMutation) InclusionStatus() (r string, exists bool) {
+	v := m.inclusion_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInclusionStatus returns the old "inclusion_status" field's value of the GleanMembership entity.
+// If the GleanMembership object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanMembershipMutation) OldInclusionStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInclusionStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInclusionStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInclusionStatus: %w", err)
+	}
+	return oldValue.InclusionStatus, nil
+}
+
+// ResetInclusionStatus resets all changes to the "inclusion_status" field.
+func (m *GleanMembershipMutation) ResetInclusionStatus() {
+	m.inclusion_status = nil
 }
 
 // SetTier sets the "tier" field.
@@ -867,7 +908,7 @@ func (m *GleanMembershipMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GleanMembershipMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 16)
 	if m.paper_id != nil {
 		fields = append(fields, gleanmembership.FieldPaperID)
 	}
@@ -876,6 +917,9 @@ func (m *GleanMembershipMutation) Fields() []string {
 	}
 	if m.original_id != nil {
 		fields = append(fields, gleanmembership.FieldOriginalID)
+	}
+	if m.inclusion_status != nil {
+		fields = append(fields, gleanmembership.FieldInclusionStatus)
 	}
 	if m.tier != nil {
 		fields = append(fields, gleanmembership.FieldTier)
@@ -927,6 +971,8 @@ func (m *GleanMembershipMutation) Field(name string) (ent.Value, bool) {
 		return m.Topic()
 	case gleanmembership.FieldOriginalID:
 		return m.OriginalID()
+	case gleanmembership.FieldInclusionStatus:
+		return m.InclusionStatus()
 	case gleanmembership.FieldTier:
 		return m.Tier()
 	case gleanmembership.FieldPrimaryCategory:
@@ -966,6 +1012,8 @@ func (m *GleanMembershipMutation) OldField(ctx context.Context, name string) (en
 		return m.OldTopic(ctx)
 	case gleanmembership.FieldOriginalID:
 		return m.OldOriginalID(ctx)
+	case gleanmembership.FieldInclusionStatus:
+		return m.OldInclusionStatus(ctx)
 	case gleanmembership.FieldTier:
 		return m.OldTier(ctx)
 	case gleanmembership.FieldPrimaryCategory:
@@ -1019,6 +1067,13 @@ func (m *GleanMembershipMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetOriginalID(v)
+		return nil
+	case gleanmembership.FieldInclusionStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInclusionStatus(v)
 		return nil
 	case gleanmembership.FieldTier:
 		v, ok := value.(string)
@@ -1215,6 +1270,9 @@ func (m *GleanMembershipMutation) ResetField(name string) error {
 		return nil
 	case gleanmembership.FieldOriginalID:
 		m.ResetOriginalID()
+		return nil
+	case gleanmembership.FieldInclusionStatus:
+		m.ResetInclusionStatus()
 		return nil
 	case gleanmembership.FieldTier:
 		m.ResetTier()
@@ -2121,6 +2179,2124 @@ func (m *GleanMonitorStateMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown GleanMonitorState edge %s", name)
 }
 
+// GleanObservationMutation represents an operation that mutates the GleanObservation nodes in the graph.
+type GleanObservationMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *idgen.ID
+	paper_id                 *idgen.ID
+	addpaper_id              *idgen.ID
+	run_id                   *idgen.ID
+	addrun_id                *idgen.ID
+	source                   *string
+	source_id                *string
+	version                  *string
+	content_hash             *string
+	observed_at              *time.Time
+	source_updated_at        *time.Time
+	metadata                 *json.RawMessage
+	appendmetadata           json.RawMessage
+	publication_events       *[]map[string]interface{}
+	appendpublication_events []map[string]interface{}
+	review                   *map[string]interface{}
+	created_at               *time.Time
+	updated_at               *time.Time
+	created_by               *idgen.ID
+	addcreated_by            *idgen.ID
+	updated_by               *idgen.ID
+	addupdated_by            *idgen.ID
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*GleanObservation, error)
+	predicates               []predicate.GleanObservation
+}
+
+var _ ent.Mutation = (*GleanObservationMutation)(nil)
+
+// gleanobservationOption allows management of the mutation configuration using functional options.
+type gleanobservationOption func(*GleanObservationMutation)
+
+// newGleanObservationMutation creates new mutation for the GleanObservation entity.
+func newGleanObservationMutation(c config, op Op, opts ...gleanobservationOption) *GleanObservationMutation {
+	m := &GleanObservationMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGleanObservation,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGleanObservationID sets the ID field of the mutation.
+func withGleanObservationID(id idgen.ID) gleanobservationOption {
+	return func(m *GleanObservationMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GleanObservation
+		)
+		m.oldValue = func(ctx context.Context) (*GleanObservation, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GleanObservation.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGleanObservation sets the old GleanObservation of the mutation.
+func withGleanObservation(node *GleanObservation) gleanobservationOption {
+	return func(m *GleanObservationMutation) {
+		m.oldValue = func(context.Context) (*GleanObservation, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GleanObservationMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GleanObservationMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of GleanObservation entities.
+func (m *GleanObservationMutation) SetID(id idgen.ID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GleanObservationMutation) ID() (id idgen.ID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GleanObservationMutation) IDs(ctx context.Context) ([]idgen.ID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []idgen.ID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GleanObservation.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetPaperID sets the "paper_id" field.
+func (m *GleanObservationMutation) SetPaperID(i idgen.ID) {
+	m.paper_id = &i
+	m.addpaper_id = nil
+}
+
+// PaperID returns the value of the "paper_id" field in the mutation.
+func (m *GleanObservationMutation) PaperID() (r idgen.ID, exists bool) {
+	v := m.paper_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPaperID returns the old "paper_id" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldPaperID(ctx context.Context) (v idgen.ID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPaperID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPaperID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPaperID: %w", err)
+	}
+	return oldValue.PaperID, nil
+}
+
+// AddPaperID adds i to the "paper_id" field.
+func (m *GleanObservationMutation) AddPaperID(i idgen.ID) {
+	if m.addpaper_id != nil {
+		*m.addpaper_id += i
+	} else {
+		m.addpaper_id = &i
+	}
+}
+
+// AddedPaperID returns the value that was added to the "paper_id" field in this mutation.
+func (m *GleanObservationMutation) AddedPaperID() (r idgen.ID, exists bool) {
+	v := m.addpaper_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPaperID resets all changes to the "paper_id" field.
+func (m *GleanObservationMutation) ResetPaperID() {
+	m.paper_id = nil
+	m.addpaper_id = nil
+}
+
+// SetRunID sets the "run_id" field.
+func (m *GleanObservationMutation) SetRunID(i idgen.ID) {
+	m.run_id = &i
+	m.addrun_id = nil
+}
+
+// RunID returns the value of the "run_id" field in the mutation.
+func (m *GleanObservationMutation) RunID() (r idgen.ID, exists bool) {
+	v := m.run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRunID returns the old "run_id" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldRunID(ctx context.Context) (v idgen.ID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRunID: %w", err)
+	}
+	return oldValue.RunID, nil
+}
+
+// AddRunID adds i to the "run_id" field.
+func (m *GleanObservationMutation) AddRunID(i idgen.ID) {
+	if m.addrun_id != nil {
+		*m.addrun_id += i
+	} else {
+		m.addrun_id = &i
+	}
+}
+
+// AddedRunID returns the value that was added to the "run_id" field in this mutation.
+func (m *GleanObservationMutation) AddedRunID() (r idgen.ID, exists bool) {
+	v := m.addrun_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRunID resets all changes to the "run_id" field.
+func (m *GleanObservationMutation) ResetRunID() {
+	m.run_id = nil
+	m.addrun_id = nil
+}
+
+// SetSource sets the "source" field.
+func (m *GleanObservationMutation) SetSource(s string) {
+	m.source = &s
+}
+
+// Source returns the value of the "source" field in the mutation.
+func (m *GleanObservationMutation) Source() (r string, exists bool) {
+	v := m.source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSource returns the old "source" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldSource(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSource: %w", err)
+	}
+	return oldValue.Source, nil
+}
+
+// ResetSource resets all changes to the "source" field.
+func (m *GleanObservationMutation) ResetSource() {
+	m.source = nil
+}
+
+// SetSourceID sets the "source_id" field.
+func (m *GleanObservationMutation) SetSourceID(s string) {
+	m.source_id = &s
+}
+
+// SourceID returns the value of the "source_id" field in the mutation.
+func (m *GleanObservationMutation) SourceID() (r string, exists bool) {
+	v := m.source_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceID returns the old "source_id" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldSourceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceID: %w", err)
+	}
+	return oldValue.SourceID, nil
+}
+
+// ResetSourceID resets all changes to the "source_id" field.
+func (m *GleanObservationMutation) ResetSourceID() {
+	m.source_id = nil
+}
+
+// SetVersion sets the "version" field.
+func (m *GleanObservationMutation) SetVersion(s string) {
+	m.version = &s
+}
+
+// Version returns the value of the "version" field in the mutation.
+func (m *GleanObservationMutation) Version() (r string, exists bool) {
+	v := m.version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVersion returns the old "version" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVersion: %w", err)
+	}
+	return oldValue.Version, nil
+}
+
+// ResetVersion resets all changes to the "version" field.
+func (m *GleanObservationMutation) ResetVersion() {
+	m.version = nil
+}
+
+// SetContentHash sets the "content_hash" field.
+func (m *GleanObservationMutation) SetContentHash(s string) {
+	m.content_hash = &s
+}
+
+// ContentHash returns the value of the "content_hash" field in the mutation.
+func (m *GleanObservationMutation) ContentHash() (r string, exists bool) {
+	v := m.content_hash
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContentHash returns the old "content_hash" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldContentHash(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContentHash is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContentHash requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContentHash: %w", err)
+	}
+	return oldValue.ContentHash, nil
+}
+
+// ResetContentHash resets all changes to the "content_hash" field.
+func (m *GleanObservationMutation) ResetContentHash() {
+	m.content_hash = nil
+}
+
+// SetObservedAt sets the "observed_at" field.
+func (m *GleanObservationMutation) SetObservedAt(t time.Time) {
+	m.observed_at = &t
+}
+
+// ObservedAt returns the value of the "observed_at" field in the mutation.
+func (m *GleanObservationMutation) ObservedAt() (r time.Time, exists bool) {
+	v := m.observed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObservedAt returns the old "observed_at" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldObservedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObservedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObservedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObservedAt: %w", err)
+	}
+	return oldValue.ObservedAt, nil
+}
+
+// ResetObservedAt resets all changes to the "observed_at" field.
+func (m *GleanObservationMutation) ResetObservedAt() {
+	m.observed_at = nil
+}
+
+// SetSourceUpdatedAt sets the "source_updated_at" field.
+func (m *GleanObservationMutation) SetSourceUpdatedAt(t time.Time) {
+	m.source_updated_at = &t
+}
+
+// SourceUpdatedAt returns the value of the "source_updated_at" field in the mutation.
+func (m *GleanObservationMutation) SourceUpdatedAt() (r time.Time, exists bool) {
+	v := m.source_updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceUpdatedAt returns the old "source_updated_at" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldSourceUpdatedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceUpdatedAt: %w", err)
+	}
+	return oldValue.SourceUpdatedAt, nil
+}
+
+// ClearSourceUpdatedAt clears the value of the "source_updated_at" field.
+func (m *GleanObservationMutation) ClearSourceUpdatedAt() {
+	m.source_updated_at = nil
+	m.clearedFields[gleanobservation.FieldSourceUpdatedAt] = struct{}{}
+}
+
+// SourceUpdatedAtCleared returns if the "source_updated_at" field was cleared in this mutation.
+func (m *GleanObservationMutation) SourceUpdatedAtCleared() bool {
+	_, ok := m.clearedFields[gleanobservation.FieldSourceUpdatedAt]
+	return ok
+}
+
+// ResetSourceUpdatedAt resets all changes to the "source_updated_at" field.
+func (m *GleanObservationMutation) ResetSourceUpdatedAt() {
+	m.source_updated_at = nil
+	delete(m.clearedFields, gleanobservation.FieldSourceUpdatedAt)
+}
+
+// SetMetadata sets the "metadata" field.
+func (m *GleanObservationMutation) SetMetadata(jm json.RawMessage) {
+	m.metadata = &jm
+	m.appendmetadata = nil
+}
+
+// Metadata returns the value of the "metadata" field in the mutation.
+func (m *GleanObservationMutation) Metadata() (r json.RawMessage, exists bool) {
+	v := m.metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetadata returns the old "metadata" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldMetadata(ctx context.Context) (v json.RawMessage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
+	}
+	return oldValue.Metadata, nil
+}
+
+// AppendMetadata adds jm to the "metadata" field.
+func (m *GleanObservationMutation) AppendMetadata(jm json.RawMessage) {
+	m.appendmetadata = append(m.appendmetadata, jm...)
+}
+
+// AppendedMetadata returns the list of values that were appended to the "metadata" field in this mutation.
+func (m *GleanObservationMutation) AppendedMetadata() (json.RawMessage, bool) {
+	if len(m.appendmetadata) == 0 {
+		return nil, false
+	}
+	return m.appendmetadata, true
+}
+
+// ResetMetadata resets all changes to the "metadata" field.
+func (m *GleanObservationMutation) ResetMetadata() {
+	m.metadata = nil
+	m.appendmetadata = nil
+}
+
+// SetPublicationEvents sets the "publication_events" field.
+func (m *GleanObservationMutation) SetPublicationEvents(value []map[string]interface{}) {
+	m.publication_events = &value
+	m.appendpublication_events = nil
+}
+
+// PublicationEvents returns the value of the "publication_events" field in the mutation.
+func (m *GleanObservationMutation) PublicationEvents() (r []map[string]interface{}, exists bool) {
+	v := m.publication_events
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPublicationEvents returns the old "publication_events" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldPublicationEvents(ctx context.Context) (v []map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPublicationEvents is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPublicationEvents requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPublicationEvents: %w", err)
+	}
+	return oldValue.PublicationEvents, nil
+}
+
+// AppendPublicationEvents adds value to the "publication_events" field.
+func (m *GleanObservationMutation) AppendPublicationEvents(value []map[string]interface{}) {
+	m.appendpublication_events = append(m.appendpublication_events, value...)
+}
+
+// AppendedPublicationEvents returns the list of values that were appended to the "publication_events" field in this mutation.
+func (m *GleanObservationMutation) AppendedPublicationEvents() ([]map[string]interface{}, bool) {
+	if len(m.appendpublication_events) == 0 {
+		return nil, false
+	}
+	return m.appendpublication_events, true
+}
+
+// ResetPublicationEvents resets all changes to the "publication_events" field.
+func (m *GleanObservationMutation) ResetPublicationEvents() {
+	m.publication_events = nil
+	m.appendpublication_events = nil
+}
+
+// SetReview sets the "review" field.
+func (m *GleanObservationMutation) SetReview(value map[string]interface{}) {
+	m.review = &value
+}
+
+// Review returns the value of the "review" field in the mutation.
+func (m *GleanObservationMutation) Review() (r map[string]interface{}, exists bool) {
+	v := m.review
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReview returns the old "review" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldReview(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReview is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReview requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReview: %w", err)
+	}
+	return oldValue.Review, nil
+}
+
+// ResetReview resets all changes to the "review" field.
+func (m *GleanObservationMutation) ResetReview() {
+	m.review = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GleanObservationMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GleanObservationMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GleanObservationMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GleanObservationMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GleanObservationMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GleanObservationMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (m *GleanObservationMutation) SetCreatedBy(i idgen.ID) {
+	m.created_by = &i
+	m.addcreated_by = nil
+}
+
+// CreatedBy returns the value of the "created_by" field in the mutation.
+func (m *GleanObservationMutation) CreatedBy() (r idgen.ID, exists bool) {
+	v := m.created_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedBy returns the old "created_by" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldCreatedBy(ctx context.Context) (v *idgen.ID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedBy: %w", err)
+	}
+	return oldValue.CreatedBy, nil
+}
+
+// AddCreatedBy adds i to the "created_by" field.
+func (m *GleanObservationMutation) AddCreatedBy(i idgen.ID) {
+	if m.addcreated_by != nil {
+		*m.addcreated_by += i
+	} else {
+		m.addcreated_by = &i
+	}
+}
+
+// AddedCreatedBy returns the value that was added to the "created_by" field in this mutation.
+func (m *GleanObservationMutation) AddedCreatedBy() (r idgen.ID, exists bool) {
+	v := m.addcreated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (m *GleanObservationMutation) ClearCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	m.clearedFields[gleanobservation.FieldCreatedBy] = struct{}{}
+}
+
+// CreatedByCleared returns if the "created_by" field was cleared in this mutation.
+func (m *GleanObservationMutation) CreatedByCleared() bool {
+	_, ok := m.clearedFields[gleanobservation.FieldCreatedBy]
+	return ok
+}
+
+// ResetCreatedBy resets all changes to the "created_by" field.
+func (m *GleanObservationMutation) ResetCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	delete(m.clearedFields, gleanobservation.FieldCreatedBy)
+}
+
+// SetUpdatedBy sets the "updated_by" field.
+func (m *GleanObservationMutation) SetUpdatedBy(i idgen.ID) {
+	m.updated_by = &i
+	m.addupdated_by = nil
+}
+
+// UpdatedBy returns the value of the "updated_by" field in the mutation.
+func (m *GleanObservationMutation) UpdatedBy() (r idgen.ID, exists bool) {
+	v := m.updated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedBy returns the old "updated_by" field's value of the GleanObservation entity.
+// If the GleanObservation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMutation) OldUpdatedBy(ctx context.Context) (v *idgen.ID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedBy: %w", err)
+	}
+	return oldValue.UpdatedBy, nil
+}
+
+// AddUpdatedBy adds i to the "updated_by" field.
+func (m *GleanObservationMutation) AddUpdatedBy(i idgen.ID) {
+	if m.addupdated_by != nil {
+		*m.addupdated_by += i
+	} else {
+		m.addupdated_by = &i
+	}
+}
+
+// AddedUpdatedBy returns the value that was added to the "updated_by" field in this mutation.
+func (m *GleanObservationMutation) AddedUpdatedBy() (r idgen.ID, exists bool) {
+	v := m.addupdated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearUpdatedBy clears the value of the "updated_by" field.
+func (m *GleanObservationMutation) ClearUpdatedBy() {
+	m.updated_by = nil
+	m.addupdated_by = nil
+	m.clearedFields[gleanobservation.FieldUpdatedBy] = struct{}{}
+}
+
+// UpdatedByCleared returns if the "updated_by" field was cleared in this mutation.
+func (m *GleanObservationMutation) UpdatedByCleared() bool {
+	_, ok := m.clearedFields[gleanobservation.FieldUpdatedBy]
+	return ok
+}
+
+// ResetUpdatedBy resets all changes to the "updated_by" field.
+func (m *GleanObservationMutation) ResetUpdatedBy() {
+	m.updated_by = nil
+	m.addupdated_by = nil
+	delete(m.clearedFields, gleanobservation.FieldUpdatedBy)
+}
+
+// Where appends a list predicates to the GleanObservationMutation builder.
+func (m *GleanObservationMutation) Where(ps ...predicate.GleanObservation) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GleanObservationMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GleanObservationMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GleanObservation, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GleanObservationMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GleanObservationMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GleanObservation).
+func (m *GleanObservationMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GleanObservationMutation) Fields() []string {
+	fields := make([]string, 0, 15)
+	if m.paper_id != nil {
+		fields = append(fields, gleanobservation.FieldPaperID)
+	}
+	if m.run_id != nil {
+		fields = append(fields, gleanobservation.FieldRunID)
+	}
+	if m.source != nil {
+		fields = append(fields, gleanobservation.FieldSource)
+	}
+	if m.source_id != nil {
+		fields = append(fields, gleanobservation.FieldSourceID)
+	}
+	if m.version != nil {
+		fields = append(fields, gleanobservation.FieldVersion)
+	}
+	if m.content_hash != nil {
+		fields = append(fields, gleanobservation.FieldContentHash)
+	}
+	if m.observed_at != nil {
+		fields = append(fields, gleanobservation.FieldObservedAt)
+	}
+	if m.source_updated_at != nil {
+		fields = append(fields, gleanobservation.FieldSourceUpdatedAt)
+	}
+	if m.metadata != nil {
+		fields = append(fields, gleanobservation.FieldMetadata)
+	}
+	if m.publication_events != nil {
+		fields = append(fields, gleanobservation.FieldPublicationEvents)
+	}
+	if m.review != nil {
+		fields = append(fields, gleanobservation.FieldReview)
+	}
+	if m.created_at != nil {
+		fields = append(fields, gleanobservation.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, gleanobservation.FieldUpdatedAt)
+	}
+	if m.created_by != nil {
+		fields = append(fields, gleanobservation.FieldCreatedBy)
+	}
+	if m.updated_by != nil {
+		fields = append(fields, gleanobservation.FieldUpdatedBy)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GleanObservationMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case gleanobservation.FieldPaperID:
+		return m.PaperID()
+	case gleanobservation.FieldRunID:
+		return m.RunID()
+	case gleanobservation.FieldSource:
+		return m.Source()
+	case gleanobservation.FieldSourceID:
+		return m.SourceID()
+	case gleanobservation.FieldVersion:
+		return m.Version()
+	case gleanobservation.FieldContentHash:
+		return m.ContentHash()
+	case gleanobservation.FieldObservedAt:
+		return m.ObservedAt()
+	case gleanobservation.FieldSourceUpdatedAt:
+		return m.SourceUpdatedAt()
+	case gleanobservation.FieldMetadata:
+		return m.Metadata()
+	case gleanobservation.FieldPublicationEvents:
+		return m.PublicationEvents()
+	case gleanobservation.FieldReview:
+		return m.Review()
+	case gleanobservation.FieldCreatedAt:
+		return m.CreatedAt()
+	case gleanobservation.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case gleanobservation.FieldCreatedBy:
+		return m.CreatedBy()
+	case gleanobservation.FieldUpdatedBy:
+		return m.UpdatedBy()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GleanObservationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case gleanobservation.FieldPaperID:
+		return m.OldPaperID(ctx)
+	case gleanobservation.FieldRunID:
+		return m.OldRunID(ctx)
+	case gleanobservation.FieldSource:
+		return m.OldSource(ctx)
+	case gleanobservation.FieldSourceID:
+		return m.OldSourceID(ctx)
+	case gleanobservation.FieldVersion:
+		return m.OldVersion(ctx)
+	case gleanobservation.FieldContentHash:
+		return m.OldContentHash(ctx)
+	case gleanobservation.FieldObservedAt:
+		return m.OldObservedAt(ctx)
+	case gleanobservation.FieldSourceUpdatedAt:
+		return m.OldSourceUpdatedAt(ctx)
+	case gleanobservation.FieldMetadata:
+		return m.OldMetadata(ctx)
+	case gleanobservation.FieldPublicationEvents:
+		return m.OldPublicationEvents(ctx)
+	case gleanobservation.FieldReview:
+		return m.OldReview(ctx)
+	case gleanobservation.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case gleanobservation.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case gleanobservation.FieldCreatedBy:
+		return m.OldCreatedBy(ctx)
+	case gleanobservation.FieldUpdatedBy:
+		return m.OldUpdatedBy(ctx)
+	}
+	return nil, fmt.Errorf("unknown GleanObservation field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GleanObservationMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case gleanobservation.FieldPaperID:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPaperID(v)
+		return nil
+	case gleanobservation.FieldRunID:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRunID(v)
+		return nil
+	case gleanobservation.FieldSource:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSource(v)
+		return nil
+	case gleanobservation.FieldSourceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceID(v)
+		return nil
+	case gleanobservation.FieldVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVersion(v)
+		return nil
+	case gleanobservation.FieldContentHash:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContentHash(v)
+		return nil
+	case gleanobservation.FieldObservedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObservedAt(v)
+		return nil
+	case gleanobservation.FieldSourceUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceUpdatedAt(v)
+		return nil
+	case gleanobservation.FieldMetadata:
+		v, ok := value.(json.RawMessage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetadata(v)
+		return nil
+	case gleanobservation.FieldPublicationEvents:
+		v, ok := value.([]map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPublicationEvents(v)
+		return nil
+	case gleanobservation.FieldReview:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReview(v)
+		return nil
+	case gleanobservation.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case gleanobservation.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case gleanobservation.FieldCreatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedBy(v)
+		return nil
+	case gleanobservation.FieldUpdatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservation field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GleanObservationMutation) AddedFields() []string {
+	var fields []string
+	if m.addpaper_id != nil {
+		fields = append(fields, gleanobservation.FieldPaperID)
+	}
+	if m.addrun_id != nil {
+		fields = append(fields, gleanobservation.FieldRunID)
+	}
+	if m.addcreated_by != nil {
+		fields = append(fields, gleanobservation.FieldCreatedBy)
+	}
+	if m.addupdated_by != nil {
+		fields = append(fields, gleanobservation.FieldUpdatedBy)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GleanObservationMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case gleanobservation.FieldPaperID:
+		return m.AddedPaperID()
+	case gleanobservation.FieldRunID:
+		return m.AddedRunID()
+	case gleanobservation.FieldCreatedBy:
+		return m.AddedCreatedBy()
+	case gleanobservation.FieldUpdatedBy:
+		return m.AddedUpdatedBy()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GleanObservationMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case gleanobservation.FieldPaperID:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPaperID(v)
+		return nil
+	case gleanobservation.FieldRunID:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRunID(v)
+		return nil
+	case gleanobservation.FieldCreatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedBy(v)
+		return nil
+	case gleanobservation.FieldUpdatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUpdatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservation numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GleanObservationMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(gleanobservation.FieldSourceUpdatedAt) {
+		fields = append(fields, gleanobservation.FieldSourceUpdatedAt)
+	}
+	if m.FieldCleared(gleanobservation.FieldCreatedBy) {
+		fields = append(fields, gleanobservation.FieldCreatedBy)
+	}
+	if m.FieldCleared(gleanobservation.FieldUpdatedBy) {
+		fields = append(fields, gleanobservation.FieldUpdatedBy)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GleanObservationMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GleanObservationMutation) ClearField(name string) error {
+	switch name {
+	case gleanobservation.FieldSourceUpdatedAt:
+		m.ClearSourceUpdatedAt()
+		return nil
+	case gleanobservation.FieldCreatedBy:
+		m.ClearCreatedBy()
+		return nil
+	case gleanobservation.FieldUpdatedBy:
+		m.ClearUpdatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservation nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GleanObservationMutation) ResetField(name string) error {
+	switch name {
+	case gleanobservation.FieldPaperID:
+		m.ResetPaperID()
+		return nil
+	case gleanobservation.FieldRunID:
+		m.ResetRunID()
+		return nil
+	case gleanobservation.FieldSource:
+		m.ResetSource()
+		return nil
+	case gleanobservation.FieldSourceID:
+		m.ResetSourceID()
+		return nil
+	case gleanobservation.FieldVersion:
+		m.ResetVersion()
+		return nil
+	case gleanobservation.FieldContentHash:
+		m.ResetContentHash()
+		return nil
+	case gleanobservation.FieldObservedAt:
+		m.ResetObservedAt()
+		return nil
+	case gleanobservation.FieldSourceUpdatedAt:
+		m.ResetSourceUpdatedAt()
+		return nil
+	case gleanobservation.FieldMetadata:
+		m.ResetMetadata()
+		return nil
+	case gleanobservation.FieldPublicationEvents:
+		m.ResetPublicationEvents()
+		return nil
+	case gleanobservation.FieldReview:
+		m.ResetReview()
+		return nil
+	case gleanobservation.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case gleanobservation.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case gleanobservation.FieldCreatedBy:
+		m.ResetCreatedBy()
+		return nil
+	case gleanobservation.FieldUpdatedBy:
+		m.ResetUpdatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservation field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GleanObservationMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GleanObservationMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GleanObservationMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GleanObservationMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GleanObservationMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GleanObservationMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GleanObservationMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown GleanObservation unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GleanObservationMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown GleanObservation edge %s", name)
+}
+
+// GleanObservationMatchMutation represents an operation that mutates the GleanObservationMatch nodes in the graph.
+type GleanObservationMatchMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *idgen.ID
+	observation_id    *idgen.ID
+	addobservation_id *idgen.ID
+	topic             *string
+	template_version  *string
+	created_at        *time.Time
+	updated_at        *time.Time
+	created_by        *idgen.ID
+	addcreated_by     *idgen.ID
+	updated_by        *idgen.ID
+	addupdated_by     *idgen.ID
+	clearedFields     map[string]struct{}
+	done              bool
+	oldValue          func(context.Context) (*GleanObservationMatch, error)
+	predicates        []predicate.GleanObservationMatch
+}
+
+var _ ent.Mutation = (*GleanObservationMatchMutation)(nil)
+
+// gleanobservationmatchOption allows management of the mutation configuration using functional options.
+type gleanobservationmatchOption func(*GleanObservationMatchMutation)
+
+// newGleanObservationMatchMutation creates new mutation for the GleanObservationMatch entity.
+func newGleanObservationMatchMutation(c config, op Op, opts ...gleanobservationmatchOption) *GleanObservationMatchMutation {
+	m := &GleanObservationMatchMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGleanObservationMatch,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGleanObservationMatchID sets the ID field of the mutation.
+func withGleanObservationMatchID(id idgen.ID) gleanobservationmatchOption {
+	return func(m *GleanObservationMatchMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GleanObservationMatch
+		)
+		m.oldValue = func(ctx context.Context) (*GleanObservationMatch, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GleanObservationMatch.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGleanObservationMatch sets the old GleanObservationMatch of the mutation.
+func withGleanObservationMatch(node *GleanObservationMatch) gleanobservationmatchOption {
+	return func(m *GleanObservationMatchMutation) {
+		m.oldValue = func(context.Context) (*GleanObservationMatch, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GleanObservationMatchMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GleanObservationMatchMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of GleanObservationMatch entities.
+func (m *GleanObservationMatchMutation) SetID(id idgen.ID) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GleanObservationMatchMutation) ID() (id idgen.ID, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GleanObservationMatchMutation) IDs(ctx context.Context) ([]idgen.ID, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []idgen.ID{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GleanObservationMatch.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetObservationID sets the "observation_id" field.
+func (m *GleanObservationMatchMutation) SetObservationID(i idgen.ID) {
+	m.observation_id = &i
+	m.addobservation_id = nil
+}
+
+// ObservationID returns the value of the "observation_id" field in the mutation.
+func (m *GleanObservationMatchMutation) ObservationID() (r idgen.ID, exists bool) {
+	v := m.observation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObservationID returns the old "observation_id" field's value of the GleanObservationMatch entity.
+// If the GleanObservationMatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMatchMutation) OldObservationID(ctx context.Context) (v idgen.ID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObservationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObservationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObservationID: %w", err)
+	}
+	return oldValue.ObservationID, nil
+}
+
+// AddObservationID adds i to the "observation_id" field.
+func (m *GleanObservationMatchMutation) AddObservationID(i idgen.ID) {
+	if m.addobservation_id != nil {
+		*m.addobservation_id += i
+	} else {
+		m.addobservation_id = &i
+	}
+}
+
+// AddedObservationID returns the value that was added to the "observation_id" field in this mutation.
+func (m *GleanObservationMatchMutation) AddedObservationID() (r idgen.ID, exists bool) {
+	v := m.addobservation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetObservationID resets all changes to the "observation_id" field.
+func (m *GleanObservationMatchMutation) ResetObservationID() {
+	m.observation_id = nil
+	m.addobservation_id = nil
+}
+
+// SetTopic sets the "topic" field.
+func (m *GleanObservationMatchMutation) SetTopic(s string) {
+	m.topic = &s
+}
+
+// Topic returns the value of the "topic" field in the mutation.
+func (m *GleanObservationMatchMutation) Topic() (r string, exists bool) {
+	v := m.topic
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTopic returns the old "topic" field's value of the GleanObservationMatch entity.
+// If the GleanObservationMatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMatchMutation) OldTopic(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTopic is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTopic requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTopic: %w", err)
+	}
+	return oldValue.Topic, nil
+}
+
+// ResetTopic resets all changes to the "topic" field.
+func (m *GleanObservationMatchMutation) ResetTopic() {
+	m.topic = nil
+}
+
+// SetTemplateVersion sets the "template_version" field.
+func (m *GleanObservationMatchMutation) SetTemplateVersion(s string) {
+	m.template_version = &s
+}
+
+// TemplateVersion returns the value of the "template_version" field in the mutation.
+func (m *GleanObservationMatchMutation) TemplateVersion() (r string, exists bool) {
+	v := m.template_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemplateVersion returns the old "template_version" field's value of the GleanObservationMatch entity.
+// If the GleanObservationMatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMatchMutation) OldTemplateVersion(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemplateVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemplateVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemplateVersion: %w", err)
+	}
+	return oldValue.TemplateVersion, nil
+}
+
+// ResetTemplateVersion resets all changes to the "template_version" field.
+func (m *GleanObservationMatchMutation) ResetTemplateVersion() {
+	m.template_version = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GleanObservationMatchMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GleanObservationMatchMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GleanObservationMatch entity.
+// If the GleanObservationMatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMatchMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GleanObservationMatchMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GleanObservationMatchMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GleanObservationMatchMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GleanObservationMatch entity.
+// If the GleanObservationMatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMatchMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GleanObservationMatchMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (m *GleanObservationMatchMutation) SetCreatedBy(i idgen.ID) {
+	m.created_by = &i
+	m.addcreated_by = nil
+}
+
+// CreatedBy returns the value of the "created_by" field in the mutation.
+func (m *GleanObservationMatchMutation) CreatedBy() (r idgen.ID, exists bool) {
+	v := m.created_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedBy returns the old "created_by" field's value of the GleanObservationMatch entity.
+// If the GleanObservationMatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMatchMutation) OldCreatedBy(ctx context.Context) (v *idgen.ID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedBy: %w", err)
+	}
+	return oldValue.CreatedBy, nil
+}
+
+// AddCreatedBy adds i to the "created_by" field.
+func (m *GleanObservationMatchMutation) AddCreatedBy(i idgen.ID) {
+	if m.addcreated_by != nil {
+		*m.addcreated_by += i
+	} else {
+		m.addcreated_by = &i
+	}
+}
+
+// AddedCreatedBy returns the value that was added to the "created_by" field in this mutation.
+func (m *GleanObservationMatchMutation) AddedCreatedBy() (r idgen.ID, exists bool) {
+	v := m.addcreated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (m *GleanObservationMatchMutation) ClearCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	m.clearedFields[gleanobservationmatch.FieldCreatedBy] = struct{}{}
+}
+
+// CreatedByCleared returns if the "created_by" field was cleared in this mutation.
+func (m *GleanObservationMatchMutation) CreatedByCleared() bool {
+	_, ok := m.clearedFields[gleanobservationmatch.FieldCreatedBy]
+	return ok
+}
+
+// ResetCreatedBy resets all changes to the "created_by" field.
+func (m *GleanObservationMatchMutation) ResetCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	delete(m.clearedFields, gleanobservationmatch.FieldCreatedBy)
+}
+
+// SetUpdatedBy sets the "updated_by" field.
+func (m *GleanObservationMatchMutation) SetUpdatedBy(i idgen.ID) {
+	m.updated_by = &i
+	m.addupdated_by = nil
+}
+
+// UpdatedBy returns the value of the "updated_by" field in the mutation.
+func (m *GleanObservationMatchMutation) UpdatedBy() (r idgen.ID, exists bool) {
+	v := m.updated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedBy returns the old "updated_by" field's value of the GleanObservationMatch entity.
+// If the GleanObservationMatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanObservationMatchMutation) OldUpdatedBy(ctx context.Context) (v *idgen.ID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedBy: %w", err)
+	}
+	return oldValue.UpdatedBy, nil
+}
+
+// AddUpdatedBy adds i to the "updated_by" field.
+func (m *GleanObservationMatchMutation) AddUpdatedBy(i idgen.ID) {
+	if m.addupdated_by != nil {
+		*m.addupdated_by += i
+	} else {
+		m.addupdated_by = &i
+	}
+}
+
+// AddedUpdatedBy returns the value that was added to the "updated_by" field in this mutation.
+func (m *GleanObservationMatchMutation) AddedUpdatedBy() (r idgen.ID, exists bool) {
+	v := m.addupdated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearUpdatedBy clears the value of the "updated_by" field.
+func (m *GleanObservationMatchMutation) ClearUpdatedBy() {
+	m.updated_by = nil
+	m.addupdated_by = nil
+	m.clearedFields[gleanobservationmatch.FieldUpdatedBy] = struct{}{}
+}
+
+// UpdatedByCleared returns if the "updated_by" field was cleared in this mutation.
+func (m *GleanObservationMatchMutation) UpdatedByCleared() bool {
+	_, ok := m.clearedFields[gleanobservationmatch.FieldUpdatedBy]
+	return ok
+}
+
+// ResetUpdatedBy resets all changes to the "updated_by" field.
+func (m *GleanObservationMatchMutation) ResetUpdatedBy() {
+	m.updated_by = nil
+	m.addupdated_by = nil
+	delete(m.clearedFields, gleanobservationmatch.FieldUpdatedBy)
+}
+
+// Where appends a list predicates to the GleanObservationMatchMutation builder.
+func (m *GleanObservationMatchMutation) Where(ps ...predicate.GleanObservationMatch) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GleanObservationMatchMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GleanObservationMatchMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GleanObservationMatch, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GleanObservationMatchMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GleanObservationMatchMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GleanObservationMatch).
+func (m *GleanObservationMatchMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GleanObservationMatchMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.observation_id != nil {
+		fields = append(fields, gleanobservationmatch.FieldObservationID)
+	}
+	if m.topic != nil {
+		fields = append(fields, gleanobservationmatch.FieldTopic)
+	}
+	if m.template_version != nil {
+		fields = append(fields, gleanobservationmatch.FieldTemplateVersion)
+	}
+	if m.created_at != nil {
+		fields = append(fields, gleanobservationmatch.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, gleanobservationmatch.FieldUpdatedAt)
+	}
+	if m.created_by != nil {
+		fields = append(fields, gleanobservationmatch.FieldCreatedBy)
+	}
+	if m.updated_by != nil {
+		fields = append(fields, gleanobservationmatch.FieldUpdatedBy)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GleanObservationMatchMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case gleanobservationmatch.FieldObservationID:
+		return m.ObservationID()
+	case gleanobservationmatch.FieldTopic:
+		return m.Topic()
+	case gleanobservationmatch.FieldTemplateVersion:
+		return m.TemplateVersion()
+	case gleanobservationmatch.FieldCreatedAt:
+		return m.CreatedAt()
+	case gleanobservationmatch.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case gleanobservationmatch.FieldCreatedBy:
+		return m.CreatedBy()
+	case gleanobservationmatch.FieldUpdatedBy:
+		return m.UpdatedBy()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GleanObservationMatchMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case gleanobservationmatch.FieldObservationID:
+		return m.OldObservationID(ctx)
+	case gleanobservationmatch.FieldTopic:
+		return m.OldTopic(ctx)
+	case gleanobservationmatch.FieldTemplateVersion:
+		return m.OldTemplateVersion(ctx)
+	case gleanobservationmatch.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case gleanobservationmatch.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case gleanobservationmatch.FieldCreatedBy:
+		return m.OldCreatedBy(ctx)
+	case gleanobservationmatch.FieldUpdatedBy:
+		return m.OldUpdatedBy(ctx)
+	}
+	return nil, fmt.Errorf("unknown GleanObservationMatch field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GleanObservationMatchMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case gleanobservationmatch.FieldObservationID:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObservationID(v)
+		return nil
+	case gleanobservationmatch.FieldTopic:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTopic(v)
+		return nil
+	case gleanobservationmatch.FieldTemplateVersion:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemplateVersion(v)
+		return nil
+	case gleanobservationmatch.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case gleanobservationmatch.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case gleanobservationmatch.FieldCreatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedBy(v)
+		return nil
+	case gleanobservationmatch.FieldUpdatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservationMatch field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GleanObservationMatchMutation) AddedFields() []string {
+	var fields []string
+	if m.addobservation_id != nil {
+		fields = append(fields, gleanobservationmatch.FieldObservationID)
+	}
+	if m.addcreated_by != nil {
+		fields = append(fields, gleanobservationmatch.FieldCreatedBy)
+	}
+	if m.addupdated_by != nil {
+		fields = append(fields, gleanobservationmatch.FieldUpdatedBy)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GleanObservationMatchMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case gleanobservationmatch.FieldObservationID:
+		return m.AddedObservationID()
+	case gleanobservationmatch.FieldCreatedBy:
+		return m.AddedCreatedBy()
+	case gleanobservationmatch.FieldUpdatedBy:
+		return m.AddedUpdatedBy()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GleanObservationMatchMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case gleanobservationmatch.FieldObservationID:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddObservationID(v)
+		return nil
+	case gleanobservationmatch.FieldCreatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedBy(v)
+		return nil
+	case gleanobservationmatch.FieldUpdatedBy:
+		v, ok := value.(idgen.ID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUpdatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservationMatch numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GleanObservationMatchMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(gleanobservationmatch.FieldCreatedBy) {
+		fields = append(fields, gleanobservationmatch.FieldCreatedBy)
+	}
+	if m.FieldCleared(gleanobservationmatch.FieldUpdatedBy) {
+		fields = append(fields, gleanobservationmatch.FieldUpdatedBy)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GleanObservationMatchMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GleanObservationMatchMutation) ClearField(name string) error {
+	switch name {
+	case gleanobservationmatch.FieldCreatedBy:
+		m.ClearCreatedBy()
+		return nil
+	case gleanobservationmatch.FieldUpdatedBy:
+		m.ClearUpdatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservationMatch nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GleanObservationMatchMutation) ResetField(name string) error {
+	switch name {
+	case gleanobservationmatch.FieldObservationID:
+		m.ResetObservationID()
+		return nil
+	case gleanobservationmatch.FieldTopic:
+		m.ResetTopic()
+		return nil
+	case gleanobservationmatch.FieldTemplateVersion:
+		m.ResetTemplateVersion()
+		return nil
+	case gleanobservationmatch.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case gleanobservationmatch.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case gleanobservationmatch.FieldCreatedBy:
+		m.ResetCreatedBy()
+		return nil
+	case gleanobservationmatch.FieldUpdatedBy:
+		m.ResetUpdatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown GleanObservationMatch field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GleanObservationMatchMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GleanObservationMatchMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GleanObservationMatchMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GleanObservationMatchMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GleanObservationMatchMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GleanObservationMatchMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GleanObservationMatchMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown GleanObservationMatch unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GleanObservationMatchMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown GleanObservationMatch edge %s", name)
+}
+
 // GleanPaperMutation represents an operation that mutates the GleanPaper nodes in the graph.
 type GleanPaperMutation struct {
 	config
@@ -2128,6 +4304,7 @@ type GleanPaperMutation struct {
 	typ                string
 	id                 *idgen.ID
 	identity_key       *string
+	origin             *string
 	title              *string
 	title_zh           *string
 	abstract           *string
@@ -2296,6 +4473,42 @@ func (m *GleanPaperMutation) OldIdentityKey(ctx context.Context) (v string, err 
 // ResetIdentityKey resets all changes to the "identity_key" field.
 func (m *GleanPaperMutation) ResetIdentityKey() {
 	m.identity_key = nil
+}
+
+// SetOrigin sets the "origin" field.
+func (m *GleanPaperMutation) SetOrigin(s string) {
+	m.origin = &s
+}
+
+// Origin returns the value of the "origin" field in the mutation.
+func (m *GleanPaperMutation) Origin() (r string, exists bool) {
+	v := m.origin
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOrigin returns the old "origin" field's value of the GleanPaper entity.
+// If the GleanPaper object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanPaperMutation) OldOrigin(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOrigin is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOrigin requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOrigin: %w", err)
+	}
+	return oldValue.Origin, nil
+}
+
+// ResetOrigin resets all changes to the "origin" field.
+func (m *GleanPaperMutation) ResetOrigin() {
+	m.origin = nil
 }
 
 // SetTitle sets the "title" field.
@@ -3186,9 +5399,12 @@ func (m *GleanPaperMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GleanPaperMutation) Fields() []string {
-	fields := make([]string, 0, 20)
+	fields := make([]string, 0, 21)
 	if m.identity_key != nil {
 		fields = append(fields, gleanpaper.FieldIdentityKey)
+	}
+	if m.origin != nil {
+		fields = append(fields, gleanpaper.FieldOrigin)
 	}
 	if m.title != nil {
 		fields = append(fields, gleanpaper.FieldTitle)
@@ -3257,6 +5473,8 @@ func (m *GleanPaperMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case gleanpaper.FieldIdentityKey:
 		return m.IdentityKey()
+	case gleanpaper.FieldOrigin:
+		return m.Origin()
 	case gleanpaper.FieldTitle:
 		return m.Title()
 	case gleanpaper.FieldTitleZh:
@@ -3306,6 +5524,8 @@ func (m *GleanPaperMutation) OldField(ctx context.Context, name string) (ent.Val
 	switch name {
 	case gleanpaper.FieldIdentityKey:
 		return m.OldIdentityKey(ctx)
+	case gleanpaper.FieldOrigin:
+		return m.OldOrigin(ctx)
 	case gleanpaper.FieldTitle:
 		return m.OldTitle(ctx)
 	case gleanpaper.FieldTitleZh:
@@ -3359,6 +5579,13 @@ func (m *GleanPaperMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIdentityKey(v)
+		return nil
+	case gleanpaper.FieldOrigin:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOrigin(v)
 		return nil
 	case gleanpaper.FieldTitle:
 		v, ok := value.(string)
@@ -3622,6 +5849,9 @@ func (m *GleanPaperMutation) ResetField(name string) error {
 	switch name {
 	case gleanpaper.FieldIdentityKey:
 		m.ResetIdentityKey()
+		return nil
+	case gleanpaper.FieldOrigin:
+		m.ResetOrigin()
 		return nil
 	case gleanpaper.FieldTitle:
 		m.ResetTitle()
@@ -5374,6 +7604,10 @@ type GleanVenueMutation struct {
 	typ                   string
 	id                    *idgen.ID
 	name                  *string
+	issns                 *[]string
+	appendissns           []string
+	aliases               *[]string
+	appendaliases         []string
 	kind                  *string
 	jif                   *float64
 	addjif                *float64
@@ -5536,6 +7770,108 @@ func (m *GleanVenueMutation) OldName(ctx context.Context) (v string, err error) 
 // ResetName resets all changes to the "name" field.
 func (m *GleanVenueMutation) ResetName() {
 	m.name = nil
+}
+
+// SetIssns sets the "issns" field.
+func (m *GleanVenueMutation) SetIssns(s []string) {
+	m.issns = &s
+	m.appendissns = nil
+}
+
+// Issns returns the value of the "issns" field in the mutation.
+func (m *GleanVenueMutation) Issns() (r []string, exists bool) {
+	v := m.issns
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIssns returns the old "issns" field's value of the GleanVenue entity.
+// If the GleanVenue object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanVenueMutation) OldIssns(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIssns is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIssns requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIssns: %w", err)
+	}
+	return oldValue.Issns, nil
+}
+
+// AppendIssns adds s to the "issns" field.
+func (m *GleanVenueMutation) AppendIssns(s []string) {
+	m.appendissns = append(m.appendissns, s...)
+}
+
+// AppendedIssns returns the list of values that were appended to the "issns" field in this mutation.
+func (m *GleanVenueMutation) AppendedIssns() ([]string, bool) {
+	if len(m.appendissns) == 0 {
+		return nil, false
+	}
+	return m.appendissns, true
+}
+
+// ResetIssns resets all changes to the "issns" field.
+func (m *GleanVenueMutation) ResetIssns() {
+	m.issns = nil
+	m.appendissns = nil
+}
+
+// SetAliases sets the "aliases" field.
+func (m *GleanVenueMutation) SetAliases(s []string) {
+	m.aliases = &s
+	m.appendaliases = nil
+}
+
+// Aliases returns the value of the "aliases" field in the mutation.
+func (m *GleanVenueMutation) Aliases() (r []string, exists bool) {
+	v := m.aliases
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAliases returns the old "aliases" field's value of the GleanVenue entity.
+// If the GleanVenue object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GleanVenueMutation) OldAliases(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAliases is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAliases requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAliases: %w", err)
+	}
+	return oldValue.Aliases, nil
+}
+
+// AppendAliases adds s to the "aliases" field.
+func (m *GleanVenueMutation) AppendAliases(s []string) {
+	m.appendaliases = append(m.appendaliases, s...)
+}
+
+// AppendedAliases returns the list of values that were appended to the "aliases" field in this mutation.
+func (m *GleanVenueMutation) AppendedAliases() ([]string, bool) {
+	if len(m.appendaliases) == 0 {
+		return nil, false
+	}
+	return m.appendaliases, true
+}
+
+// ResetAliases resets all changes to the "aliases" field.
+func (m *GleanVenueMutation) ResetAliases() {
+	m.aliases = nil
+	m.appendaliases = nil
 }
 
 // SetKind sets the "kind" field.
@@ -6177,9 +8513,15 @@ func (m *GleanVenueMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GleanVenueMutation) Fields() []string {
-	fields := make([]string, 0, 14)
+	fields := make([]string, 0, 16)
 	if m.name != nil {
 		fields = append(fields, gleanvenue.FieldName)
+	}
+	if m.issns != nil {
+		fields = append(fields, gleanvenue.FieldIssns)
+	}
+	if m.aliases != nil {
+		fields = append(fields, gleanvenue.FieldAliases)
 	}
 	if m.kind != nil {
 		fields = append(fields, gleanvenue.FieldKind)
@@ -6230,6 +8572,10 @@ func (m *GleanVenueMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case gleanvenue.FieldName:
 		return m.Name()
+	case gleanvenue.FieldIssns:
+		return m.Issns()
+	case gleanvenue.FieldAliases:
+		return m.Aliases()
 	case gleanvenue.FieldKind:
 		return m.Kind()
 	case gleanvenue.FieldJif:
@@ -6267,6 +8613,10 @@ func (m *GleanVenueMutation) OldField(ctx context.Context, name string) (ent.Val
 	switch name {
 	case gleanvenue.FieldName:
 		return m.OldName(ctx)
+	case gleanvenue.FieldIssns:
+		return m.OldIssns(ctx)
+	case gleanvenue.FieldAliases:
+		return m.OldAliases(ctx)
 	case gleanvenue.FieldKind:
 		return m.OldKind(ctx)
 	case gleanvenue.FieldJif:
@@ -6308,6 +8658,20 @@ func (m *GleanVenueMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetName(v)
+		return nil
+	case gleanvenue.FieldIssns:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIssns(v)
+		return nil
+	case gleanvenue.FieldAliases:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAliases(v)
 		return nil
 	case gleanvenue.FieldKind:
 		v, ok := value.(string)
@@ -6523,6 +8887,12 @@ func (m *GleanVenueMutation) ResetField(name string) error {
 	switch name {
 	case gleanvenue.FieldName:
 		m.ResetName()
+		return nil
+	case gleanvenue.FieldIssns:
+		m.ResetIssns()
+		return nil
+	case gleanvenue.FieldAliases:
+		m.ResetAliases()
 		return nil
 	case gleanvenue.FieldKind:
 		m.ResetKind()

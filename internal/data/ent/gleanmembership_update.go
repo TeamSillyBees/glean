@@ -79,6 +79,20 @@ func (_u *GleanMembershipUpdate) SetNillableOriginalID(v *string) *GleanMembersh
 	return _u
 }
 
+// SetInclusionStatus sets the "inclusion_status" field.
+func (_u *GleanMembershipUpdate) SetInclusionStatus(v string) *GleanMembershipUpdate {
+	_u.mutation.SetInclusionStatus(v)
+	return _u
+}
+
+// SetNillableInclusionStatus sets the "inclusion_status" field if the given value is not nil.
+func (_u *GleanMembershipUpdate) SetNillableInclusionStatus(v *string) *GleanMembershipUpdate {
+	if v != nil {
+		_u.SetInclusionStatus(*v)
+	}
+	return _u
+}
+
 // SetTier sets the "tier" field.
 func (_u *GleanMembershipUpdate) SetTier(v string) *GleanMembershipUpdate {
 	_u.mutation.SetTier(v)
@@ -318,6 +332,9 @@ func (_u *GleanMembershipUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if value, ok := _u.mutation.OriginalID(); ok {
 		_spec.SetField(gleanmembership.FieldOriginalID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.InclusionStatus(); ok {
+		_spec.SetField(gleanmembership.FieldInclusionStatus, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Tier(); ok {
 		_spec.SetField(gleanmembership.FieldTier, field.TypeString, value)
 	}
@@ -433,6 +450,20 @@ func (_u *GleanMembershipUpdateOne) SetOriginalID(v string) *GleanMembershipUpda
 func (_u *GleanMembershipUpdateOne) SetNillableOriginalID(v *string) *GleanMembershipUpdateOne {
 	if v != nil {
 		_u.SetOriginalID(*v)
+	}
+	return _u
+}
+
+// SetInclusionStatus sets the "inclusion_status" field.
+func (_u *GleanMembershipUpdateOne) SetInclusionStatus(v string) *GleanMembershipUpdateOne {
+	_u.mutation.SetInclusionStatus(v)
+	return _u
+}
+
+// SetNillableInclusionStatus sets the "inclusion_status" field if the given value is not nil.
+func (_u *GleanMembershipUpdateOne) SetNillableInclusionStatus(v *string) *GleanMembershipUpdateOne {
+	if v != nil {
+		_u.SetInclusionStatus(*v)
 	}
 	return _u
 }
@@ -705,6 +736,9 @@ func (_u *GleanMembershipUpdateOne) sqlSave(ctx context.Context) (_node *GleanMe
 	}
 	if value, ok := _u.mutation.OriginalID(); ok {
 		_spec.SetField(gleanmembership.FieldOriginalID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.InclusionStatus(); ok {
+		_spec.SetField(gleanmembership.FieldInclusionStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Tier(); ok {
 		_spec.SetField(gleanmembership.FieldTier, field.TypeString, value)

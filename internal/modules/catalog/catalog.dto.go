@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"encoding/json"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 	"github.com/teamsillybees/glean/internal/platform/response"
 	"time"
@@ -13,6 +14,9 @@ type TopicVO struct {
 	Description     string `json:"description"`
 	Rule            string `json:"rule"`
 	MembershipCount int    `json:"membershipCount"`
+	HistoricalCount int    `json:"historicalCount"`
+	CandidateCount  int    `json:"candidateCount"`
+	CuratedCount    int    `json:"curatedCount"`
 }
 
 // SourceEvidence 保存来源及原始证据，不把接收日期冒充正式发表日期。
@@ -26,6 +30,8 @@ type SourceEvidence struct {
 
 // MembershipVO 保留主题内稳定标识、分类和原始记录。
 type MembershipVO struct {
+	ReadingNotes    map[string]string   `json:"readingNotes,omitempty"`
+	InclusionStatus string              `json:"inclusionStatus"`
 	Topic           string              `json:"topic"`
 	OriginalID      string              `json:"originalId"`
 	Tier            string              `json:"tier"`
@@ -40,25 +46,35 @@ type MembershipVO struct {
 
 // PaperVO 为只读论文详情，个人状态与历史元数据分开保存。
 type PaperVO struct {
-	ID               idgen.ID         `json:"id"`
-	Title            string           `json:"title"`
-	TitleZh          string           `json:"titleZh"`
-	Abstract         string           `json:"abstract"`
-	Authors          []string         `json:"authors"`
-	Year             int              `json:"year"`
-	Venue            string           `json:"venue"`
-	PublicationType  string           `json:"publicationType"`
-	DOI              string           `json:"doi"`
-	ArxivID          string           `json:"arxivId"`
-	URL              string           `json:"url"`
-	FormalOnlineDate *time.Time       `json:"formalOnlineDate"`
-	IssueDate        *time.Time       `json:"issueDate"`
-	DateProvenance   string           `json:"dateProvenance"`
-	ReadStatus       string           `json:"readStatus"`
-	Hidden           bool             `json:"hidden"`
-	IsMock           bool             `json:"isMock"`
-	Memberships      []MembershipVO   `json:"memberships"`
-	Evidence         []SourceEvidence `json:"evidence"`
+	Origin                string                `json:"origin"`
+	ImportedAt            *time.Time            `json:"importedAt,omitempty"`
+	FirstSeenAt           *time.Time            `json:"firstSeenAt,omitempty"`
+	LatestSourceUpdatedAt *time.Time            `json:"latestSourceUpdatedAt,omitempty"`
+	AbstractZh            string                `json:"abstractZh,omitempty"`
+	TranslationStatus     string                `json:"translationStatus,omitempty"`
+	Review                *ReviewVO             `json:"review,omitempty"`
+	LastObservedAt        *time.Time            `json:"lastObservedAt,omitempty"`
+	ObservationCount      int                   `json:"observationCount"`
+	Observations          []SourceObservationVO `json:"observations"`
+	ID                    idgen.ID              `json:"id"`
+	Title                 string                `json:"title"`
+	TitleZh               string                `json:"titleZh"`
+	Abstract              string                `json:"abstract"`
+	Authors               []string              `json:"authors"`
+	Year                  int                   `json:"year"`
+	Venue                 string                `json:"venue"`
+	PublicationType       string                `json:"publicationType"`
+	DOI                   string                `json:"doi"`
+	ArxivID               string                `json:"arxivId"`
+	URL                   string                `json:"url"`
+	FormalOnlineDate      *time.Time            `json:"formalOnlineDate"`
+	IssueDate             *time.Time            `json:"issueDate"`
+	DateProvenance        string                `json:"dateProvenance"`
+	ReadStatus            string                `json:"readStatus"`
+	Hidden                bool                  `json:"hidden"`
+	IsMock                bool                  `json:"isMock"`
+	Memberships           []MembershipVO        `json:"memberships"`
+	Evidence              []SourceEvidence      `json:"evidence"`
 }
 
 // ImportRecord 是本地历史基线导入 DTO，raw 保存原始来源。
@@ -98,6 +114,9 @@ type ImportResult struct {
 
 // PaperQuery 是共享查询条件，所有值通过 Ent 参数化。
 type PaperQuery struct {
+	CollectionScope string `query:"collectionScope" enum:"all,curated,pending"`
+	InclusionStatus string `query:"inclusionStatus" enum:"historical,pending-review"`
+	Source          string `query:"source" maxLength:"100"`
 	Topic           string `query:"topic"`
 	Q               string `query:"q" maxLength:"300"`
 	Year            int    `query:"year" minimum:"0" maximum:"9999"`
@@ -114,7 +133,7 @@ type PaperQuery struct {
 	Hidden          string `query:"hidden" default:"exclude" enum:"exclude,include,only"`
 	Page            int    `query:"page" default:"1" minimum:"1" maximum:"1000000"`
 	PageSize        int    `query:"pageSize" default:"20" minimum:"1" maximum:"100"`
-	Sort            string `query:"sort" default:"newest" enum:"newest,oldest,title"`
+	Sort            string `query:"sort" default:"newest" enum:"newest,oldest,title,observed,source-updated"`
 }
 
 // PaperPageVO 为稳定排序的全局去重分页结果。
@@ -133,17 +152,19 @@ type FacetVO struct {
 
 // FacetsVO 提供后端计算的全部筛选项。
 type FacetsVO struct {
-	Years            []FacetVO            `json:"years"`
-	Venues           []FacetVO            `json:"venues"`
-	PublicationTypes []FacetVO            `json:"publicationTypes"`
-	Categories       []FacetVO            `json:"categories"`
-	Tiers            []FacetVO            `json:"tiers"`
-	ReadStatuses     []FacetVO            `json:"readStatuses"`
-	Tasks            []FacetVO            `json:"tasks"`
-	Roles            []FacetVO            `json:"roles"`
-	Directions       []FacetVO            `json:"directions"`
-	Methods          []FacetVO            `json:"methods"`
-	Dimensions       map[string][]FacetVO `json:"dimensions"`
+	Sources           []FacetVO            `json:"sources"`
+	InclusionStatuses []FacetVO            `json:"inclusionStatuses"`
+	Years             []FacetVO            `json:"years"`
+	Venues            []FacetVO            `json:"venues"`
+	PublicationTypes  []FacetVO            `json:"publicationTypes"`
+	Categories        []FacetVO            `json:"categories"`
+	Tiers             []FacetVO            `json:"tiers"`
+	ReadStatuses      []FacetVO            `json:"readStatuses"`
+	Tasks             []FacetVO            `json:"tasks"`
+	Roles             []FacetVO            `json:"roles"`
+	Directions        []FacetVO            `json:"directions"`
+	Methods           []FacetVO            `json:"methods"`
+	Dimensions        map[string][]FacetVO `json:"dimensions"`
 }
 
 // PreferenceVO 保存当前用户的展示筛选偏好。
@@ -159,6 +180,8 @@ type PaperStateVO struct {
 
 // VenueVO 保存版本化资格证据，不由前端推测指标。
 type VenueVO struct {
+	ISSNs               []string       `json:"issns"`
+	Aliases             []string       `json:"aliases"`
 	ID                  idgen.ID       `json:"id"`
 	Name                string         `json:"name"`
 	Kind                string         `json:"kind"`
@@ -206,4 +229,79 @@ type stateRequest struct {
 }
 type stateResponse struct {
 	Body response.SuccessVO[PaperStateVO]
+}
+
+// ReviewVO 将 LLM 模拟输出与真实来源和正式科研纳入判定严格分离。
+type ReviewVO struct {
+	Provider           string    `json:"provider"`
+	Model              string    `json:"model"`
+	PromptVersion      string    `json:"promptVersion"`
+	ReviewedAt         time.Time `json:"reviewedAt"`
+	IsMock             bool      `json:"isMock"`
+	ScientificReviewed bool      `json:"scientificReviewed"`
+	InclusionStatus    string    `json:"inclusionStatus"`
+	Summary            string    `json:"summary"`
+}
+
+// PublicationEventVO 保留来源明示的日期类型，不用接收日期替代在线/卷期日期。
+type PublicationEventVO struct {
+	Kind     string    `json:"kind"`
+	Date     time.Time `json:"date"`
+	Evidence string    `json:"evidence"`
+}
+
+// ObservationInput 是真实来源向目录提交的版本化证据，不等于科学纳入批准。
+type ObservationInput struct {
+	CoreDiscovery     bool                 `json:"coreDiscovery,omitempty"`
+	EventType         string               `json:"eventType"`
+	SourceURL         string               `json:"sourceUrl"`
+	PMID              string               `json:"pmid,omitempty"`
+	RunID             idgen.ID             `json:"runId"`
+	Source            string               `json:"source"`
+	SourceID          string               `json:"sourceId"`
+	Version           string               `json:"version"`
+	Title             string               `json:"title"`
+	Abstract          string               `json:"abstract"`
+	URL               string               `json:"url"`
+	DOI               string               `json:"doi"`
+	ArxivID           string               `json:"arxivId"`
+	Venue             string               `json:"venue"`
+	ISSNs             []string             `json:"issns"`
+	Authors           []string             `json:"authors"`
+	PublicationType   string               `json:"publicationType"`
+	ObservedAt        time.Time            `json:"observedAt"`
+	SourceUpdatedAt   *time.Time           `json:"sourceUpdatedAt"`
+	PublicationEvents []PublicationEventVO `json:"publicationEvents"`
+	Review            ReviewVO             `json:"review"`
+	Topics            []string             `json:"topics"`
+	TemplateVersion   string               `json:"templateVersion"`
+	Raw               json.RawMessage      `json:"raw"`
+}
+
+// SourceObservationVO 是不可覆盖的来源版本及独立审核标记。
+type SourceObservationVO struct {
+	ObservationInput
+	ID          idgen.ID `json:"id"`
+	ContentHash string   `json:"contentHash"`
+}
+
+// ObservationResult 返回原子投影的幂等结果。
+type ObservationResult struct {
+	PaperID          idgen.ID `json:"paperId"`
+	ObservationID    idgen.ID `json:"observationId"`
+	Created          bool     `json:"created"`
+	MembershipsAdded int      `json:"membershipsAdded"`
+}
+
+// CoreJournalVO 提供真实注册证据用于核心来源发现，不能将发现范围误作科学结论。
+type CoreJournalVO struct {
+	DiscoveryTopics       []string `json:"discoveryTopics"`
+	QualificationVerified bool     `json:"qualificationVerified"`
+	Name                  string   `json:"name"`
+	ISSNs                 []string `json:"issns"`
+	JIF                   *float64 `json:"jif"`
+	MetricYear            int      `json:"metricYear"`
+	MetricSource          string   `json:"metricSource"`
+	EligibleTopics        []string `json:"eligibleTopics"`
+	RegistryVersion       string   `json:"registryVersion"`
 }

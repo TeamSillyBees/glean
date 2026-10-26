@@ -90,6 +90,8 @@ func TestGleanFrontendAuthContract(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, request(http.MethodPost, "/api/v1/auth/refresh", string(payload), "").Code)
 	for _, topic := range []string{"biomed-ai", "llm-agent", "biomed-worldmodel"} {
 		mock.ExpectQuery(`SELECT COUNT\("glean_membership"\."id"\).*`).WithArgs(topic).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+		mock.ExpectQuery(`SELECT COUNT\("glean_membership"\."id"\).*`).WithArgs(topic, "historical").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+		mock.ExpectQuery(`SELECT COUNT\("glean_membership"\."id"\).*`).WithArgs(topic, "historical", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	}
 	listed := request(http.MethodGet, "/api/v1/catalog/topics", "", rotated.Data.AccessToken)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())

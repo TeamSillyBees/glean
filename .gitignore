@@ -16,3 +16,10 @@ coverage/
 
 # Local planning note; not part of the deliverable
 docs/glean/implementation-brief.md
+
+# Generated interpreter caches and root build outputs
+__pycache__/
+*.py[cod]
+/server
+/glean-monitor
+/importbaseline

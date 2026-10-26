@@ -20,7 +20,7 @@ func NewService(client *ent.Client) *Service { return &Service{client: client} }
 
 var topics = []TopicVO{
 	{Slug: "biomed-ai", Name: "生物医学 × AI", Description: "生命科学、医学与人工智能交叉研究", Rule: "JIF > 10；CCF A 主会正式全文"},
-	{Slug: "llm-agent", Name: "LLM × Agent", Description: "大语言模型与智能体研究", Rule: "JIF ≥ 4；CCF A/B/C 主会正式全文"},
+	{Slug: "llm-agent", Name: "大模型知识工程", Description: "LLM / Agent 知识工程：知识抽取、构建、融合与验证", Rule: "JIF ≥ 4；CCF A/B/C 主会正式全文"},
 	{Slug: "biomed-worldmodel", Name: "生物医学 × 世界模型", Description: "生物医学环境建模与可交互预测", Rule: "JIF ≥ 4；CCF A/B/C 主会正式全文"},
 }
 
@@ -44,8 +44,14 @@ func userID(ctx context.Context) (idgen.ID, error) {
 	return id, nil
 }
 func validateQuery(q *PaperQuery) error {
+	if q.CollectionScope != "" && q.CollectionScope != "all" && q.CollectionScope != "curated" && q.CollectionScope != "pending" {
+		return bizerrors.BadRequest("invalid collection scope")
+	}
 	if q.Topic != "" && !validTopic(q.Topic) {
 		return bizerrors.BadRequest("unknown topic")
+	}
+	if q.InclusionStatus != "" && q.InclusionStatus != "historical" && q.InclusionStatus != "pending-review" {
+		return bizerrors.BadRequest("invalid inclusion status")
 	}
 	if q.Page == 0 {
 		q.Page = 1
@@ -65,7 +71,7 @@ func validateQuery(q *PaperQuery) error {
 	if q.Hidden != "exclude" && q.Hidden != "include" && q.Hidden != "only" {
 		return bizerrors.BadRequest("invalid hidden filter")
 	}
-	if q.Sort != "newest" && q.Sort != "oldest" && q.Sort != "title" {
+	if q.Sort != "newest" && q.Sort != "oldest" && q.Sort != "title" && q.Sort != "observed" && q.Sort != "source-updated" {
 		return bizerrors.BadRequest("invalid sort")
 	}
 	if len(q.Q) > 1200 || len(q.Dimension) > 2000 {
@@ -147,6 +153,11 @@ func normalizeImport(r *ImportRecord) error {
 	}
 	if r.Source == "" {
 		r.Source = "historical-baseline"
+	}
+	if r.Topic == "llm-agent" {
+		if _, ok := r.Dimensions["display_collection"]; !ok {
+			r.Dimensions["display_collection"] = []string{historicalLLMCollection(r.Raw)}
+		}
 	}
 	if r.ReadStatus == "" {
 		r.ReadStatus = "unread"

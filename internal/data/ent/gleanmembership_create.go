@@ -39,6 +39,20 @@ func (_c *GleanMembershipCreate) SetOriginalID(v string) *GleanMembershipCreate 
 	return _c
 }
 
+// SetInclusionStatus sets the "inclusion_status" field.
+func (_c *GleanMembershipCreate) SetInclusionStatus(v string) *GleanMembershipCreate {
+	_c.mutation.SetInclusionStatus(v)
+	return _c
+}
+
+// SetNillableInclusionStatus sets the "inclusion_status" field if the given value is not nil.
+func (_c *GleanMembershipCreate) SetNillableInclusionStatus(v *string) *GleanMembershipCreate {
+	if v != nil {
+		_c.SetInclusionStatus(*v)
+	}
+	return _c
+}
+
 // SetTier sets the "tier" field.
 func (_c *GleanMembershipCreate) SetTier(v string) *GleanMembershipCreate {
 	_c.mutation.SetTier(v)
@@ -232,6 +246,10 @@ func (_c *GleanMembershipCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *GleanMembershipCreate) defaults() {
+	if _, ok := _c.mutation.InclusionStatus(); !ok {
+		v := gleanmembership.DefaultInclusionStatus
+		_c.mutation.SetInclusionStatus(v)
+	}
 	if _, ok := _c.mutation.Tier(); !ok {
 		v := gleanmembership.DefaultTier
 		_c.mutation.SetTier(v)
@@ -303,6 +321,9 @@ func (_c *GleanMembershipCreate) check() error {
 		if err := gleanmembership.OriginalIDValidator(v); err != nil {
 			return &ValidationError{Name: "original_id", err: fmt.Errorf(`ent: validator failed for field "GleanMembership.original_id": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.InclusionStatus(); !ok {
+		return &ValidationError{Name: "inclusion_status", err: errors.New(`ent: missing required field "GleanMembership.inclusion_status"`)}
 	}
 	if _, ok := _c.mutation.Tier(); !ok {
 		return &ValidationError{Name: "tier", err: errors.New(`ent: missing required field "GleanMembership.tier"`)}
@@ -382,6 +403,10 @@ func (_c *GleanMembershipCreate) createSpec() (*GleanMembership, *sqlgraph.Creat
 	if value, ok := _c.mutation.OriginalID(); ok {
 		_spec.SetField(gleanmembership.FieldOriginalID, field.TypeString, value)
 		_node.OriginalID = value
+	}
+	if value, ok := _c.mutation.InclusionStatus(); ok {
+		_spec.SetField(gleanmembership.FieldInclusionStatus, field.TypeString, value)
+		_node.InclusionStatus = value
 	}
 	if value, ok := _c.mutation.Tier(); ok {
 		_spec.SetField(gleanmembership.FieldTier, field.TypeString, value)

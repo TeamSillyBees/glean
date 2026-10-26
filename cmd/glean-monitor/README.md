@@ -1,49 +1,65 @@
-# Glean mock monitor runner
+# Glean real monitor runner
 
-This command exercises real monitor orchestration with synthetic source records and deterministic mock review. It never calls source APIs or an LLM, never inserts mock papers into the historical catalog, and never enables a scheduler.
+**Normal operation uses real source APIs, PostgreSQL and catalog ingestion. Only LLM review is mocked.** Official sources are Crossref, PubMed, arXiv OAI-PMH, bioRxiv, Europe PMC and medRxiv. Synthetic sources require an explicit `--demo` flag and are not part of server startup.
 
-## Offline (default)
+## Configure once
 
-```sh
-go run ./cmd/glean-monitor --node 11 --scenario incremental
-```
+Apply the normal application migrations and admin seed, then privately configure:
 
-`baseline` produces four mock candidate versions; `incremental` produces twelve versions across two runs; `failure` demonstrates a malformed source without advancing its checkpoint. The default is in-memory. `--full` includes the synthetic raw evidence and mock review objects.
+- `INITRA_MONITOR_DATABASE_URL`: the **same database as the server**. Never commit the DSN or pass it on the command line.
+- `INITRA_MONITOR_OPERATOR_ID`: an existing enabled user ID, used for audited state and catalog writes.
+- `INITRA_IDGEN_NODE`: a Snowflake node distinct from every running server/importer. `--node` can override it for a separate CLI process.
 
-## Persist mock runs for the actual monitor API
-
-1. Apply the existing application migrations and local admin seed using the normal project workflow. Use the same PostgreSQL database as the server.
-2. Choose a Snowflake node ID distinct from every running application/importer instance. Obtain the ID of an existing enabled operator account for audit.
-3. Set `INITRA_MONITOR_DATABASE_URL` privately. Do not commit a DSN or pass it as a command-line argument.
-4. Explicitly opt in:
+Remote databases require `sslmode=verify-full`. Loopback development can explicitly use `--allow-local-insecure` with `sslmode=disable`; remote plaintext and endpoint/query/environment overrides are rejected.
 
 ```sh
-# INITRA_MONITOR_DATABASE_URL must already be configured privately.
-go run ./cmd/glean-monitor \
-  --node 11 \
-  --persist-mock \
-  --operator YOUR_EXISTING_USER_ID \
-  --scenario incremental \
-  --at 2026-10-26T12:00:00Z
+# These commands read the private environment above; no source or LLM API key is needed.
+go run ./cmd/glean-monitor --doctor
+
+go run ./cmd/glean-monitor --node 11 \
+  --sources crossref,pubmed,europepmc \
+  --since 2026-10-20T00:00:00Z \
+  --until 2026-10-26T00:00:00Z \
+  --max-pages 6
 ```
 
-Remote databases require `sslmode=verify-full`. Local loopback-only development can explicitly add `--allow-local-insecure` when its DSN uses `sslmode=disable`; this never relaxes remote TLS checks.
+`--doctor` checks database/actor/registry/source configuration without calling any source API. Error diagnostics produce a nonzero exit status. `--contact` is optional explicit source contact information; no account email is inferred.
 
-The command writes `glean_monitor_state` under the default `glean-monitor-mock-v1` key used by the running API. Refresh the authenticated views:
+The CLI is bounded to two minutes and 1–200 upstream request attempts (`--max-pages`, default 12). Valid observations are reviewed by the clearly marked mock reviewer and **written to the real catalog as soon as each acquired page is ready**. They are visible in the catalog’s pending-review collection (API `collectionScope=pending`) as real papers; the curated historical collection stays separate. `record.isMock=false` and `review.isMock=true` are intentionally independent.
+
+## Resume and scheduled scans
+
+Omitting `--since` and `--until` resumes a pending durable run, or starts a due run using the stored 72-hour UTC schedule and source checkpoints. Explicit windows are half-open, at most 90 days, and cannot end in the future. Reusing the same completed explicit window is idempotent while its run receipt is retained; durable catalog observation identities also prevent duplicate papers after monitor-history compaction.
+
+A finite invocation may stop **pending** because its page/time budget is exhausted, pagination remains, or upstream retry time has not arrived. This is not a completed harvest. Resume with the same source set/window or let the configured scheduler continue. Fixed end watermarks and cursors are preserved; acquisition watermarks advance only after all source/topic pagination completes, while review/projection watermarks advance independently after those phases complete. A manual window cannot jump an existing acquisition gap.
+
+Ordinary scans use the three versioned topic queries with a seven-day overlap and a thirty-day first window. Every normal journal-source run performs full core-journal feeds **after** ordinary discovery over the same overlap window. Every tenth run widens only that core-journal window to ninety days; ordinary discovery continues independently. Non-journal providers do not duplicate ISSN core scans. Core feeds retain all journal records rather than silently discarding items by keyword; `coreDiscovery=true` means “core journal discovery, topic relevance unreviewed,” never confirmed topic relevance or scientific inclusion. The registry is an incomplete historical seed, not the full journal universe.
+
+The server's `monitor.scheduler_enabled` integration uses the existing task worker/scheduler lifecycle. Its one-minute wake-up pulse checks the durable 72-hour anchor and retry readiness; it is not a one-minute full scan. Configure the audited actor before enabling it. The `GET /api/v1/monitor/sources` diagnostics report missing actors, disabled scheduling and registry limitations. CLI scans do not enable background scheduling.
+
+The request-attempt budget conservatively counts each source step (including a possible local cursor transition); HTTP requests are serialized per provider, with at least three seconds between starts. bioRxiv/medRxiv share their host gate. 429/503 `Retry-After` applies across that provider; 403 without a permitted retry is recorded as blocked rather than repeatedly probed. Redirects and alternate origins are rejected. No automatic source-client retry loops are enabled.
+
+## Query results and retention
+
+Use the regular authenticated catalog UI/API for source evidence, publication events, versions and reading state. Monitor views are:
 
 - `GET /api/v1/monitor/runs`
 - `GET /api/v1/monitor/sources`
 - `GET /api/v1/monitor/templates`
 
-Repeating the same command and `--at` is idempotent: existing runs/versions are not duplicated. Interrupted runs resume their existing ID, fixed end watermark and saved cursor. To demonstrate a later scan, deliberately choose a later anchor. Existing state is never reset or deleted by this command. A concurrent active worker is rejected by the durable lease; retry after that worker finishes.
+Formal dates come from publisher/source publication events, never from acquisition or index timestamps. Mock LLM output remains `scientificReviewed=false`, `inclusionStatus=pending`; it cannot convert discovery into scientific inclusion.
 
-A completed mock review means only that the software stage ran. Every mock result remains `isMock=true`, `scientificReviewed=false`, `inclusionStatus=pending`. `publishedThrough` tracks projection into the mock monitor snapshot, not scientific inclusion or journal publication.
+Full observations and raw evidence are durably preserved in the relational catalog. After successful projection, monitor state strips bulky evidence and retains at most 2,000 lightweight published review receipts and 100 completed runs, plus the active run. Unprojected or retrying backlog is never pruned. A permanent per-record identity conflict or invalid record is quarantined with raw evidence and a safe reason, while other records continue. Quarantined records are never labeled published: `handledThrough` includes isolated records, while `publishedThrough` remains conservative until their resolution. Unchanged quarantines are not retried on every overlap. Catalog uniqueness remains the long-term deduplication authority.
 
-## Optional scheduler integration
+## Explicit offline fixtures
 
-The application integration is explicitly opt-in through `monitor.scheduler_enabled` (default `false`) and requires the existing task worker and scheduler to be enabled. It registers a one-minute wake-up pulse, **not** a one-minute scan: the database owns the 72-hour UTC anchor, source pagination readiness and backoff. Not-due pulses do not update state. Queue-level automatic retries are disabled; persisted per-source retry budgets apply instead.
+Fixtures exist only for development/testing:
 
-The module methods `RegisterTasks(task.Registry)` and `RegisterSchedule(task.Scheduler)` register capabilities without starting threads themselves. The existing application lifecycle owns worker/scheduler startup and shutdown. Automatic real-source harvesting is rejected in this phase even if a service was manually configured for a real adapter.
+```sh
+go run ./cmd/glean-monitor --demo --node 11 --scenario incremental
+```
+
+`baseline`, `incremental` and `failure` simulate source transitions without network calls. The old persistent fixture helper is available only with **both** `--demo --persist-mock`; it uses a separate mock state key and never writes fake papers to the real catalog. It is not normal application mode.
 
 ## Verification
 
@@ -53,10 +69,16 @@ go test -race ./internal/modules/monitor ./cmd/glean-monitor -count=1
 go vet ./internal/modules/monitor ./cmd/glean-monitor
 ```
 
-With an explicitly configured test PostgreSQL URL, CI also runs:
+With `INITRA_TEST_DATABASE_URL`, `TestMonitorRealPipelinePostgres` validates real database state, the real catalog publisher, partial-page query visibility, resume and version identity in an isolated rollback schema. Its external source is a test fixture; separate guarded source canaries validate real upstream API responses. A skipped database test is not database validation.
+
+### Bounded real end-to-end canary
+
+After migrations/seed (operator 7 below must actually exist), CI can perform one real Europe PMC request, persist its result and verify that same observation through the authenticated browser:
 
 ```sh
-go test ./internal/modules/monitor -run TestMonitorPostgresDurableMockRun -count=1 -v
+go run ./cmd/glean-monitor --node 18 --operator 7 --sources europepmc \
+  --since 2026-10-23T00:00:00Z --until 2026-10-24T00:00:00Z \
+  --max-pages 1 --page-size 1 --require-observation --allow-local-insecure > live-monitor.json
 ```
 
-`INITRA_TEST_DATABASE_URL` is used only by the integration test. It applies the actual migration history to a temporary transaction-isolated schema, exercises persistent partial run/resume/incremental/replay, reconstructs API services, checks CAS fencing, and rolls everything back. Without that variable the test explicitly skips; this is not evidence of PostgreSQL validation.
+The JSON report includes `status`, actual committed `observations` with paper/observation/run IDs, canonical catalog `title`, `observationTitle`, official source URL, and independent `llmIsMock`/`scientificReviewed` flags. `bounded-partial` with a committed observation is success, not a claim of full coverage. `blocked`, `quarantined`, a database error, or no committed observation with `--require-observation` exits nonzero; no fixture fallback is allowed. `--page-size` requests 1–1000 items, but some providers impose fixed page sizes (bio/medRxiv and arXiv OAI). A successful older canary does not establish current upstream availability.

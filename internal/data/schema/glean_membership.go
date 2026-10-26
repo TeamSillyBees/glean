@@ -18,6 +18,7 @@ func (GleanMembership) Fields() []ent.Field {
 	fields := []ent.Field{fieldx.ID(),
 		field.Int64("paper_id").GoType(idgen.ID(0)).Positive(),
 		field.String("topic").NotEmpty(), field.String("original_id").NotEmpty(),
+		field.String("inclusion_status").Default("historical"),
 		field.String("tier").Default(""), field.String("primary_category").Default(""),
 		field.JSON("categories", []string{}).Default([]string{}),
 		field.JSON("dimensions", map[string][]string{}).Default(map[string][]string{}),
