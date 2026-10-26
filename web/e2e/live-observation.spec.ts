@@ -109,7 +109,7 @@ test('one official EuropePMC observation reaches real PostgreSQL, API and browse
   const version = drawer.locator(
     `[data-testid="source-observation"][data-observation-id="${committed.observationId}"]`,
   )
-  await version.locator('summary').click()
+  await version.locator(':scope > summary').click()
   await expect(version).toHaveAttribute('open', '')
   await expect(version.getByText(observed!.title, { exact: true })).toBeVisible()
   await expect(
