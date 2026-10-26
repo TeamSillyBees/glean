@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUpRight, BookOpen, CalendarDays, Check, ChevronRight, EyeOff } from 'lucide-react'
+import { ArrowUpRight, BookOpen, CalendarDays, Check, ChevronRight, EyeOff, X } from 'lucide-react'
 import type { Paper, ReadStatus, TopicSlug } from '../lib/types'
 import { api } from '../lib/api'
 import { cn, date, readLabels, reviewLabels, safeLink } from '../lib/utils'
 import { Badge, ErrorState, ExternalLink, Loading } from './common'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Tooltip } from './ui/tooltip'
 import { PaperOverview, PaperEvidence } from './paper-content'
@@ -169,20 +169,37 @@ export function PaperDetail({
     >
       <DialogContent
         drawer
+        showCloseButton={false}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           restoreFocus?.()
         }}
       >
-        <div className="sticky top-0 z-10 border-b bg-white/95 px-5 py-5 backdrop-blur sm:px-7">
-          <div className="mb-1 flex items-center gap-2 text-xs font-medium text-primary">
-            <BookOpen className="size-4" />
-            阅读空间
+        <div
+          data-testid="paper-detail-header"
+          className="sticky top-0 z-10 flex items-start gap-3 border-b bg-white/95 px-5 py-5 backdrop-blur sm:px-7"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center gap-2 text-xs font-medium text-primary">
+              <BookOpen className="size-4" />
+              阅读空间
+            </div>
+            <DialogTitle className="text-lg font-semibold">论文详情</DialogTitle>
+            <DialogDescription className="mt-1 text-xs text-muted-foreground">
+              原始证据与个人阅读状态分开保存。
+            </DialogDescription>
           </div>
-          <DialogTitle className="pr-10 text-lg font-semibold">论文详情</DialogTitle>
-          <DialogDescription className="mt-1 text-xs text-muted-foreground">
-            原始证据与个人阅读状态分开保存。
-          </DialogDescription>
+          {/* 关闭入口与标题共用 sticky 层，滚动后仍可点击。 */}
+          <DialogClose asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-11 rounded-full text-muted-foreground"
+              aria-label="关闭"
+            >
+              <X />
+            </Button>
+          </DialogClose>
         </div>
         {query.isLoading ? (
           <Loading />

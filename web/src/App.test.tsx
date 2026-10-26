@@ -198,6 +198,11 @@ describe('Glean query workspace', () => {
     await user.click(open)
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('heading', { name: '论文详情' })).toBeInTheDocument()
+    // DOM tests cannot hit-test CSS. Guard the sticky ownership here; Playwright
+    // covers real pointer clicks at the top and after scrolling on both viewports.
+    const header = within(dialog).getByTestId('paper-detail-header')
+    expect(within(header).getByRole('button', { name: '关闭' })).toBeInTheDocument()
+    expect(within(dialog).getAllByRole('button', { name: '关闭' })).toHaveLength(1)
     expect(within(dialog).getByText('正式在线发表')).toBeInTheDocument()
     expect(within(dialog).getByText('卷期发表')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('tab', { name: '来源与证据' }))
@@ -209,6 +214,7 @@ describe('Glean query workspace', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(open).toHaveFocus()
   })
   it('persists personal read and hidden state and allows restoring a hidden paper', async () => {
     const user = mount()
@@ -221,7 +227,10 @@ describe('Glean query workspace', () => {
     await waitFor(() => expect(currentPaper.readStatus).toBe('read'))
     await user.click(within(dialog).getByRole('button', { name: '隐藏' }))
     await waitFor(() => expect(currentPaper.hidden).toBe(true))
-    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('paper-card')).not.toBeInTheDocument())
+    await user.click(within(dialog).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: '已隐藏' }))
     await user.click(
       await screen.findByRole('button', { name: new RegExp(`查看 ${paper.titleZh}`) }),
@@ -229,6 +238,10 @@ describe('Glean query workspace', () => {
     dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: '恢复显示' }))
     await waitFor(() => expect(currentPaper.hidden).toBe(false))
+    await waitFor(() => expect(screen.queryByTestId('paper-card')).not.toBeInTheDocument())
+    await user.click(within(dialog).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveFocus()
   })
   it('restores saved filters before its first paper request, and saves explicit preferences', async () => {
     saved = { topic: 'llm-agent', q: 'agent', hidden: 'exclude', year: '2026' }

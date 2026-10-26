@@ -219,6 +219,25 @@ test('real historical catalog: login, filters, detail, durable personal state an
   ).toBeVisible()
   await noHorizontalOverflow(page)
   await screenshot(page, info, 'paper-detail')
+  const detailTrigger = page
+    .locator(`[data-testid="paper-card"][data-paper-id="${target.id}"]`)
+    .getByRole('button', { name: `查看 ${target.titleZh || target.title} 的详情`, exact: true })
+  const closeDetail = drawer.getByRole('button', { name: '关闭', exact: true })
+  // A close button must be pointer-reachable, not just present in the DOM. Check
+  // both the initial and scrolled sticky header, then reopen through the real UI.
+  for (const scrollToEnd of [false, true]) {
+    if (scrollToEnd) {
+      await drawer.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+      await expect.poll(() => drawer.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await screenshot(page, info, 'paper-detail-scrolled')
+    }
+    await expect(closeDetail).toHaveCount(1)
+    await expect(closeDetail).toBeInViewport()
+    await closeDetail.click()
+    await expect(drawer).toBeHidden()
+    await expect(detailTrigger).toBeFocused()
+    await detail(page, target)
+  }
   await drawer.getByRole('tab', { name: '来源与证据', exact: true }).click()
   expect(original.origin).toBe('historical')
   expect(original.observationCount ?? 0).toBe(0)
@@ -239,10 +258,12 @@ test('real historical catalog: login, filters, detail, durable personal state an
   expect(read.memberships).toEqual(original.memberships)
   const hidden = await updateState(page, target.id, '隐藏')
   expect(hidden.hidden).toBe(true)
-  await drawer.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(
     page.locator(`[data-testid="paper-card"][data-paper-id="${target.id}"]`),
   ).toBeHidden()
+  await drawer.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(drawer).toBeHidden()
+  await expect(page.getByRole('textbox', { name: '搜索论文或来源' })).toBeFocused()
   const hiddenList = catalogResponse(page, 'papers', { hidden: 'only' })
   await navigate(page, '已隐藏')
   expect(
@@ -250,7 +271,12 @@ test('real historical catalog: login, filters, detail, durable personal state an
   ).toBe(true)
   await detail(page, target)
   expect((await updateState(page, target.id, '恢复显示')).hidden).toBe(false)
+  await expect(
+    page.locator(`[data-testid="paper-card"][data-paper-id="${target.id}"]`),
+  ).toBeHidden()
   await drawer.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(drawer).toBeHidden()
+  await expect(page.getByRole('textbox', { name: '搜索论文或来源' })).toBeFocused()
 
   // Tokens are memory-only: a reload requires real login, but PostgreSQL keeps read state.
   await page.reload()

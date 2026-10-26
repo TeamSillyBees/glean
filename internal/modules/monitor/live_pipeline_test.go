@@ -169,7 +169,8 @@ func TestMonitorRealPipelinePostgres(t *testing.T) {
 		require.False(t, candidate.Review.ScientificReviewed)
 		require.Equal(t, "pending", candidate.Review.InclusionStatus)
 		require.True(t, candidate.Compacted)
-		require.Empty(t, candidate.Record.Raw)
+		// 压缩后的 nil RawMessage 经持久化 JSON 往返后为字面量 null，仍不含来源正文。
+		require.JSONEq(t, "null", string(candidate.Record.Raw))
 	}
 	source.record.Version = "2"
 	source.record.Raw = json.RawMessage(`{"fixture":true,"version":2}`)

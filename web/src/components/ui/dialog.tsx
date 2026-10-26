@@ -4,16 +4,22 @@ import { X } from 'lucide-react'
 import { cn } from '../../lib/utils'
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
+// DialogClose 允许将关闭入口放入抽屉的固定标题区域。
+export const DialogClose = DialogPrimitive.Close
 export const DialogTitle = DialogPrimitive.Title
 export const DialogDescription = DialogPrimitive.Description
 export function DialogContent({
   className,
   children,
   drawer = false,
+  showCloseButton = true,
   onOpenAutoFocus,
   onCloseAutoFocus,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & { drawer?: boolean }) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  drawer?: boolean
+  showCloseButton?: boolean
+}) {
   const returnFocus = React.useRef<HTMLElement | null>(null)
   return (
     <DialogPrimitive.Portal>
@@ -40,12 +46,14 @@ export function DialogContent({
         }}
       >
         {children}
-        <DialogPrimitive.Close
-          className="absolute right-5 top-5 flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="关闭"
-        >
-          <X className="size-4" />
-        </DialogPrimitive.Close>
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            className="absolute right-5 top-5 flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="关闭"
+          >
+            <X className="size-4" />
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   )
