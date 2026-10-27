@@ -2,9 +2,11 @@ package monitor
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +116,7 @@ func (s *remoteSource) arxiv(ctx context.Context, req FetchRequest) (Page, error
 		if len(r.List.Records) == 0 {
 			return Page{}, malformed("empty arXiv OAI list without noRecordsMatch")
 		}
+	records:
 		for _, item := range r.List.Records {
 			// 删除的 OAI 头不包含论文元数据；不据此发明撤稿结论，保留源记录现状。
 			if item.Header.Status == "deleted" {
@@ -124,14 +127,16 @@ func (s *remoteSource) arxiv(ctx context.Context, req FetchRequest) (Page, error
 				updated, e = time.Parse(time.RFC3339, item.Header.Datestamp)
 			}
 			if e != nil {
-				return Page{}, malformed("invalid arXiv OAI modification datestamp")
+				page.Records = append(page.Records, rejectedArxivRecord(item))
+				continue records
 			}
 			if updated.Before(dayStart(req.Window.Start)) || !updated.Before(req.Window.End) {
 				continue
 			}
 			a := item.Metadata.Raw
 			if a.ID == "" || strings.TrimSpace(a.Title) == "" || len(a.Versions) == 0 || item.Header.Identifier != "oai:arXiv.org:"+a.ID {
-				return Page{}, malformed("invalid arXivRaw identity or version history")
+				page.Records = append(page.Records, rejectedArxivRecord(item))
+				continue records
 			}
 			record := Record{Source: s.name, SourceID: a.ID, ArxivID: a.ID, Title: strings.Join(strings.Fields(a.Title), " "), Abstract: strings.TrimSpace(a.Abstract), DOI: cleanDOI(a.DOI), Journal: a.Journal, SourceUpdatedAt: updated, Topics: []string{req.Template.Topic}, Raw: rawXML(item.Raw), PublicationType: "preprint"}
 			if !matchesTemplateGroups(record.Title+" "+record.Abstract, req.Template) {
@@ -141,14 +146,16 @@ func (s *remoteSource) arxiv(ctx context.Context, req FetchRequest) (Page, error
 			for _, v := range a.Versions {
 				n, e := strconv.Atoi(strings.TrimPrefix(v.Number, "v"))
 				if e != nil || n < 1 {
-					return Page{}, malformed("invalid arXiv version number")
+					page.Records = append(page.Records, rejectedArxivRecord(item))
+					continue records
 				}
 				date, e := time.Parse(time.RFC1123, v.Date)
 				if e != nil {
 					date, e = time.Parse(time.RFC1123Z, v.Date)
 				}
 				if e != nil {
-					return Page{}, malformed("invalid arXiv version date")
+					page.Records = append(page.Records, rejectedArxivRecord(item))
+					continue records
 				}
 				if !date.Before(req.Window.End) {
 					continue
@@ -193,4 +200,17 @@ func (s *remoteSource) arxiv(ctx context.Context, req FetchRequest) (Page, error
 		page.NextCursor = (arxivCursor{Day: dateOnly(next)}).encode()
 	}
 	return page, nil
+}
+
+// rejectedArxivRecord 保留坏记录的原始 XML；冲突或缺失的身份仅使用隔离哈希，不猜测论文归属。
+func rejectedArxivRecord(item arxivOAIRecord) Record {
+	r := Record{Source: "arxiv", Raw: rawXML(item.Raw), ValidationError: "invalid_source_record"}
+	id := strings.TrimSpace(item.Metadata.Raw.ID)
+	if id != "" && item.Header.Identifier == "oai:arXiv.org:"+id {
+		r.SourceID = id
+		r.SourceURL = sourceRecordURL("arxiv", id)
+	} else {
+		r.SourceID = fmt.Sprintf("unparsed-sha256:%x", sha256.Sum256([]byte(item.Raw)))
+	}
+	return r
 }

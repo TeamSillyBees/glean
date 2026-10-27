@@ -1,7 +1,13 @@
 import { useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  type Query,
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { ArrowUpRight, BookOpen, CalendarDays, Check, ChevronRight, EyeOff, X } from 'lucide-react'
-import type { Paper, ReadStatus, TopicSlug } from '../lib/types'
+import type { Paper, PaperPage, ReadStatus, TopicSlug } from '../lib/types'
 import { api } from '../lib/api'
 import { cn, date, readLabels, reviewLabels, safeLink } from '../lib/utils'
 import { Badge, ErrorState, ExternalLink, Loading } from './common'
@@ -136,27 +142,86 @@ export function PaperDetail({
     enabled: !!id,
     staleTime: 0,
   })
+  const pending = useIsMutating({ mutationKey: ['paper-state', id] }) > 0
   const mutation = useMutation({
-    mutationFn: ({
+    mutationKey: ['paper-state', id],
+    onMutate: async ({
       paper,
-      hidden = paper.hidden,
-      readStatus = paper.readStatus,
+      originalQuery,
     }: {
       paper: Paper
       hidden?: boolean
       readStatus?: ReadStatus
-    }) => api.state(paper.id, hidden, readStatus),
-    onSuccess: (_, variables) => {
-      client.invalidateQueries({ queryKey: ['papers'] })
-      client.invalidateQueries({ queryKey: ['paper', variables.paper.id] })
-      client.invalidateQueries({ queryKey: ['facets'] })
+      originalQuery: Query
+    }) => {
+      if (
+        client.getQueryCache().find({ queryKey: ['paper', paper.id], exact: true }) !==
+        originalQuery
+      ) {
+        throw new Error('会话已切换，已取消旧操作。')
+      }
+      // 旧 GET 不能在写入完成后覆盖个人状态。
+      await Promise.all([
+        client.cancelQueries({ queryKey: ['paper', paper.id] }),
+        client.cancelQueries({ queryKey: ['papers'] }),
+      ])
+      return { originalQuery }
+    },
+    mutationFn: ({ paper, hidden, readStatus, originalQuery }) => {
+      if (
+        client.getQueryCache().find({ queryKey: ['paper', paper.id], exact: true }) !==
+        originalQuery
+      ) {
+        throw new Error('会话已切换，已取消旧操作。')
+      }
+      // 使用上一笔写入返回的权威缓存，不使用按钮闭包中的旧字段。
+      const latest = client.getQueryData<Paper>(['paper', paper.id]) || paper
+      return api.state(paper.id, hidden ?? latest.hidden, readStatus ?? latest.readStatus)
+    },
+    onSuccess: async (state, variables, context) => {
+      const key = ['paper', variables.paper.id]
+      const ownsCache = () =>
+        context?.originalQuery &&
+        client.getQueryCache().find({ queryKey: key, exact: true }) === context.originalQuery
+      if (!ownsCache()) return
+      // 写入期间关闭、重开详情也可能发起 GET，合并前再次取消。
+      await Promise.all([
+        client.cancelQueries({ queryKey: key }),
+        client.cancelQueries({ queryKey: ['papers'] }),
+      ])
+      // 登出会清空 QueryClient；旧会话的完成回调不得重建或污染新会话缓存。
+      if (!ownsCache()) return
+      client.setQueryData<Paper>(key, (cached) => ({ ...variables.paper, ...cached, ...state }))
+      client.setQueriesData<PaperPage>({ queryKey: ['papers'] }, (page) =>
+        page
+          ? {
+              ...page,
+              items: page.items.map((item) =>
+                item.id === variables.paper.id ? { ...item, ...state } : item,
+              ),
+            }
+          : page,
+      )
+      void client.invalidateQueries({ queryKey: ['papers'] })
+      void client.invalidateQueries({ queryKey: ['facets'] })
       notify(
         variables.hidden === true
           ? '已在所有主题中隐藏，可在「已隐藏」中恢复。'
-          : '阅读状态已保存。',
+          : variables.hidden === false
+            ? '已恢复显示。'
+            : '阅读状态已保存。',
       )
     },
   })
+  function changeState(paper: Paper, change: { hidden?: boolean; readStatus?: ReadStatus }) {
+    // QueryClient 的 mutation 状态同步更新，阻止同一帧重复点击及重开后的并发写入。
+    if (client.isMutating({ mutationKey: ['paper-state', paper.id] })) return
+    const originalQuery = client
+      .getQueryCache()
+      .find({ queryKey: ['paper', paper.id], exact: true })
+    if (!originalQuery) return
+    mutation.mutate({ paper, ...change, originalQuery })
+  }
   const { reset: resetMutation } = mutation
   useEffect(() => resetMutation(), [id, resetMutation])
   const paper = query.data
@@ -231,8 +296,8 @@ export function PaperDetail({
                     key={status}
                     size="sm"
                     variant={paper.readStatus === status ? 'default' : 'outline'}
-                    disabled={mutation.isPending && mutation.variables?.paper.id === id}
-                    onClick={() => mutation.mutate({ paper, readStatus: status })}
+                    disabled={pending}
+                    onClick={() => changeState(paper, { readStatus: status })}
                   >
                     {paper.readStatus === status && <Check />}
                     {readLabels[status]}
@@ -245,8 +310,8 @@ export function PaperDetail({
                     className="ml-auto"
                     variant="ghost"
                     size="sm"
-                    disabled={mutation.isPending && mutation.variables?.paper.id === id}
-                    onClick={() => mutation.mutate({ paper, hidden: !paper.hidden })}
+                    disabled={pending}
+                    onClick={() => changeState(paper, { hidden: !paper.hidden })}
                   >
                     <EyeOff />
                     {paper.hidden ? '恢复显示' : '隐藏'}
