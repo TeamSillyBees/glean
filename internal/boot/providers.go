@@ -104,6 +104,9 @@ func registerModules(injector *do.Injector, cfg *Config) {
 	do.Provide(injector, func(i *do.Injector) (monitormodule.JournalProvider, error) {
 		return NewMonitorJournalProvider(do.MustInvoke[*catalogmodule.Service](i)), nil
 	})
+	do.Provide(injector, func(i *do.Injector) (monitormodule.TemplateProvider, error) {
+		return NewMonitorTemplateProvider(do.MustInvoke[*catalogmodule.Service](i)), nil
+	})
 	monitorConfig := monitormodule.RuntimeConfig()
 	if cfg.Monitor.MaxPagesPerCall > 0 {
 		monitorConfig.MaxPagesPerCall = cfg.Monitor.MaxPagesPerCall

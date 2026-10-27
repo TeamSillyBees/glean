@@ -52,11 +52,14 @@ func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int
 	key := ""
 	if window != nil {
 		key = s.windowKey(*window)
+		if active := activeSnapshotRun(latest); active != nil {
+			key = s.windowKey(*window, active.TemplateVersion)
+		}
 		if active := activeSnapshotRun(latest); active != nil && active.RequestKey != key {
 			return latest, bizerrors.BadRequest("another window is active; resume its original window first")
 		}
 		for _, run := range latest.Runs {
-			if run.RequestKey == key {
+			if run.RequestKey == s.windowKey(*window, run.TemplateVersion) {
 				initialRequests = run.Requests
 				if !run.FinishedAt.IsZero() {
 					return latest, nil

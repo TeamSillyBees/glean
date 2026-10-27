@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-// TemplateVersion 固定此次部署采用的统一检索模板版本。
+// TemplateVersion 标识原始内置模板；无快照的旧运行只能按此精确版本恢复。
 const TemplateVersion = "2026-10-26.3"
 
-// SearchTemplates 返回三个主题共用的检索定义；纳入策略留在审核阶段。
+// SearchTemplates 返回三个内置主题的默认检索定义；运行配置由 TemplateProvider 解析。
 func SearchTemplates() []SearchTemplate {
 	templates := []SearchTemplate{
 		{ID: "biomed-ai-core", Topic: "biomed-ai", TermGroups: [][]string{

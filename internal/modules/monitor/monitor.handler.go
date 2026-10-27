@@ -57,5 +57,9 @@ func (h *Handler) runs(ctx context.Context, _ *runsRequest) (*runsResponse, erro
 	return &runsResponse{Body: response.OK(ctx, RunsVO{Items: items})}, nil
 }
 func (h *Handler) templates(ctx context.Context, _ *templatesRequest) (*templatesResponse, error) {
-	return &templatesResponse{Body: response.OK(ctx, TemplatesVO{Items: SearchTemplates(), Version: TemplateVersion})}, nil
+	items, version, err := h.service.currentTemplates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &templatesResponse{Body: response.OK(ctx, TemplatesVO{Items: items, Version: version})}, nil
 }

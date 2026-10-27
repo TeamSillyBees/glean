@@ -33,9 +33,10 @@ func TestCatalogMonitorAdapterPreservesAuthenticity(t *testing.T) {
 	writer := &observationWriterRecorder{}
 	publisher := &catalogMonitorPublisher{catalog: writer, operator: 7}
 	now := time.Now().UTC()
-	publication := monitor.Publication{Record: monitor.Record{Source: "crossref", SourceID: "10.1234/a", CoreDiscovery: true, PMID: "12345678", SourceURL: "https://doi.org/10.1234/a", Title: "Real paper", ArxivID: "2401.12345", Authors: []string{"A"}, PublicationType: "journal-article", Topics: []string{"biomed-ai"}, AcquiredAt: now, Raw: json.RawMessage(`{"title":"Real paper"}`)}, Review: monitor.Review{Provider: "mock", IsMock: true, ScientificReviewed: false, InclusionStatus: "pending"}}
+	publication := monitor.Publication{Record: monitor.Record{Source: "crossref", TemplateVersion: "snapshot-frozen-version", SourceID: "10.1234/a", CoreDiscovery: true, PMID: "12345678", SourceURL: "https://doi.org/10.1234/a", Title: "Real paper", ArxivID: "2401.12345", Authors: []string{"A"}, PublicationType: "journal-article", Topics: []string{"biomed-ai"}, AcquiredAt: now, Raw: json.RawMessage(`{"title":"Real paper"}`)}, Review: monitor.Review{Provider: "mock", IsMock: true, ScientificReviewed: false, InclusionStatus: "pending"}}
 	require.NoError(t, publisher.Publish(context.Background(), 100, []monitor.Publication{publication}))
 	require.Len(t, writer.inputs, 1)
+	require.Equal(t, "snapshot-frozen-version", writer.inputs[0].TemplateVersion)
 	require.Equal(t, idgen.ID(7), writer.operator)
 	require.Equal(t, "2401.12345", writer.inputs[0].ArxivID)
 	require.True(t, writer.inputs[0].CoreDiscovery)

@@ -24,6 +24,7 @@ type PublicationEvent struct {
 
 // Record 保存一条来源版本及原始证据，AcquiredAt 不表示正式发表日期。
 type Record struct {
+	TemplateVersion string   `json:"templateVersion,omitempty"`
 	CoreDiscovery   bool     `json:"coreDiscovery,omitempty"`
 	ValidationError string   `json:"validationError,omitempty"`
 	SourceURL       string   `json:"sourceUrl"`
@@ -197,6 +198,7 @@ type SourceProgress struct {
 
 // Run 保存一次固定水位的运行，取消或退避后恢复同一 ID。
 type Run struct {
+	SearchTemplates    []SearchTemplate           `json:"searchTemplates,omitempty"`
 	RetryCandidateKeys map[string][]string        `json:"retryCandidateKeys,omitempty"`
 	RetryOf            idgen.ID                   `json:"retryOf,omitempty"`
 	RetriedBy          idgen.ID                   `json:"retriedBy,omitempty"`

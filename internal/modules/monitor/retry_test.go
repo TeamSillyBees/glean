@@ -215,7 +215,8 @@ func TestRetryDoesNotConsumeScheduledBackfillCadence(t *testing.T) {
 	require.Equal(t, 9, done.Runs[1].Number)
 	state, err = s.load(context.Background())
 	require.NoError(t, err)
-	next := s.startRun(state, scenarioTime.Add(72*time.Hour), nil, nil, nil)
+	next, err := s.startRun(state, scenarioTime.Add(72*time.Hour), nil, nil, nil)
+	require.NoError(t, err)
 	require.Equal(t, 10, next.Number)
 }
 

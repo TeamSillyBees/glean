@@ -53,6 +53,7 @@ type Service struct {
 	publisher        Publisher
 	clock            func() time.Time
 	journals         JournalProvider
+	templates        TemplateProvider
 	schedulerEnabled bool
 	operatorID       idgen.ID
 	requireOperator  bool
@@ -149,7 +150,7 @@ func newService(client *ent.Client, memory *memoryState, ids *idgen.Generator, c
 	if _, mock := publisher.(MockPublisher); mock && liveSources {
 		return nil, bizerrors.BadRequest("real sources cannot use a mock catalog publisher")
 	}
-	return &Service{client: client, memory: memory, ids: ids, config: cfg, sources: sources, reviewer: reviewer, publisher: publisher, clock: time.Now}, nil
+	return &Service{client: client, memory: memory, ids: ids, config: cfg, sources: sources, reviewer: reviewer, publisher: publisher, clock: time.Now, templates: defaultTemplateProvider{}}, nil
 }
 
 func isMockSource(s Source) bool { v, ok := s.(interface{ IsMock() bool }); return ok && v.IsMock() }
@@ -210,7 +211,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 		}
 	}
 	if run != nil {
-		if run.TemplateVersion != TemplateVersion {
+		if _, snapshotErr := runTemplates(run); snapshotErr != nil {
 			return state.Snapshot, bizerrors.BadRequest("active monitor run requires its original template version")
 		}
 		names := map[string]bool{}
@@ -222,20 +223,23 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				return state.Snapshot, bizerrors.BadRequest("active run needs its original sources; resume with those sources")
 			}
 		}
-		if requested != nil && run.RequestKey != s.windowKey(*requested) {
+		if requested != nil && run.RequestKey != s.windowKey(*requested, run.TemplateVersion) {
 			return state.Snapshot, bizerrors.BadRequest("another window is active; resume its original window first")
 		}
 	}
 	if run == nil {
 		if requested != nil {
-			key := s.windowKey(*requested)
 			for _, previous := range state.Runs {
-				if previous.RequestKey == key {
+				if previous.RequestKey == s.windowKey(*requested, previous.TemplateVersion) {
 					return state.Snapshot, nil
 				}
 			}
 		} else if now.Before(state.Schedule.NextRunUTC) && s.knownSources(state) {
 			return state.Snapshot, nil
+		}
+		templates, _, templateErr := s.currentTemplates(ctx)
+		if templateErr != nil {
+			return state.Snapshot, templateErr
 		}
 		registry := []string{}
 		registryByTopic := map[string][]string{}
@@ -244,9 +248,12 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			if registryErr != nil {
 				return state.Snapshot, registryErr
 			}
-			registry, registryByTopic = compileRegistry(entries)
+			registry, registryByTopic = compileRegistry(entries, templates)
 		}
-		run = s.startRun(state, now, requested, registry, registryByTopic)
+		run, err = s.startRun(state, now, requested, registry, registryByTopic, templates)
+		if err != nil {
+			return state.Snapshot, err
+		}
 		if err = s.save(ctx, state); err != nil {
 			return Snapshot{}, err
 		}
@@ -254,7 +261,10 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 	run.Status = "running"
 	pages := 0
 	reviewsUsed := 0
-	templates := SearchTemplates()
+	templates, templateErr := runTemplates(run)
+	if templateErr != nil {
+		return state.Snapshot, templateErr
+	}
 	offset := run.Requests % len(s.sources)
 	ordered := append(append([]Source{}, s.sources[offset:]...), s.sources[:offset]...)
 	for _, source := range ordered {
@@ -262,6 +272,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 		if !ok {
 			continue
 		}
+		selectedTemplates := executionTemplates(templates, progress.CoreBackfill)
 		checkpoint := state.Sources[source.Name()]
 		if !isMockSource(source) {
 			s.shareProviderCooldown(state, source.Name(), checkpoint)
@@ -283,8 +294,10 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			if err = ctx.Err(); err != nil {
 				return s.cancelRun(ctx, state, run, err)
 			}
-			template := templates[progress.TemplateIndex%len(templates)]
-			template.Core = progress.CoreBackfill && progress.TemplateIndex >= len(templates)
+			if progress.TemplateIndex < 0 || progress.TemplateIndex >= len(selectedTemplates) {
+				return state.Snapshot, bizerrors.BadRequest("invalid template cursor")
+			}
+			template := selectedTemplates[progress.TemplateIndex]
 			fetchWindow := progress.Window
 			if progress.CoreBackfill && !template.Core && !progress.IncrementalWindow.Start.IsZero() {
 				fetchWindow = progress.IncrementalWindow
@@ -330,6 +343,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				progress.Observed++
 				record.IsMock = isMockSource(source)
 				record.CoreDiscovery = template.Core
+				record.TemplateVersion = run.TemplateVersion
 				record.Source = source.Name()
 				record.AcquiredAt = now
 				if !isMockSource(source) {
@@ -364,6 +378,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 						candidate.Compacted = false
 					}
 					if topicsChanged {
+						candidate.Record.TemplateVersion = run.TemplateVersion
 						candidate.Review = nil
 						candidate.Published = false
 					}
@@ -391,15 +406,12 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				if checkpoint.TopicAcquiredThrough == nil {
 					checkpoint.TopicAcquiredThrough = map[string]time.Time{}
 				}
-				if (!progress.CoreBackfill || template.Core) && (progress.AdvanceCheckpoint || run.RequestKey == "") {
+				if (!progress.CoreBackfill || template.Core || (progress.TemplateIndex < len(templates) && !templates[progress.TemplateIndex].Core)) && (progress.AdvanceCheckpoint || run.RequestKey == "") {
 					checkpoint.TopicAcquiredThrough[template.Topic] = later(checkpoint.TopicAcquiredThrough[template.Topic], run.FixedEnd)
 				}
 				progress.TemplateIndex++
 				progress.Cursor = ""
-				templateCount := len(templates)
-				if progress.CoreBackfill {
-					templateCount *= 2
-				}
+				templateCount := len(selectedTemplates)
 				if progress.TemplateIndex == templateCount {
 					progress.Acquired = true
 					if progress.AdvanceCheckpoint || run.RequestKey == "" {
@@ -480,7 +492,12 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			for _, key := range progress.CandidateKeys {
 				candidate := state.Records[key]
 				if !candidate.Published && candidate.Quarantine == nil && candidate.Review != nil {
-					publications = append(publications, Publication{Key: key, Record: candidate.Record, Review: *candidate.Review})
+					record := candidate.Record
+					// 旧候选只使用其原固定模板版本，不能借用新运行的动态配置版本。
+					if record.TemplateVersion == "" {
+						record.TemplateVersion = TemplateVersion
+					}
+					publications = append(publications, Publication{Key: key, Record: record, Review: *candidate.Review})
 				}
 			}
 			var publishErr error
@@ -581,7 +598,15 @@ func activeRun(state *monitorState) *Run {
 	return nil
 }
 
-func (s *Service) startRun(state *monitorState, now time.Time, requested *Window, registry []string, registryByTopic map[string][]string) *Run {
+func (s *Service) startRun(state *monitorState, now time.Time, requested *Window, registry []string, registryByTopic map[string][]string, selected ...[]SearchTemplate) (*Run, error) {
+	templates := SearchTemplates()
+	if len(selected) > 0 {
+		templates = selected[0]
+	}
+	templates, version, err := freezeTemplates(templates)
+	if err != nil {
+		return nil, err
+	}
 	number := state.Schedule.CompletedRuns + 1
 	mode := "mock"
 	for _, source := range s.sources {
@@ -589,10 +614,10 @@ func (s *Service) startRun(state *monitorState, now time.Time, requested *Window
 			mode = "live"
 		}
 	}
-	run := Run{ID: s.ids.NextID(), Number: number, StartedAt: now, FixedEnd: now, Status: "running", Mode: mode, TemplateVersion: TemplateVersion, Sources: map[string]*SourceProgress{}}
+	run := Run{ID: s.ids.NextID(), Number: number, StartedAt: now, FixedEnd: now, Status: "running", Mode: mode, TemplateVersion: version, SearchTemplates: templates, Sources: map[string]*SourceProgress{}}
 	if requested != nil {
 		run.FixedEnd = requested.End
-		run.RequestKey = s.windowKey(*requested)
+		run.RequestKey = s.windowKey(*requested, version)
 	}
 	for _, source := range s.sources {
 		checkpoint := state.Sources[source.Name()]
@@ -634,7 +659,7 @@ func (s *Service) startRun(state *monitorState, now time.Time, requested *Window
 		run.Sources[source.Name()] = &SourceProgress{RegistryByTopic: registryByTopic, CoreWide: wideCore && requested == nil, IncrementalWindow: Window{Start: incrementalStart, End: run.FixedEnd}, Window: Window{Start: start, End: run.FixedEnd}, CandidateKeys: keys, RegistryISSNs: append([]string(nil), registry...), CoreBackfill: core, AdvanceCheckpoint: checkpoint.AcquiredThrough.IsZero() || !start.After(checkpoint.AcquiredThrough), Failed: checkpoint.Blocked}
 	}
 	state.Runs = append(state.Runs, run)
-	return &state.Runs[len(state.Runs)-1]
+	return &state.Runs[len(state.Runs)-1], nil
 }
 
 func nextAnchor(anchor, after time.Time) time.Time {
@@ -780,7 +805,11 @@ func later(first, second time.Time) time.Time {
 func journalSource(name string) bool {
 	return name == "crossref" || name == "pubmed" || name == "europepmc"
 }
-func (s *Service) windowKey(window Window) string {
+func (s *Service) windowKey(window Window, versions ...string) string {
+	version := TemplateVersion
+	if len(versions) > 0 {
+		version = versions[0]
+	}
 	names := []string{}
 	for _, source := range s.sources {
 		names = append(names, source.Name())
@@ -790,7 +819,7 @@ func (s *Service) windowKey(window Window) string {
 		Window  Window
 		Sources []string
 		Version string
-	}{window, names, TemplateVersion})
+	}{window, names, version})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }

@@ -47,7 +47,7 @@ func (s *Service) prepareRetry(ctx context.Context, runID idgen.ID) (idgen.ID, S
 		return 0, state.Snapshot, bizerrors.BadRequest("retry run not found in retained history")
 	}
 	original := state.Runs[index]
-	if original.TemplateVersion != TemplateVersion {
+	if _, snapshotErr := runTemplates(&original); snapshotErr != nil {
 		return 0, state.Snapshot, bizerrors.BadRequest("retry requires original template version")
 	}
 	if len(original.Sources) != len(s.sources) {

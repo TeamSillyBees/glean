@@ -1,10 +1,14 @@
 package monitor
 
 // compileRegistry 只按明确主题路由真实发现目标，不把发现资格等同于指标核验。
-func compileRegistry(entries []JournalEntry) ([]string, map[string][]string) {
+func compileRegistry(entries []JournalEntry, selected ...[]SearchTemplate) ([]string, map[string][]string) {
 	topics := []string{}
 	byTopic := map[string][]string{}
-	for _, template := range SearchTemplates() {
+	templates := SearchTemplates()
+	if len(selected) > 0 {
+		templates = selected[0]
+	}
+	for _, template := range templates {
 		topics = append(topics, template.Topic)
 		byTopic[template.Topic] = []string{}
 	}

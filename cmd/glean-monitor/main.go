@@ -302,6 +302,7 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 	options.Config.MaxPagesPerCall = maxPages
 	options.Config.PageSize = pageSize
 	catalogService := catalog.NewService(client)
+	options.Templates = boot.NewMonitorTemplateProvider(catalogService)
 	service, err := monitor.NewRuntimeService(client, ids, factory, options, boot.NewCatalogMonitorPublisher(catalogService, operatorID), boot.NewMonitorJournalProvider(catalogService))
 	if err != nil {
 		return fmt.Errorf("real monitor assembly failed; inspect configured official sources")

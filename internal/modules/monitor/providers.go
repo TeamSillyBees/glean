@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"fmt"
 	"github.com/samber/do"
 	"github.com/teamsillybees/glean/internal/data/ent"
 	"github.com/teamsillybees/glean/internal/platform/httpclient"
@@ -9,6 +10,7 @@ import (
 
 // ProviderOptions 定义真实来源服务装配；构造本身不会请求外部 API。
 type ProviderOptions struct {
+	Templates        TemplateProvider
 	Config           Config
 	Sources          []string
 	SchedulerEnabled bool
@@ -31,6 +33,9 @@ func RuntimeConfig() Config {
 
 // NewRuntimeService 创建真实采集与真实目录投影的持久化服务；只有 LLM Reviewer 使用明确 mock。
 func NewRuntimeService(client *ent.Client, ids *idgen.Generator, factory *httpclient.Factory, options ProviderOptions, publisher Publisher, journals JournalProvider) (*Service, error) {
+	if options.Templates == nil {
+		return nil, fmt.Errorf("live monitor requires a topic template provider")
+	}
 	cfg := options.Config
 	if cfg.StateKey == "" {
 		cfg = RuntimeConfig()
@@ -43,6 +48,7 @@ func NewRuntimeService(client *ent.Client, ids *idgen.Generator, factory *httpcl
 	if err != nil {
 		return nil, err
 	}
+	service.templates = options.Templates
 	service.operatorID = options.OperatorID
 	service.requireOperator = true
 	service.schedulerEnabled = options.SchedulerEnabled
@@ -75,6 +81,12 @@ func Provide(injector *do.Injector, options ...ProviderOptions) {
 		journals, err := do.Invoke[JournalProvider](i)
 		if err != nil {
 			return nil, err
+		}
+		if opts.Templates == nil {
+			opts.Templates, err = do.Invoke[TemplateProvider](i)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return NewRuntimeService(client, ids, factory, opts, publisher, journals)
 	})
