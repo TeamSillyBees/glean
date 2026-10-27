@@ -2,19 +2,25 @@
 
 以中文阅读为优先的文献检索与研究工作台。基于 **React 19 + TypeScript + Vite**、**Tailwind CSS v4**、可编辑的 **shadcn/ui 开放源码组件与 Radix 基础组件**，配合 Lucide 图标和 TanStack Query 构建。
 
+## 界面设计方法
+
+本次重构选择 [Impeccable](https://github.com/pbakaus/impeccable) 的 Operate / Read 方法，而不是叠加两套设计工具。深色任务导航、紧凑的主题信息、连续题录列表和前置的原文入口共同服务于检索与阅读；认证、精确筛选、个人状态和科学证据逻辑保持不变。
+
+产品事实与交互边界见 [PRODUCT.md](PRODUCT.md)，视觉 token、响应式规则和方法版本见 [DESIGN.md](DESIGN.md)。本项目采用其设计指导，没有安装其运行时、浏览器扩展或 hooks，也不声称通过了其 CLI 检测。
+
 ## 运行界面
 
 以下截图来自真实运行的前端、Go API 和 PostgreSQL，使用已提交的历史文献数据，不是设计稿或模拟页面。
 
 ### 桌面端：论文工作台
 
-三个研究主题、中文优先的论文卡片、多维筛选、目录范围与个人阅读状态集中展示。截图中主题总量为 31,399 条，精选目录为 8,556 篇；两种统计口径不同。
+三个研究主题、中文优先的连续题录、多维筛选、目录范围与个人阅读状态集中展示。截图中主题总量为 31,399 条，精选目录为 8,556 篇；两种统计口径不同。
 
 ![桌面端论文工作台：主题导航、筛选条件与真实历史论文列表](docs/screenshots/desktop-catalog.png)
 
 ### 桌面端：论文详情
 
-详情抽屉将个人阅读状态、原始历史笔记与模型处理结果分开。尚未获取的摘要明确显示为空，不用历史笔记或模型输出冒充原文摘要。
+详情抽屉前置原文入口，将个人阅读状态、原始历史笔记与模型处理结果分开。尚未获取的摘要明确显示为空，不用历史笔记或模型输出冒充原文摘要。
 
 ![桌面端论文详情：阅读状态、摘要空状态与保留的历史阅读笔记](docs/screenshots/desktop-paper-detail.png)
 
@@ -24,7 +30,7 @@
 
 <img src="docs/screenshots/mobile-catalog.png" alt="手机端论文工作台：搜索、目录范围、筛选入口与论文卡片" width="360" />
 
-截图记录：2026-10-27，[提交 `4eff45b`](https://github.com/TeamSillyBees/glean/commit/4eff45b49b851a8275a3fe3ada37d7e263fc0789) 的 [GitHub Actions 运行 #17](https://github.com/TeamSillyBees/glean/actions/runs/40472376956)，来自 Chromium 桌面端与 Pixel 7 尺寸的移动端浏览器验收。图片为原始视口截图，仅更名复制；详细来源见[截图说明](docs/screenshots/README.md)。该次历史库浏览器测试已通过；截图展示历史库界面，不代表实时采集验收结果，也不代表正式上线。LLM 调用仍为明确标识的 mock，历史笔记不是本次模型生成结果。
+截图记录：2026-10-27，[提交 `bd20fb4`](https://github.com/TeamSillyBees/glean/commit/bd20fb4a5be5cae300a1c8cf6f15cdfc07db5d2f) 的 [GitHub Actions 运行 40531139041](https://github.com/TeamSillyBees/glean/actions/runs/40531139041)，来自 Chromium 桌面端与 Pixel 7 尺寸的移动端浏览器验收。图片为原始视口截图，仅更名复制；详细来源见[截图说明](docs/screenshots/README.md)。该次常规 CI 全部通过，另完成 320–1920px 七档目录布局检查；截图展示历史库界面，不代表实时采集验收结果，也不代表正式上线。LLM 调用仍为明确标识的 mock，历史笔记不是本次模型生成结果。
 
 ## 本地运行
 
