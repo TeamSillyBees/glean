@@ -12,18 +12,18 @@ type PageUsersQuery struct {
 	Keyword string `query:"keyword" example:"alice" doc:"用户名、昵称、手机号或邮箱关键字"`
 }
 
-// CreateUserBody 描述创建用户请求体。
+// CreateUserBody 描述创建用户请求体。联系方式、头像、角色和排序可省略；角色为空时默认 viewer。
 type CreateUserBody struct {
 	Username     string   `json:"username" example:"alice"`
 	Password     string   `json:"password" example:"secret-123"`
 	Nickname     string   `json:"nickname" example:"Alice"`
-	Phone        string   `json:"phone" example:"13800000000"`
-	Email        string   `json:"email" example:"alice@example.com"`
-	AvatarURL    string   `json:"avatarUrl" example:"https://example.com/avatar.png"`
-	RoleCodes    []string `json:"roleCodes" example:"admin"`
+	Phone        string   `json:"phone,omitempty" example:"13800000000"`
+	Email        string   `json:"email,omitempty" example:"alice@example.com"`
+	AvatarURL    string   `json:"avatarUrl,omitempty" example:"https://example.com/avatar.png"`
+	RoleCodes    []string `json:"roleCodes,omitempty" example:"admin"`
 	IsSuperAdmin bool     `json:"isSuperAdmin" example:"false"`
 	IsEnable     *bool    `json:"isEnable,omitempty" example:"true"`
-	SortID       int32    `json:"sortId" example:"0"`
+	SortID       int32    `json:"sortId,omitempty" example:"0"`
 }
 
 // UpdateUserBody 描述更新用户请求体。
