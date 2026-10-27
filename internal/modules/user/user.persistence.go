@@ -14,8 +14,16 @@ import (
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 )
 
-func (s *Service) createEnt(ctx context.Context, user *User) error {
+func (s *Service) createEnt(ctx context.Context, user *User, explicitRoles bool) error {
 	return data.WithinTx(ctx, s.client, func(txCtx context.Context, txClient *appent.Client) error {
+		if err := lockAdministrators(txCtx, txClient); err != nil {
+			return err
+		}
+		if user.IsSuperAdmin || explicitRoles {
+			if err := requireSuperAdmin(txCtx, txClient); err != nil {
+				return err
+			}
+		}
 		roleIDs, err := s.resolveRoleIDs(txCtx, txClient, user.RoleCodes)
 		if err != nil {
 			return err
@@ -114,15 +122,49 @@ func (s *Service) page(ctx context.Context, input PageUsersQuery) ([]*User, int3
 	return items, int32(total), nil
 }
 
-func (s *Service) updateEnt(ctx context.Context, user *User) error {
+func (s *Service) updateEnt(ctx context.Context, user *User, body UpdateUserBody) error {
 	return data.WithinTx(ctx, s.client, func(txCtx context.Context, txClient *appent.Client) error {
+		if err := lockAdministrators(txCtx, txClient); err != nil {
+			return err
+		}
 		current, err := txClient.SysUser.Query().Where(sysuser.ID(user.ID), sysuser.DeletedAtIsNil()).ForUpdate().Only(txCtx)
 		if appent.IsNotFound(err) {
-			return nil
+			return bizerrors.UserNotFound(user.ID)
 		}
 		if err != nil {
 			return bizerrors.WrapDBContext(txCtx, err, "query current user failed")
 		}
+		if current.IsSuperAdmin || body.IsSuperAdmin != nil && *body.IsSuperAdmin != current.IsSuperAdmin || body.RoleCodes != nil {
+			if err := requireSuperAdmin(txCtx, txClient); err != nil {
+				return err
+			}
+		}
+		*user = *userFromEnt(current)
+		if body.Nickname != nil {
+			user.Nickname = strings.TrimSpace(*body.Nickname)
+		}
+		if body.Phone != nil {
+			user.Phone = strings.TrimSpace(*body.Phone)
+		}
+		if body.Email != nil {
+			user.Email = strings.TrimSpace(*body.Email)
+		}
+		if body.AvatarURL != nil {
+			user.AvatarURL = strings.TrimSpace(*body.AvatarURL)
+		}
+		if body.RoleCodes != nil {
+			user.RoleCodes = normalizeRoleCodes(*body.RoleCodes)
+		}
+		if body.IsSuperAdmin != nil {
+			user.IsSuperAdmin = *body.IsSuperAdmin
+		}
+		if body.IsEnable != nil {
+			user.IsEnable = *body.IsEnable
+		}
+		if body.SortID != nil {
+			user.SortID = *body.SortID
+		}
+
 		if current.IsSuperAdmin && current.IsEnable && (!user.IsSuperAdmin || !user.IsEnable) {
 			if err := ensureAnotherSuperAdmin(txCtx, txClient, user.ID); err != nil {
 				return err
@@ -144,18 +186,21 @@ func (s *Service) updateEnt(ctx context.Context, user *User) error {
 
 		record, err := update.Save(txCtx)
 		if appent.IsNotFound(err) {
-			return nil
+			return bizerrors.UserNotFound(user.ID)
 		}
 		if err != nil {
 			return mapEntWriteError(txCtx, err, "update user failed")
 		}
 
-		roleIDs, err := s.resolveRoleIDs(txCtx, txClient, user.RoleCodes)
-		if err != nil {
-			return err
-		}
-		if err := s.replaceUserRoles(txCtx, txClient, user.ID, roleIDs); err != nil {
-			return err
+		if body.RoleCodes != nil {
+			roleIDs, err := s.resolveRoleIDs(txCtx, txClient, user.RoleCodes)
+			if err != nil {
+				return err
+			}
+			if err := s.replaceUserRoles(txCtx, txClient, user.ID, roleIDs); err != nil {
+				return err
+			}
+
 		}
 
 		refreshed, err := s.findByIDWithClient(txCtx, txClient, record.ID)
@@ -170,13 +215,24 @@ func (s *Service) updateEnt(ctx context.Context, user *User) error {
 }
 
 func (s *Service) deleteEnt(ctx context.Context, id idgen.ID) error {
+	if err := protectSelf(ctx, id, false, false, true); err != nil {
+		return err
+	}
 	return data.WithinTx(ctx, s.client, func(txCtx context.Context, txClient *appent.Client) error {
+		if err := lockAdministrators(txCtx, txClient); err != nil {
+			return err
+		}
 		current, err := txClient.SysUser.Query().Where(sysuser.ID(id), sysuser.DeletedAtIsNil()).ForUpdate().Only(txCtx)
 		if appent.IsNotFound(err) {
 			return nil
 		}
 		if err != nil {
 			return bizerrors.WrapDBContext(txCtx, err, "query current user failed")
+		}
+		if current.IsSuperAdmin {
+			if err := requireSuperAdmin(txCtx, txClient); err != nil {
+				return err
+			}
 		}
 		if current.IsSuperAdmin && current.IsEnable {
 			if err := ensureAnotherSuperAdmin(txCtx, txClient, id); err != nil {

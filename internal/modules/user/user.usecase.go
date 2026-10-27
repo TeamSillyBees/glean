@@ -41,7 +41,7 @@ func (s *Service) Create(ctx context.Context, body CreateUserBody) (UserVO, erro
 		SortID:       body.SortID,
 	}
 
-	if err := s.createEnt(ctx, user); err != nil {
+	if err := s.createEnt(ctx, user, len(body.RoleCodes) > 0); err != nil {
 		return UserVO{}, err
 	}
 
@@ -88,40 +88,11 @@ func (s *Service) Page(ctx context.Context, query PageUsersQuery) (pagination.Pa
 
 // Update 更新用户并清理缓存。
 func (s *Service) Update(ctx context.Context, id idgen.ID, body UpdateUserBody) (UserVO, error) {
-	user, err := s.findByID(ctx, id)
-	if err != nil {
+	if err := protectSelf(ctx, id, body.IsEnable != nil && !*body.IsEnable, body.IsSuperAdmin != nil && !*body.IsSuperAdmin, false); err != nil {
 		return UserVO{}, err
 	}
-	if user == nil {
-		return UserVO{}, bizerrors.UserNotFound(id)
-	}
-
-	if body.Nickname != nil {
-		user.Nickname = strings.TrimSpace(*body.Nickname)
-	}
-	if body.Phone != nil {
-		user.Phone = strings.TrimSpace(*body.Phone)
-	}
-	if body.Email != nil {
-		user.Email = strings.TrimSpace(*body.Email)
-	}
-	if body.AvatarURL != nil {
-		user.AvatarURL = strings.TrimSpace(*body.AvatarURL)
-	}
-	if body.RoleCodes != nil {
-		user.RoleCodes = normalizeRoleCodes(*body.RoleCodes)
-	}
-	if body.IsSuperAdmin != nil {
-		user.IsSuperAdmin = *body.IsSuperAdmin
-	}
-	if body.IsEnable != nil {
-		user.IsEnable = *body.IsEnable
-	}
-	if body.SortID != nil {
-		user.SortID = *body.SortID
-	}
-
-	if err := s.updateEnt(ctx, user); err != nil {
+	user := &User{ID: id}
+	if err := s.updateEnt(ctx, user, body); err != nil {
 		return UserVO{}, err
 	}
 	if err := s.cache.Delete(ctx, user.ID); err != nil {

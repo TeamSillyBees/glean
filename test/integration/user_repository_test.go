@@ -39,6 +39,9 @@ func TestUserServiceCreateUsesEntHooks(t *testing.T) {
 
 	service := user.NewService(client, stubUserCache{}, stubPasswordManager{})
 	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT .*FROM "sys_user".*ORDER BY "sys_user"\."id" ASC FOR UPDATE`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "is_super_admin", "is_enable"}).AddRow(int64(9001), true, true))
+	mock.ExpectQuery(`SELECT .*FROM "sys_user".*`).WithArgs(int64(9001)).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(9001)))
 	mock.ExpectQuery(`SELECT .*FROM "sys_role".*FOR SHARE`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "code"}).AddRow(int64(1002), "admin"))
 	mock.ExpectExec(`INSERT INTO "sys_user" \(.*"id".*\)`).
@@ -50,7 +53,7 @@ func TestUserServiceCreateUsesEntHooks(t *testing.T) {
 	mock.ExpectCommit()
 
 	isEnable := true
-	ctx := platformauth.WithPrincipal(context.Background(), platformauth.Principal{UserID: idgen.New(9001)})
+	ctx := platformauth.WithPrincipal(context.Background(), platformauth.Principal{UserID: idgen.New(9001), IsSuperAdmin: true})
 	vo, err := service.Create(ctx, user.CreateUserBody{
 		Username:     "alice",
 		Password:     "secret-123",
@@ -135,6 +138,8 @@ func TestUserServiceDeleteSoftDeletesUserAndRoles(t *testing.T) {
 
 	service := user.NewService(client, stubUserCache{}, stubPasswordManager{})
 	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT .*FROM "sys_user".*ORDER BY "sys_user"\."id" ASC FOR UPDATE`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "is_super_admin", "is_enable"}).AddRow(int64(9001), true, true))
 	mock.ExpectQuery(`SELECT .*FROM "sys_user".*FOR UPDATE`).
 		WillReturnRows(sysUserRows().AddRow(
 			int64(1001), nil, testNow, testNow, int64(9001), int64(9001),
