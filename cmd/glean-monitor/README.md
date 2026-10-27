@@ -73,7 +73,7 @@ With `INITRA_TEST_DATABASE_URL`, `TestMonitorRealPipelinePostgres` validates rea
 
 ### Bounded real end-to-end canary
 
-After migrations/seed (operator 7 below must actually exist), CI can perform one real Europe PMC request, persist its result and verify that same observation through the authenticated browser:
+This operational check is excluded from normal push/PR CI. The separate `Manual live source acceptance` Actions workflow runs only via explicit `workflow_dispatch`; it creates isolated migrations/test-only accounts, performs one real Europe PMC request, and verifies that observation through the authenticated desktop/mobile browser. It never uses `continue-on-error` or fixture fallback. For a deliberate local check after migrations/seed (operator 7 below must actually exist):
 
 ```sh
 go run ./cmd/glean-monitor --node 18 --operator 7 --sources europepmc \

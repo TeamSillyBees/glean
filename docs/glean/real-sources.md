@@ -41,13 +41,15 @@ Crossref / Europe PMC 的可变索引数量在分页过程中变化时，最多�
 
 1. 合成单元 fixture：只用于错误、边界与恢复测试，文件名/内容明确标注 synthetic。
 2. 原样公开 API 捕获：`internal/modules/monitor/testdata/live/`；gzip 解压后的响应字节不可编辑，`manifest.json` 记录请求、UTC 捕获时间、HTTP 状态、字节数与 SHA-256。测试验证摘要后再检查解析。离线 fixture 测试不代表今天网络仍通畅。
-3. 真实 Go HTTP canary：显式 opt-in，使用同一平台 Factory、官方 origin Hook 和来源适配器。每来源最多 2 次请求；支持的 API 请求 1 条，bio/medRxiv 和 OAI 使用供应商固定页大小。只读，不追完所有分页，不运行 LLM、不写生产目录。
+3. 真实 Go HTTP canary：仅在 `live` build tag 加显式环境变量双重 opt-in 时编译并运行，不进入默认 `go test ./...` 或常规 CI，使用同一平台 Factory、官方 origin Hook 和来源适配器。每来源最多 2 次请求；支持的 API 请求 1 条，bio/medRxiv 和 OAI 使用供应商固定页大小。只读，不追完所有分页，不运行 LLM、不写生产目录。
 
 ```sh
-GLEAN_LIVE_SOURCE_CANARY=1 go test ./internal/modules/monitor -run '^TestLiveSourceCanary$' -v -count=1
+GLEAN_LIVE_SOURCE_CANARY=1 go test -tags=live ./internal/modules/monitor -run '^TestLiveSourceCanary$' -v -count=1
 # 或仅检查一个来源，避免不必要地重复访问全部来源：
-GLEAN_LIVE_SOURCE_CANARY=1 GLEAN_LIVE_SOURCE=pubmed go test ./internal/modules/monitor -run '^TestLiveSourceCanary$' -v -count=1
+GLEAN_LIVE_SOURCE_CANARY=1 GLEAN_LIVE_SOURCE=pubmed go test -tags=live ./internal/modules/monitor -run '^TestLiveSourceCanary$' -v -count=1
 ```
+
+完整的真实来源 → PostgreSQL → 桌面/手机页面验收单独放在 `.github/workflows/live-source-acceptance.yml`，仅支持 Actions 手动 `workflow_dispatch`，不由 push、PR 或定时触发。它不导入历史库，不替代常规 CI 的完整历史导入和浏览器验证。供应商 503、限流、超时或零条结果会使该手动验收明确失败；不使用 `continue-on-error` 或模拟数据掩盖问题。
 
 Canary 使用固定的小时间窗，不是 30 日全网扫描。捕获的 arXiv 363 条 cs.AI 子集只是该子集的解析证据，不能宣称全 arXiv 覆盖。来源查询、同义词和数据库本身都有覆盖边界；完整分页也不是“全部相关文献”的保证。
 

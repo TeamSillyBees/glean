@@ -1,3 +1,5 @@
+//go:build live
+
 package monitor
 
 import (
@@ -11,7 +13,7 @@ import (
 )
 
 // TestLiveSourceCanary 只在显式启用时访问官方 API；每来源最多两次请求，不追完分页、不调用 LLM。
-// GLEAN_LIVE_SOURCE_CANARY=1 [GLEAN_LIVE_SOURCE=pubmed] go test ./internal/modules/monitor -run '^TestLiveSourceCanary$' -v -count=1
+// GLEAN_LIVE_SOURCE_CANARY=1 [GLEAN_LIVE_SOURCE=pubmed] go test -tags=live ./internal/modules/monitor -run '^TestLiveSourceCanary$' -v -count=1
 func TestLiveSourceCanary(t *testing.T) {
 	if os.Getenv("GLEAN_LIVE_SOURCE_CANARY") != "1" {
 		t.Skip("real official-API canary is opt-in, not deterministic fixture coverage")

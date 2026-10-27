@@ -1,0 +1,213 @@
+name: Manual live source acceptance
+
+# Explicit operator action only. Provider uptime must not gate normal build/tests.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: glean-live-source-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  live-source:
+    name: Manual official source, PostgreSQL and browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Dedicated disposable services, not application or user credentials.
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: glean_browser_ci
+      GLEAN_E2E_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/glean_browser_ci?sslmode=disable
+      INITRA_MONITOR_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/glean_browser_ci?sslmode=disable
+      GLEAN_E2E_USERNAME: glean-browser
+      GLEAN_E2E_SECOND_USERNAME: glean-browser-other
+      GLEAN_E2E_BASE_URL: http://127.0.0.1:18081
+      GLEAN_API_PROXY: http://127.0.0.1:18080
+      APP_ENV: local
+      INITRA_SERVER_ADDR: 127.0.0.1:18080
+      INITRA_DATABASE_DBNAME: glean_browser_ci
+      INITRA_IDGEN_NODE: 1
+      INITRA_TASK_WORKER_ENABLED: 'false'
+      INITRA_TASK_SCHEDULER_ENABLED: 'false'
+      INITRA_MONITOR_SCHEDULER_ENABLED: 'false'
+      INITRA_MONITOR_OPERATOR_ID: '7'
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: glean_browser_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Prepare isolated runtime and generated test-only identity
+        run: |
+          set -euo pipefail
+          umask 077
+          runtime="$RUNNER_TEMP/glean-browser"
+          mkdir -p "$runtime/configs"
+          cp configs/config.yaml configs/rbac_model.conf "$runtime/configs/"
+          jwt_secret="$(openssl rand -hex 32)"
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$jwt_secret"
+          echo "::add-mask::$password"
+          printf 'INITRA_AUTH_JWT_SECRET=%s\nGLEAN_E2E_PASSWORD=%s\n' "$jwt_secret" "$password" >> "$GITHUB_ENV"
+          cat db/migrations/*.sql | psql --set ON_ERROR_STOP=1 --single-transaction > "$runtime/migrations.log"
+          go build -o "$runtime/server" ./cmd/server
+          go build -o "$runtime/browserseed" ./test/e2e/browserseed
+          go build -o "$runtime/monitor" ./cmd/glean-monitor
+
+      - name: Create isolated test-only accounts without historical import
+        run: '"$RUNNER_TEMP/glean-browser/browserseed"'
+
+      - name: Start actual Go HTTP API
+        run: |
+          runtime="$RUNNER_TEMP/glean-browser"
+          cd "$runtime"
+          ./server > "$runtime/server.log" 2>&1 &
+          echo "$!" > "$runtime/server.pid"
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-all-errors \
+            --max-time 5 --retry-max-time 90 http://127.0.0.1:18080/ready > /dev/null
+
+      - name: Build actual frontend and install CI Chromium
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          npx playwright install --with-deps chromium
+
+      - name: Persist one bounded official EuropePMC response through the real pipeline
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          runtime="$RUNNER_TEMP/glean-browser"
+          # Manual operational acceptance only; never part of push/PR build CI.
+          # One real HTTP page, one requested record, no keys, contacts, retries or fallback.
+          # A provider failure is an honest failed live check, never replaced by a fixture.
+          "$runtime/monitor" --node 18 --operator 7 --sources europepmc \
+            --since 2026-10-23T00:00:00Z --until 2026-10-24T00:00:00Z \
+            --max-pages 1 --page-size 1 --require-observation --allow-local-insecure \
+            > "$runtime/live-monitor.json"
+          python3 - "$runtime/live-monitor.json" <<'PY'
+          import json
+          import sys
+          from urllib.parse import urlsplit
+
+          with open(sys.argv[1], encoding="utf-8") as source:
+              result = json.load(source)
+          assert result["mode"] == "real" and result["status"] in {"bounded-partial", "completed"}
+          assert result["requestBudget"] == result["pageSize"] == 1
+          assert sum(run["requests"] for run in result["runs"]) == 1
+          observations = result["observations"]
+          assert len(observations) == 1, "Exactly one bounded real source observation must be committed"
+          item = observations[0]
+          assert item["source"] == "europepmc"
+          assert item["llmIsMock"] is True and item["scientificReviewed"] is False
+          assert item["sourceId"] and (item.get("catalogTitle") or item["title"])
+          for key in ["paperId", "observationId", "runId"]:
+              assert isinstance(item[key], str) and item[key].isdigit() and int(item[key]) > 0
+          origin = urlsplit(item["sourceUrl"])
+          assert origin.scheme == "https" and origin.hostname == "www.ebi.ac.uk" and not origin.username and not origin.password
+          print("One actual EuropePMC response persisted; source evidence is real, only LLM review is mock. Paging remains bounded/incomplete.")
+          PY
+          observation_count="$(psql -Atqc "SELECT COUNT(*) FROM glean_observation WHERE source = 'europepmc'")"
+          test "$observation_count" = 1
+          test "$(psql -Atqc 'SELECT COUNT(*) FROM glean_paper WHERE is_mock')" = 0
+
+      - name: Show the newly fetched official observation in desktop and mobile browsers
+        working-directory: web
+        env:
+          GLEAN_E2E_PHASE: live
+        run: GLEAN_E2E_LIVE_REPORT="$RUNNER_TEMP/glean-browser/live-monitor.json" npm run test:e2e
+
+      - name: Remove generated authentication secrets from native browser reports
+        id: sanitize_reports
+        if: always()
+        run: |
+          python3 -m unittest discover -s test/e2e -p 'sanitize_reports_test.py'
+          python3 test/e2e/sanitize_reports.py web/playwright-report
+
+      - name: Upload browser screenshots and sanitized HTML report
+        if: always() && steps.sanitize_reports.outcome == 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: glean-live-source-${{ github.sha }}
+          path: |
+            web/test-results/**/*.png
+            web/playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
+          # No HAR, traces, auth storage, server logs, secrets or quarantine data.
+          include-hidden-files: false
+
+      - name: Diagnose failed API startup or browser acceptance
+        if: failure()
+        run: |
+          tail -n 80 "$RUNNER_TEMP/glean-browser/server.log" 2>/dev/null || true
+          # Preserve only safe typed upstream status, never request headers or raw bodies.
+          python3 - "$RUNNER_TEMP/glean-browser/live-monitor.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          if path.exists() and path.stat().st_size:
+              try:
+                  result = json.loads(path.read_text(encoding="utf-8"))
+                  print("Bounded live phase status:", result.get("status", "unknown"))
+                  for name, item in result.get("sources", {}).items():
+                      print(name, {key: item.get(key) for key in ["lastError", "lastStatusCode", "blocked", "nextRetryAt", "quarantined"]})
+              except (ValueError, TypeError):
+                  print("No complete live report; inspect the explicit CLI failure above.")
+          PY
+
+      - name: Stop API and delete generated credentials
+        if: always()
+        run: |
+          runtime="$RUNNER_TEMP/glean-browser"
+          if [ -f "$runtime/server.pid" ]; then kill "$(cat "$runtime/server.pid")" 2>/dev/null || true; fi
+          rm -rf "$runtime"
