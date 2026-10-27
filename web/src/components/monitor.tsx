@@ -5,32 +5,9 @@ import { date, number, topicLabels } from '../lib/utils'
 import type { TopicSlug } from '../lib/types'
 import { Badge, Empty, ErrorState, Loading } from './common'
 import { Button } from './ui/button'
+import type { Run } from './run-types'
+import { RunRecovery } from './run-recovery'
 export { SourcesView, FreshnessStrip } from './source-health'
-interface Progress {
-  acquired: boolean
-  handled?: boolean
-  quarantined?: number
-  reviewed: boolean
-  published: boolean
-  failed: boolean
-  attempts: number
-  pages: number
-  observed?: number
-  projected?: number
-  lastError?: string
-  window: { start: string; end: string }
-}
-interface Run {
-  id: string
-  number: number
-  startedAt: string
-  fixedEnd: string
-  finishedAt: string
-  status: string
-  mode: string
-  templateVersion: string
-  sources: Record<string, Progress>
-}
 interface SearchTemplate {
   id: string
   version: string
@@ -114,7 +91,13 @@ export function RunsView() {
         />
       ) : (
         items.map((run) => (
-          <section key={run.id} className="rounded-xl border bg-white p-6">
+          <section
+            key={run.id}
+            id={`scan-run-${run.id}`}
+            tabIndex={-1}
+            aria-label={`运行 ${run.id}`}
+            className="rounded-xl border bg-white p-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-xl bg-violet-50">
                 <Activity className="size-4 text-primary" />
@@ -151,6 +134,7 @@ export function RunsView() {
                 正在等待来源退避或重试条件，刷新此页面不会提前发起采集请求。
               </p>
             )}
+            <RunRecovery run={run} runs={items} historyStale={query.isError} />
             <div className="mt-5 grid gap-4 border-t pt-5 sm:grid-cols-2">
               <p className="text-xs text-muted-foreground">
                 固定结束水位{' '}
