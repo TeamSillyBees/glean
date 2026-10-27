@@ -28,7 +28,7 @@ import (
 	"github.com/teamsillybees/glean/internal/platform/entx"
 )
 
-func normalizeObservation(in *ObservationInput) (string, error) {
+func normalizeObservation(in *ObservationInput, knownTopics ...string) (string, error) {
 	in.EventType = ""
 	if in.RunID <= 0 || strings.TrimSpace(in.Source) == "" || strings.TrimSpace(in.SourceID) == "" || strings.TrimSpace(in.Title) == "" || in.ObservedAt.IsZero() {
 		return "", bizerrors.BadRequest("source observation requires run, source, sourceId, title and observedAt")
@@ -40,7 +40,14 @@ func normalizeObservation(in *ObservationInput) (string, error) {
 		return "", bizerrors.BadRequest("source observation requires at least one query-hit topic")
 	}
 	for _, topic := range in.Topics {
-		if !validTopic(topic) {
+		known := validTopic(topic)
+		for _, v := range knownTopics {
+			if v == topic {
+				known = true
+				break
+			}
+		}
+		if !known {
 			return "", bizerrors.BadRequest("unknown source query topic")
 		}
 	}
@@ -128,7 +135,15 @@ func (s *Service) IngestObservation(ctx context.Context, input ObservationInput)
 	if input.Kind != "" || input.AbstractEvidence != nil {
 		return ObservationResult{}, &observationRejection{kind: "invalid_source_record", err: bizerrors.BadRequest("historical abstract evidence requires the restricted enrichment path")}
 	}
-	hash, err := normalizeObservation(&input)
+	for _, topic := range input.Topics {
+		if err := s.topicExists(ctx, topic); err != nil {
+			if bizerrors.StatusOf(err) == 400 {
+				return ObservationResult{}, &observationRejection{kind: "invalid_source_record", err: err}
+			}
+			return ObservationResult{}, err
+		}
+	}
+	hash, err := normalizeObservation(&input, input.Topics...)
 	if err != nil {
 		return ObservationResult{}, &observationRejection{kind: "invalid_source_record", err: err}
 	}

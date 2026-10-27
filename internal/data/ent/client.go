@@ -16,13 +16,17 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/teamsillybees/glean/internal/data/ent/gleancatalogchange"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmonitorstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservationmatch"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpapercorrection"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
+	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
 	"github.com/teamsillybees/glean/internal/data/ent/sysdictcollection"
@@ -39,6 +43,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// GleanCatalogChange is the client for interacting with the GleanCatalogChange builders.
+	GleanCatalogChange *GleanCatalogChangeClient
 	// GleanMembership is the client for interacting with the GleanMembership builders.
 	GleanMembership *GleanMembershipClient
 	// GleanMonitorState is the client for interacting with the GleanMonitorState builders.
@@ -49,10 +55,16 @@ type Client struct {
 	GleanObservationMatch *GleanObservationMatchClient
 	// GleanPaper is the client for interacting with the GleanPaper builders.
 	GleanPaper *GleanPaperClient
+	// GleanPaperCorrection is the client for interacting with the GleanPaperCorrection builders.
+	GleanPaperCorrection *GleanPaperCorrectionClient
+	// GleanPaperReview is the client for interacting with the GleanPaperReview builders.
+	GleanPaperReview *GleanPaperReviewClient
 	// GleanPaperState is the client for interacting with the GleanPaperState builders.
 	GleanPaperState *GleanPaperStateClient
 	// GleanPreference is the client for interacting with the GleanPreference builders.
 	GleanPreference *GleanPreferenceClient
+	// GleanTopic is the client for interacting with the GleanTopic builders.
+	GleanTopic *GleanTopicClient
 	// GleanVenue is the client for interacting with the GleanVenue builders.
 	GleanVenue *GleanVenueClient
 	// SysConfig is the client for interacting with the SysConfig builders.
@@ -82,13 +94,17 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.GleanCatalogChange = NewGleanCatalogChangeClient(c.config)
 	c.GleanMembership = NewGleanMembershipClient(c.config)
 	c.GleanMonitorState = NewGleanMonitorStateClient(c.config)
 	c.GleanObservation = NewGleanObservationClient(c.config)
 	c.GleanObservationMatch = NewGleanObservationMatchClient(c.config)
 	c.GleanPaper = NewGleanPaperClient(c.config)
+	c.GleanPaperCorrection = NewGleanPaperCorrectionClient(c.config)
+	c.GleanPaperReview = NewGleanPaperReviewClient(c.config)
 	c.GleanPaperState = NewGleanPaperStateClient(c.config)
 	c.GleanPreference = NewGleanPreferenceClient(c.config)
+	c.GleanTopic = NewGleanTopicClient(c.config)
 	c.GleanVenue = NewGleanVenueClient(c.config)
 	c.SysConfig = NewSysConfigClient(c.config)
 	c.SysDictCollection = NewSysDictCollectionClient(c.config)
@@ -190,13 +206,17 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                   ctx,
 		config:                cfg,
+		GleanCatalogChange:    NewGleanCatalogChangeClient(cfg),
 		GleanMembership:       NewGleanMembershipClient(cfg),
 		GleanMonitorState:     NewGleanMonitorStateClient(cfg),
 		GleanObservation:      NewGleanObservationClient(cfg),
 		GleanObservationMatch: NewGleanObservationMatchClient(cfg),
 		GleanPaper:            NewGleanPaperClient(cfg),
+		GleanPaperCorrection:  NewGleanPaperCorrectionClient(cfg),
+		GleanPaperReview:      NewGleanPaperReviewClient(cfg),
 		GleanPaperState:       NewGleanPaperStateClient(cfg),
 		GleanPreference:       NewGleanPreferenceClient(cfg),
+		GleanTopic:            NewGleanTopicClient(cfg),
 		GleanVenue:            NewGleanVenueClient(cfg),
 		SysConfig:             NewSysConfigClient(cfg),
 		SysDictCollection:     NewSysDictCollectionClient(cfg),
@@ -225,13 +245,17 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                   ctx,
 		config:                cfg,
+		GleanCatalogChange:    NewGleanCatalogChangeClient(cfg),
 		GleanMembership:       NewGleanMembershipClient(cfg),
 		GleanMonitorState:     NewGleanMonitorStateClient(cfg),
 		GleanObservation:      NewGleanObservationClient(cfg),
 		GleanObservationMatch: NewGleanObservationMatchClient(cfg),
 		GleanPaper:            NewGleanPaperClient(cfg),
+		GleanPaperCorrection:  NewGleanPaperCorrectionClient(cfg),
+		GleanPaperReview:      NewGleanPaperReviewClient(cfg),
 		GleanPaperState:       NewGleanPaperStateClient(cfg),
 		GleanPreference:       NewGleanPreferenceClient(cfg),
+		GleanTopic:            NewGleanTopicClient(cfg),
 		GleanVenue:            NewGleanVenueClient(cfg),
 		SysConfig:             NewSysConfigClient(cfg),
 		SysDictCollection:     NewSysDictCollectionClient(cfg),
@@ -247,7 +271,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		GleanMembership.
+//		GleanCatalogChange.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -270,10 +294,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.GleanMembership, c.GleanMonitorState, c.GleanObservation,
-		c.GleanObservationMatch, c.GleanPaper, c.GleanPaperState, c.GleanPreference,
-		c.GleanVenue, c.SysConfig, c.SysDictCollection, c.SysDictItem, c.SysMenu,
-		c.SysRole, c.SysRoleMenu, c.SysUser, c.SysUserRole,
+		c.GleanCatalogChange, c.GleanMembership, c.GleanMonitorState,
+		c.GleanObservation, c.GleanObservationMatch, c.GleanPaper,
+		c.GleanPaperCorrection, c.GleanPaperReview, c.GleanPaperState,
+		c.GleanPreference, c.GleanTopic, c.GleanVenue, c.SysConfig,
+		c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu,
+		c.SysUser, c.SysUserRole,
 	} {
 		n.Use(hooks...)
 	}
@@ -283,10 +309,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.GleanMembership, c.GleanMonitorState, c.GleanObservation,
-		c.GleanObservationMatch, c.GleanPaper, c.GleanPaperState, c.GleanPreference,
-		c.GleanVenue, c.SysConfig, c.SysDictCollection, c.SysDictItem, c.SysMenu,
-		c.SysRole, c.SysRoleMenu, c.SysUser, c.SysUserRole,
+		c.GleanCatalogChange, c.GleanMembership, c.GleanMonitorState,
+		c.GleanObservation, c.GleanObservationMatch, c.GleanPaper,
+		c.GleanPaperCorrection, c.GleanPaperReview, c.GleanPaperState,
+		c.GleanPreference, c.GleanTopic, c.GleanVenue, c.SysConfig,
+		c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu,
+		c.SysUser, c.SysUserRole,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -295,6 +323,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *GleanCatalogChangeMutation:
+		return c.GleanCatalogChange.mutate(ctx, m)
 	case *GleanMembershipMutation:
 		return c.GleanMembership.mutate(ctx, m)
 	case *GleanMonitorStateMutation:
@@ -305,10 +335,16 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.GleanObservationMatch.mutate(ctx, m)
 	case *GleanPaperMutation:
 		return c.GleanPaper.mutate(ctx, m)
+	case *GleanPaperCorrectionMutation:
+		return c.GleanPaperCorrection.mutate(ctx, m)
+	case *GleanPaperReviewMutation:
+		return c.GleanPaperReview.mutate(ctx, m)
 	case *GleanPaperStateMutation:
 		return c.GleanPaperState.mutate(ctx, m)
 	case *GleanPreferenceMutation:
 		return c.GleanPreference.mutate(ctx, m)
+	case *GleanTopicMutation:
+		return c.GleanTopic.mutate(ctx, m)
 	case *GleanVenueMutation:
 		return c.GleanVenue.mutate(ctx, m)
 	case *SysConfigMutation:
@@ -329,6 +365,139 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SysUserRole.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// GleanCatalogChangeClient is a client for the GleanCatalogChange schema.
+type GleanCatalogChangeClient struct {
+	config
+}
+
+// NewGleanCatalogChangeClient returns a client for the GleanCatalogChange from the given config.
+func NewGleanCatalogChangeClient(c config) *GleanCatalogChangeClient {
+	return &GleanCatalogChangeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleancatalogchange.Hooks(f(g(h())))`.
+func (c *GleanCatalogChangeClient) Use(hooks ...Hook) {
+	c.hooks.GleanCatalogChange = append(c.hooks.GleanCatalogChange, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleancatalogchange.Intercept(f(g(h())))`.
+func (c *GleanCatalogChangeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanCatalogChange = append(c.inters.GleanCatalogChange, interceptors...)
+}
+
+// Create returns a builder for creating a GleanCatalogChange entity.
+func (c *GleanCatalogChangeClient) Create() *GleanCatalogChangeCreate {
+	mutation := newGleanCatalogChangeMutation(c.config, OpCreate)
+	return &GleanCatalogChangeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanCatalogChange entities.
+func (c *GleanCatalogChangeClient) CreateBulk(builders ...*GleanCatalogChangeCreate) *GleanCatalogChangeCreateBulk {
+	return &GleanCatalogChangeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanCatalogChangeClient) MapCreateBulk(slice any, setFunc func(*GleanCatalogChangeCreate, int)) *GleanCatalogChangeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanCatalogChangeCreateBulk{err: fmt.Errorf("calling to GleanCatalogChangeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanCatalogChangeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanCatalogChangeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanCatalogChange.
+func (c *GleanCatalogChangeClient) Update() *GleanCatalogChangeUpdate {
+	mutation := newGleanCatalogChangeMutation(c.config, OpUpdate)
+	return &GleanCatalogChangeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanCatalogChangeClient) UpdateOne(_m *GleanCatalogChange) *GleanCatalogChangeUpdateOne {
+	mutation := newGleanCatalogChangeMutation(c.config, OpUpdateOne, withGleanCatalogChange(_m))
+	return &GleanCatalogChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanCatalogChangeClient) UpdateOneID(id idgen.ID) *GleanCatalogChangeUpdateOne {
+	mutation := newGleanCatalogChangeMutation(c.config, OpUpdateOne, withGleanCatalogChangeID(id))
+	return &GleanCatalogChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanCatalogChange.
+func (c *GleanCatalogChangeClient) Delete() *GleanCatalogChangeDelete {
+	mutation := newGleanCatalogChangeMutation(c.config, OpDelete)
+	return &GleanCatalogChangeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanCatalogChangeClient) DeleteOne(_m *GleanCatalogChange) *GleanCatalogChangeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanCatalogChangeClient) DeleteOneID(id idgen.ID) *GleanCatalogChangeDeleteOne {
+	builder := c.Delete().Where(gleancatalogchange.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanCatalogChangeDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanCatalogChange.
+func (c *GleanCatalogChangeClient) Query() *GleanCatalogChangeQuery {
+	return &GleanCatalogChangeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanCatalogChange},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanCatalogChange entity by its id.
+func (c *GleanCatalogChangeClient) Get(ctx context.Context, id idgen.ID) (*GleanCatalogChange, error) {
+	return c.Query().Where(gleancatalogchange.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanCatalogChangeClient) GetX(ctx context.Context, id idgen.ID) *GleanCatalogChange {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanCatalogChangeClient) Hooks() []Hook {
+	return c.hooks.GleanCatalogChange
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanCatalogChangeClient) Interceptors() []Interceptor {
+	return c.inters.GleanCatalogChange
+}
+
+func (c *GleanCatalogChangeClient) mutate(ctx context.Context, m *GleanCatalogChangeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanCatalogChangeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanCatalogChangeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanCatalogChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanCatalogChangeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanCatalogChange mutation op: %q", m.Op())
 	}
 }
 
@@ -997,6 +1166,272 @@ func (c *GleanPaperClient) mutate(ctx context.Context, m *GleanPaperMutation) (V
 	}
 }
 
+// GleanPaperCorrectionClient is a client for the GleanPaperCorrection schema.
+type GleanPaperCorrectionClient struct {
+	config
+}
+
+// NewGleanPaperCorrectionClient returns a client for the GleanPaperCorrection from the given config.
+func NewGleanPaperCorrectionClient(c config) *GleanPaperCorrectionClient {
+	return &GleanPaperCorrectionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleanpapercorrection.Hooks(f(g(h())))`.
+func (c *GleanPaperCorrectionClient) Use(hooks ...Hook) {
+	c.hooks.GleanPaperCorrection = append(c.hooks.GleanPaperCorrection, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleanpapercorrection.Intercept(f(g(h())))`.
+func (c *GleanPaperCorrectionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanPaperCorrection = append(c.inters.GleanPaperCorrection, interceptors...)
+}
+
+// Create returns a builder for creating a GleanPaperCorrection entity.
+func (c *GleanPaperCorrectionClient) Create() *GleanPaperCorrectionCreate {
+	mutation := newGleanPaperCorrectionMutation(c.config, OpCreate)
+	return &GleanPaperCorrectionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanPaperCorrection entities.
+func (c *GleanPaperCorrectionClient) CreateBulk(builders ...*GleanPaperCorrectionCreate) *GleanPaperCorrectionCreateBulk {
+	return &GleanPaperCorrectionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanPaperCorrectionClient) MapCreateBulk(slice any, setFunc func(*GleanPaperCorrectionCreate, int)) *GleanPaperCorrectionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanPaperCorrectionCreateBulk{err: fmt.Errorf("calling to GleanPaperCorrectionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanPaperCorrectionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanPaperCorrectionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanPaperCorrection.
+func (c *GleanPaperCorrectionClient) Update() *GleanPaperCorrectionUpdate {
+	mutation := newGleanPaperCorrectionMutation(c.config, OpUpdate)
+	return &GleanPaperCorrectionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanPaperCorrectionClient) UpdateOne(_m *GleanPaperCorrection) *GleanPaperCorrectionUpdateOne {
+	mutation := newGleanPaperCorrectionMutation(c.config, OpUpdateOne, withGleanPaperCorrection(_m))
+	return &GleanPaperCorrectionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanPaperCorrectionClient) UpdateOneID(id idgen.ID) *GleanPaperCorrectionUpdateOne {
+	mutation := newGleanPaperCorrectionMutation(c.config, OpUpdateOne, withGleanPaperCorrectionID(id))
+	return &GleanPaperCorrectionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanPaperCorrection.
+func (c *GleanPaperCorrectionClient) Delete() *GleanPaperCorrectionDelete {
+	mutation := newGleanPaperCorrectionMutation(c.config, OpDelete)
+	return &GleanPaperCorrectionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanPaperCorrectionClient) DeleteOne(_m *GleanPaperCorrection) *GleanPaperCorrectionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanPaperCorrectionClient) DeleteOneID(id idgen.ID) *GleanPaperCorrectionDeleteOne {
+	builder := c.Delete().Where(gleanpapercorrection.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanPaperCorrectionDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanPaperCorrection.
+func (c *GleanPaperCorrectionClient) Query() *GleanPaperCorrectionQuery {
+	return &GleanPaperCorrectionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanPaperCorrection},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanPaperCorrection entity by its id.
+func (c *GleanPaperCorrectionClient) Get(ctx context.Context, id idgen.ID) (*GleanPaperCorrection, error) {
+	return c.Query().Where(gleanpapercorrection.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanPaperCorrectionClient) GetX(ctx context.Context, id idgen.ID) *GleanPaperCorrection {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanPaperCorrectionClient) Hooks() []Hook {
+	return c.hooks.GleanPaperCorrection
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanPaperCorrectionClient) Interceptors() []Interceptor {
+	return c.inters.GleanPaperCorrection
+}
+
+func (c *GleanPaperCorrectionClient) mutate(ctx context.Context, m *GleanPaperCorrectionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanPaperCorrectionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanPaperCorrectionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanPaperCorrectionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanPaperCorrectionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanPaperCorrection mutation op: %q", m.Op())
+	}
+}
+
+// GleanPaperReviewClient is a client for the GleanPaperReview schema.
+type GleanPaperReviewClient struct {
+	config
+}
+
+// NewGleanPaperReviewClient returns a client for the GleanPaperReview from the given config.
+func NewGleanPaperReviewClient(c config) *GleanPaperReviewClient {
+	return &GleanPaperReviewClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleanpaperreview.Hooks(f(g(h())))`.
+func (c *GleanPaperReviewClient) Use(hooks ...Hook) {
+	c.hooks.GleanPaperReview = append(c.hooks.GleanPaperReview, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleanpaperreview.Intercept(f(g(h())))`.
+func (c *GleanPaperReviewClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanPaperReview = append(c.inters.GleanPaperReview, interceptors...)
+}
+
+// Create returns a builder for creating a GleanPaperReview entity.
+func (c *GleanPaperReviewClient) Create() *GleanPaperReviewCreate {
+	mutation := newGleanPaperReviewMutation(c.config, OpCreate)
+	return &GleanPaperReviewCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanPaperReview entities.
+func (c *GleanPaperReviewClient) CreateBulk(builders ...*GleanPaperReviewCreate) *GleanPaperReviewCreateBulk {
+	return &GleanPaperReviewCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanPaperReviewClient) MapCreateBulk(slice any, setFunc func(*GleanPaperReviewCreate, int)) *GleanPaperReviewCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanPaperReviewCreateBulk{err: fmt.Errorf("calling to GleanPaperReviewClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanPaperReviewCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanPaperReviewCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanPaperReview.
+func (c *GleanPaperReviewClient) Update() *GleanPaperReviewUpdate {
+	mutation := newGleanPaperReviewMutation(c.config, OpUpdate)
+	return &GleanPaperReviewUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanPaperReviewClient) UpdateOne(_m *GleanPaperReview) *GleanPaperReviewUpdateOne {
+	mutation := newGleanPaperReviewMutation(c.config, OpUpdateOne, withGleanPaperReview(_m))
+	return &GleanPaperReviewUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanPaperReviewClient) UpdateOneID(id idgen.ID) *GleanPaperReviewUpdateOne {
+	mutation := newGleanPaperReviewMutation(c.config, OpUpdateOne, withGleanPaperReviewID(id))
+	return &GleanPaperReviewUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanPaperReview.
+func (c *GleanPaperReviewClient) Delete() *GleanPaperReviewDelete {
+	mutation := newGleanPaperReviewMutation(c.config, OpDelete)
+	return &GleanPaperReviewDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanPaperReviewClient) DeleteOne(_m *GleanPaperReview) *GleanPaperReviewDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanPaperReviewClient) DeleteOneID(id idgen.ID) *GleanPaperReviewDeleteOne {
+	builder := c.Delete().Where(gleanpaperreview.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanPaperReviewDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanPaperReview.
+func (c *GleanPaperReviewClient) Query() *GleanPaperReviewQuery {
+	return &GleanPaperReviewQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanPaperReview},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanPaperReview entity by its id.
+func (c *GleanPaperReviewClient) Get(ctx context.Context, id idgen.ID) (*GleanPaperReview, error) {
+	return c.Query().Where(gleanpaperreview.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanPaperReviewClient) GetX(ctx context.Context, id idgen.ID) *GleanPaperReview {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanPaperReviewClient) Hooks() []Hook {
+	return c.hooks.GleanPaperReview
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanPaperReviewClient) Interceptors() []Interceptor {
+	return c.inters.GleanPaperReview
+}
+
+func (c *GleanPaperReviewClient) mutate(ctx context.Context, m *GleanPaperReviewMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanPaperReviewCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanPaperReviewUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanPaperReviewUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanPaperReviewDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanPaperReview mutation op: %q", m.Op())
+	}
+}
+
 // GleanPaperStateClient is a client for the GleanPaperState schema.
 type GleanPaperStateClient struct {
 	config
@@ -1260,6 +1695,139 @@ func (c *GleanPreferenceClient) mutate(ctx context.Context, m *GleanPreferenceMu
 		return (&GleanPreferenceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GleanPreference mutation op: %q", m.Op())
+	}
+}
+
+// GleanTopicClient is a client for the GleanTopic schema.
+type GleanTopicClient struct {
+	config
+}
+
+// NewGleanTopicClient returns a client for the GleanTopic from the given config.
+func NewGleanTopicClient(c config) *GleanTopicClient {
+	return &GleanTopicClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleantopic.Hooks(f(g(h())))`.
+func (c *GleanTopicClient) Use(hooks ...Hook) {
+	c.hooks.GleanTopic = append(c.hooks.GleanTopic, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleantopic.Intercept(f(g(h())))`.
+func (c *GleanTopicClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanTopic = append(c.inters.GleanTopic, interceptors...)
+}
+
+// Create returns a builder for creating a GleanTopic entity.
+func (c *GleanTopicClient) Create() *GleanTopicCreate {
+	mutation := newGleanTopicMutation(c.config, OpCreate)
+	return &GleanTopicCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanTopic entities.
+func (c *GleanTopicClient) CreateBulk(builders ...*GleanTopicCreate) *GleanTopicCreateBulk {
+	return &GleanTopicCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanTopicClient) MapCreateBulk(slice any, setFunc func(*GleanTopicCreate, int)) *GleanTopicCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanTopicCreateBulk{err: fmt.Errorf("calling to GleanTopicClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanTopicCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanTopicCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanTopic.
+func (c *GleanTopicClient) Update() *GleanTopicUpdate {
+	mutation := newGleanTopicMutation(c.config, OpUpdate)
+	return &GleanTopicUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanTopicClient) UpdateOne(_m *GleanTopic) *GleanTopicUpdateOne {
+	mutation := newGleanTopicMutation(c.config, OpUpdateOne, withGleanTopic(_m))
+	return &GleanTopicUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanTopicClient) UpdateOneID(id idgen.ID) *GleanTopicUpdateOne {
+	mutation := newGleanTopicMutation(c.config, OpUpdateOne, withGleanTopicID(id))
+	return &GleanTopicUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanTopic.
+func (c *GleanTopicClient) Delete() *GleanTopicDelete {
+	mutation := newGleanTopicMutation(c.config, OpDelete)
+	return &GleanTopicDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanTopicClient) DeleteOne(_m *GleanTopic) *GleanTopicDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanTopicClient) DeleteOneID(id idgen.ID) *GleanTopicDeleteOne {
+	builder := c.Delete().Where(gleantopic.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanTopicDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanTopic.
+func (c *GleanTopicClient) Query() *GleanTopicQuery {
+	return &GleanTopicQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanTopic},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanTopic entity by its id.
+func (c *GleanTopicClient) Get(ctx context.Context, id idgen.ID) (*GleanTopic, error) {
+	return c.Query().Where(gleantopic.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanTopicClient) GetX(ctx context.Context, id idgen.ID) *GleanTopic {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanTopicClient) Hooks() []Hook {
+	return c.hooks.GleanTopic
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanTopicClient) Interceptors() []Interceptor {
+	return c.inters.GleanTopic
+}
+
+func (c *GleanTopicClient) mutate(ctx context.Context, m *GleanTopicMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanTopicCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanTopicUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanTopicUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanTopicDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanTopic mutation op: %q", m.Op())
 	}
 }
 
@@ -2655,14 +3223,16 @@ func (c *SysUserRoleClient) mutate(ctx context.Context, m *SysUserRoleMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		GleanMembership, GleanMonitorState, GleanObservation, GleanObservationMatch,
-		GleanPaper, GleanPaperState, GleanPreference, GleanVenue, SysConfig,
+		GleanCatalogChange, GleanMembership, GleanMonitorState, GleanObservation,
+		GleanObservationMatch, GleanPaper, GleanPaperCorrection, GleanPaperReview,
+		GleanPaperState, GleanPreference, GleanTopic, GleanVenue, SysConfig,
 		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
 		SysUserRole []ent.Hook
 	}
 	inters struct {
-		GleanMembership, GleanMonitorState, GleanObservation, GleanObservationMatch,
-		GleanPaper, GleanPaperState, GleanPreference, GleanVenue, SysConfig,
+		GleanCatalogChange, GleanMembership, GleanMonitorState, GleanObservation,
+		GleanObservationMatch, GleanPaper, GleanPaperCorrection, GleanPaperReview,
+		GleanPaperState, GleanPreference, GleanTopic, GleanVenue, SysConfig,
 		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
 		SysUserRole []ent.Interceptor
 	}

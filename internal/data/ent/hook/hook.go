@@ -9,6 +9,18 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent"
 )
 
+// The GleanCatalogChangeFunc type is an adapter to allow the use of ordinary
+// function as GleanCatalogChange mutator.
+type GleanCatalogChangeFunc func(context.Context, *ent.GleanCatalogChangeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanCatalogChangeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanCatalogChangeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanCatalogChangeMutation", m)
+}
+
 // The GleanMembershipFunc type is an adapter to allow the use of ordinary
 // function as GleanMembership mutator.
 type GleanMembershipFunc func(context.Context, *ent.GleanMembershipMutation) (ent.Value, error)
@@ -69,6 +81,30 @@ func (f GleanPaperFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanPaperMutation", m)
 }
 
+// The GleanPaperCorrectionFunc type is an adapter to allow the use of ordinary
+// function as GleanPaperCorrection mutator.
+type GleanPaperCorrectionFunc func(context.Context, *ent.GleanPaperCorrectionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanPaperCorrectionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanPaperCorrectionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanPaperCorrectionMutation", m)
+}
+
+// The GleanPaperReviewFunc type is an adapter to allow the use of ordinary
+// function as GleanPaperReview mutator.
+type GleanPaperReviewFunc func(context.Context, *ent.GleanPaperReviewMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanPaperReviewFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanPaperReviewMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanPaperReviewMutation", m)
+}
+
 // The GleanPaperStateFunc type is an adapter to allow the use of ordinary
 // function as GleanPaperState mutator.
 type GleanPaperStateFunc func(context.Context, *ent.GleanPaperStateMutation) (ent.Value, error)
@@ -91,6 +127,18 @@ func (f GleanPreferenceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanPreferenceMutation", m)
+}
+
+// The GleanTopicFunc type is an adapter to allow the use of ordinary
+// function as GleanTopic mutator.
+type GleanTopicFunc func(context.Context, *ent.GleanTopicMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanTopicFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanTopicMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanTopicMutation", m)
 }
 
 // The GleanVenueFunc type is an adapter to allow the use of ordinary

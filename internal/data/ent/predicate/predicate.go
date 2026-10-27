@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// GleanCatalogChange is the predicate function for gleancatalogchange builders.
+type GleanCatalogChange func(*sql.Selector)
+
 // GleanMembership is the predicate function for gleanmembership builders.
 type GleanMembership func(*sql.Selector)
 
@@ -21,11 +24,20 @@ type GleanObservationMatch func(*sql.Selector)
 // GleanPaper is the predicate function for gleanpaper builders.
 type GleanPaper func(*sql.Selector)
 
+// GleanPaperCorrection is the predicate function for gleanpapercorrection builders.
+type GleanPaperCorrection func(*sql.Selector)
+
+// GleanPaperReview is the predicate function for gleanpaperreview builders.
+type GleanPaperReview func(*sql.Selector)
+
 // GleanPaperState is the predicate function for gleanpaperstate builders.
 type GleanPaperState func(*sql.Selector)
 
 // GleanPreference is the predicate function for gleanpreference builders.
 type GleanPreference func(*sql.Selector)
+
+// GleanTopic is the predicate function for gleantopic builders.
+type GleanTopic func(*sql.Selector)
 
 // GleanVenue is the predicate function for gleanvenue builders.
 type GleanVenue func(*sql.Selector)

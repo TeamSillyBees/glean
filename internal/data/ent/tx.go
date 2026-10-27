@@ -12,6 +12,8 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// GleanCatalogChange is the client for interacting with the GleanCatalogChange builders.
+	GleanCatalogChange *GleanCatalogChangeClient
 	// GleanMembership is the client for interacting with the GleanMembership builders.
 	GleanMembership *GleanMembershipClient
 	// GleanMonitorState is the client for interacting with the GleanMonitorState builders.
@@ -22,10 +24,16 @@ type Tx struct {
 	GleanObservationMatch *GleanObservationMatchClient
 	// GleanPaper is the client for interacting with the GleanPaper builders.
 	GleanPaper *GleanPaperClient
+	// GleanPaperCorrection is the client for interacting with the GleanPaperCorrection builders.
+	GleanPaperCorrection *GleanPaperCorrectionClient
+	// GleanPaperReview is the client for interacting with the GleanPaperReview builders.
+	GleanPaperReview *GleanPaperReviewClient
 	// GleanPaperState is the client for interacting with the GleanPaperState builders.
 	GleanPaperState *GleanPaperStateClient
 	// GleanPreference is the client for interacting with the GleanPreference builders.
 	GleanPreference *GleanPreferenceClient
+	// GleanTopic is the client for interacting with the GleanTopic builders.
+	GleanTopic *GleanTopicClient
 	// GleanVenue is the client for interacting with the GleanVenue builders.
 	GleanVenue *GleanVenueClient
 	// SysConfig is the client for interacting with the SysConfig builders.
@@ -175,13 +183,17 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.GleanCatalogChange = NewGleanCatalogChangeClient(tx.config)
 	tx.GleanMembership = NewGleanMembershipClient(tx.config)
 	tx.GleanMonitorState = NewGleanMonitorStateClient(tx.config)
 	tx.GleanObservation = NewGleanObservationClient(tx.config)
 	tx.GleanObservationMatch = NewGleanObservationMatchClient(tx.config)
 	tx.GleanPaper = NewGleanPaperClient(tx.config)
+	tx.GleanPaperCorrection = NewGleanPaperCorrectionClient(tx.config)
+	tx.GleanPaperReview = NewGleanPaperReviewClient(tx.config)
 	tx.GleanPaperState = NewGleanPaperStateClient(tx.config)
 	tx.GleanPreference = NewGleanPreferenceClient(tx.config)
+	tx.GleanTopic = NewGleanTopicClient(tx.config)
 	tx.GleanVenue = NewGleanVenueClient(tx.config)
 	tx.SysConfig = NewSysConfigClient(tx.config)
 	tx.SysDictCollection = NewSysDictCollectionClient(tx.config)
@@ -200,7 +212,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: GleanMembership.QueryXXX(), the query will be executed
+// applies a query, for example: GleanCatalogChange.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

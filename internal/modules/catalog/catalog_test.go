@@ -81,7 +81,7 @@ func TestImportParentFailureRollsBack(t *testing.T) {
 func TestPaperPaginationIsDeterministic(t *testing.T) {
 	service, mock := catalogMock(t)
 	mock.ExpectQuery(`SELECT COUNT\("glean_paper"\."id"\).*`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(50))
-	mock.ExpectQuery(`SELECT .* FROM "glean_paper" .* ORDER BY "glean_paper"\."year" DESC, "glean_paper"\."formal_online_date" DESC NULLS LAST, "glean_paper"\."id" DESC LIMIT 20 OFFSET 20`).WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery(`SELECT .* FROM "glean_paper" .* ORDER BY COALESCE\(.*"glean_paper"\."year"\) DESC, "glean_paper"\."formal_online_date" DESC NULLS LAST, "glean_paper"\."id" DESC LIMIT 20 OFFSET 20`).WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	page, err := service.Papers(requestctx.WithUserID(context.Background(), "7"), PaperQuery{Topic: "biomed-ai", Page: 2, PageSize: 20})
 	require.NoError(t, err)
 	require.Equal(t, 50, page.Total)

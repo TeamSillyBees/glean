@@ -44,13 +44,13 @@ func userID(ctx context.Context) (idgen.ID, error) {
 	return id, nil
 }
 func validateQuery(q *PaperQuery) error {
-	if q.CollectionScope != "" && q.CollectionScope != "all" && q.CollectionScope != "curated" && q.CollectionScope != "pending" {
+	if q.CollectionScope != "" && q.CollectionScope != "all" && q.CollectionScope != "curated" && q.CollectionScope != "pending" && q.CollectionScope != "excluded" {
 		return bizerrors.BadRequest("invalid collection scope")
 	}
-	if q.Topic != "" && !validTopic(q.Topic) {
+	if q.Topic != "" && !topicSlugPattern.MatchString(q.Topic) {
 		return bizerrors.BadRequest("unknown topic")
 	}
-	if q.InclusionStatus != "" && q.InclusionStatus != "historical" && q.InclusionStatus != "pending-review" {
+	if q.InclusionStatus != "" && q.InclusionStatus != "historical" && q.InclusionStatus != "pending-review" && q.InclusionStatus != "pending" && q.InclusionStatus != "included" && q.InclusionStatus != "excluded" {
 		return bizerrors.BadRequest("invalid inclusion status")
 	}
 	if q.Page == 0 {

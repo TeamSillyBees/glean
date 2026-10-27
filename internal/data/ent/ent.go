@@ -12,13 +12,17 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/teamsillybees/glean/internal/data/ent/gleancatalogchange"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmonitorstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservationmatch"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpapercorrection"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
+	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
 	"github.com/teamsillybees/glean/internal/data/ent/sysdictcollection"
@@ -88,13 +92,17 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
+			gleancatalogchange.Table:    gleancatalogchange.ValidColumn,
 			gleanmembership.Table:       gleanmembership.ValidColumn,
 			gleanmonitorstate.Table:     gleanmonitorstate.ValidColumn,
 			gleanobservation.Table:      gleanobservation.ValidColumn,
 			gleanobservationmatch.Table: gleanobservationmatch.ValidColumn,
 			gleanpaper.Table:            gleanpaper.ValidColumn,
+			gleanpapercorrection.Table:  gleanpapercorrection.ValidColumn,
+			gleanpaperreview.Table:      gleanpaperreview.ValidColumn,
 			gleanpaperstate.Table:       gleanpaperstate.ValidColumn,
 			gleanpreference.Table:       gleanpreference.ValidColumn,
+			gleantopic.Table:            gleantopic.ValidColumn,
 			gleanvenue.Table:            gleanvenue.ValidColumn,
 			sysconfig.Table:             sysconfig.ValidColumn,
 			sysdictcollection.Table:     sysdictcollection.ValidColumn,

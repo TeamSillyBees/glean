@@ -7,16 +7,19 @@ import (
 	"time"
 )
 
-// TopicVO 表示固定研究方向及真实导入数量。
+// TopicVO 表示兼容内置主题的动态研究方向及真实目录数量。
 type TopicVO struct {
-	Slug            string `json:"slug"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	Rule            string `json:"rule"`
-	MembershipCount int    `json:"membershipCount"`
-	HistoricalCount int    `json:"historicalCount"`
-	CandidateCount  int    `json:"candidateCount"`
-	CuratedCount    int    `json:"curatedCount"`
+	SearchEnabled   bool       `json:"searchEnabled"`
+	TermGroups      [][]string `json:"termGroups"`
+	Version         int        `json:"version"`
+	Slug            string     `json:"slug"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Rule            string     `json:"rule"`
+	MembershipCount int        `json:"membershipCount"`
+	HistoricalCount int        `json:"historicalCount"`
+	CandidateCount  int        `json:"candidateCount"`
+	CuratedCount    int        `json:"curatedCount"`
 }
 
 // SourceEvidence 保存来源及原始证据，不把接收日期冒充正式发表日期。
@@ -30,6 +33,8 @@ type SourceEvidence struct {
 
 // MembershipVO 保留主题内稳定标识、分类和原始记录。
 type MembershipVO struct {
+	EffectiveStatus string              `json:"effectiveStatus,omitempty"`
+	ManualReview    *ManualReviewVO     `json:"manualReview,omitempty"`
 	ReadingNotes    map[string]string   `json:"readingNotes,omitempty"`
 	InclusionStatus string              `json:"inclusionStatus"`
 	Topic           string              `json:"topic"`
@@ -44,8 +49,9 @@ type MembershipVO struct {
 	Raw             map[string]any      `json:"raw"`
 }
 
-// PaperVO 为只读论文详情，个人状态与历史元数据分开保存。
+// PaperVO 返回有效书目与来源详情；个人状态和人工覆盖层独立保存。
 type PaperVO struct {
+	Correction            *CorrectionVO         `json:"correction,omitempty"`
 	AbstractEnrichment    *AbstractEnrichmentVO `json:"abstractEnrichment,omitempty"`
 	Origin                string                `json:"origin"`
 	ImportedAt            *time.Time            `json:"importedAt,omitempty"`
@@ -115,10 +121,10 @@ type ImportResult struct {
 
 // PaperQuery 是共享查询条件，所有值通过 Ent 参数化。
 type PaperQuery struct {
-	CollectionScope string `query:"collectionScope" enum:"all,curated,pending"`
-	InclusionStatus string `query:"inclusionStatus" enum:"historical,pending-review"`
+	CollectionScope string `query:"collectionScope" enum:"all,curated,pending,excluded"`
+	InclusionStatus string `query:"inclusionStatus" enum:"historical,pending-review,pending,included,excluded"`
 	Source          string `query:"source" maxLength:"100"`
-	Topic           string `query:"topic"`
+	Topic           string `query:"topic" maxLength:"80"`
 	Q               string `query:"q" maxLength:"300"`
 	Year            int    `query:"year" minimum:"0" maximum:"9999"`
 	Venue           string `query:"venue" maxLength:"500"`
@@ -213,7 +219,7 @@ type paperResponse struct{ Body response.SuccessVO[PaperVO] }
 type facetsResponse struct{ Body response.SuccessVO[FacetsVO] }
 type venuesRequest struct {
 	Q     string `query:"q" maxLength:"300"`
-	Topic string `query:"topic"`
+	Topic string `query:"topic" maxLength:"80"`
 }
 type venuesResponse struct {
 	Body response.SuccessVO[struct {

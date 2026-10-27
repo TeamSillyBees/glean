@@ -29,7 +29,24 @@ func (m *Module) Register(api huma.API, registry *server.RouteRegistry) {
 	huma.Register(api, register(http.MethodGet, "/api/v1/catalog/preferences", "catalog-preferences", "个人筛选偏好"), m.handler.preferences)
 	huma.Register(api, register(http.MethodPut, "/api/v1/catalog/preferences", "catalog-save-preferences", "保存个人筛选偏好"), m.handler.savePreferences)
 	huma.Register(api, register(http.MethodPut, "/api/v1/catalog/papers/{id}/state", "catalog-paper-state", "保存个人阅读隐藏状态"), m.handler.saveState)
+
+	huma.Register(api, register(http.MethodGet, "/api/v1/catalog/access", "catalog-access", "目录管理能力"), m.handler.access)
+	huma.Register(api, register(http.MethodGet, "/api/v1/catalog/papers/{id}/history", "catalog-history", "论文人工修改历史"), m.handler.history)
 	for _, op := range operations {
 		registry.Register(op.Method, op.Path, platformauth.RouteSecurity{AccessMode: platformauth.AccessModeAuthenticated})
 	}
+	writes := []huma.Operation{}
+	write := func(method, path, id, summary string) huma.Operation {
+		op := huma.Operation{Method: method, Path: path, OperationID: id, Summary: summary, Tags: []string{"目录管理"}, MaxBodyBytes: 160 * 1024}
+		writes = append(writes, op)
+		return op
+	}
+	huma.Register(api, write(http.MethodPut, "/api/v1/catalog/papers/{id}/topics/{slug}/review", "catalog-review", "保存人工审核"), m.handler.saveReview)
+	huma.Register(api, write(http.MethodPut, "/api/v1/catalog/papers/{id}/correction", "catalog-correction", "保存元数据纠错"), m.handler.saveCorrection)
+	huma.Register(api, write(http.MethodPost, "/api/v1/catalog/topics", "catalog-create-topic", "新增研究主题"), m.handler.createTopic)
+	huma.Register(api, write(http.MethodPut, "/api/v1/catalog/topics/{slug}", "catalog-update-topic", "编辑研究主题"), m.handler.updateTopic)
+	for _, op := range writes {
+		registry.Register(op.Method, op.Path, platformauth.RouteSecurity{AccessMode: platformauth.AccessModePermission, Permission: "catalog:manage"})
+	}
+
 }

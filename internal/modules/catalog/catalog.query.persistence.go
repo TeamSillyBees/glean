@@ -14,6 +14,7 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanmembership"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
+	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/predicate"
@@ -27,21 +28,18 @@ func membershipSelector(q PaperQuery) *sql.Selector {
 	if q.Topic != "" {
 		selector.Where(sql.EQ(t.C(gleanmembership.FieldTopic), q.Topic))
 	}
-	if q.CollectionScope == "pending" {
-		selector.Where(sql.EQ(t.C(gleanmembership.FieldInclusionStatus), "pending-review"))
-	} else if q.CollectionScope == "curated" {
-		selector.Where(sql.EQ(t.C(gleanmembership.FieldInclusionStatus), "historical"))
-		predicates := []*sql.Predicate{}
-		for _, topic := range topics {
-			if q.Topic != "" && q.Topic != topic.Slug {
-				continue
-			}
-			predicates = append(predicates, sql.And(sql.EQ(t.C(gleanmembership.FieldTopic), topic.Slug), sqljson.ValueContains(t.C(gleanmembership.FieldDimensions), historicalCuratedDimensions(topic.Slug))))
-		}
-		selector.Where(sql.Or(predicates...))
+	if scope := collectionPredicate(t.C("paper_id"), t.C("topic"), t.C("inclusion_status"), t.C("dimensions"), q.CollectionScope); scope != nil {
+		selector.Where(scope)
 	}
 	if q.InclusionStatus != "" {
-		selector.Where(sql.EQ(t.C(gleanmembership.FieldInclusionStatus), q.InclusionStatus))
+		switch q.InclusionStatus {
+		case "included", "excluded":
+			selector.Where(reviewPredicate(t.C("paper_id"), t.C("topic"), q.InclusionStatus))
+		case "pending", "pending-review":
+			selector.Where(collectionPredicate(t.C("paper_id"), t.C("topic"), t.C("inclusion_status"), t.C("dimensions"), "pending"))
+		default:
+			selector.Where(sql.And(sql.Not(reviewPredicate(t.C("paper_id"), t.C("topic"), "")), sql.EQ(t.C("inclusion_status"), q.InclusionStatus)))
+		}
 	}
 	if q.Tier != "" {
 		selector.Where(sql.EQ(t.C(gleanmembership.FieldTier), q.Tier))
@@ -74,6 +72,11 @@ func membershipSelector(q PaperQuery) *sql.Selector {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
+		if key == "manual_labels" {
+			r := sql.Table(gleanpaperreview.Table).As("label_review")
+			selector.Where(sql.Exists(sql.Dialect(dialect.Postgres).Select(r.C("id")).From(r).Where(sql.And(sql.ColumnsEQ(r.C("paper_id"), t.C("paper_id")), sql.ColumnsEQ(r.C("topic"), t.C("topic")), sqljson.ValueContains(r.C("labels"), dimensions[key])))))
+			continue
+		}
 		selector.Where(sqljson.ValueContains(t.C(gleanmembership.FieldDimensions), map[string][]string{key: {dimensions[key]}}))
 	}
 	return selector
@@ -91,13 +94,25 @@ func (s *Service) paperQuery(q PaperQuery, uid idgen.ID) *ent.GleanPaperQuery {
 		})
 	}
 	if q.Q != "" {
-		query.Where(gleanpaper.Or(gleanpaper.TitleContainsFold(q.Q), gleanpaper.TitleZhContainsFold(q.Q), gleanpaper.AbstractContainsFold(q.Q), gleanpaper.DoiContainsFold(q.Q), gleanpaper.ArxivIDContainsFold(q.Q), gleanpaper.VenueContainsFold(q.Q), observedTextPredicate(q.Q)))
+		query.Where(gleanpaper.Or(func(sel *sql.Selector) {
+			ps := []*sql.Predicate{}
+			for _, field := range []string{"title", "title_zh", "abstract", "venue"} {
+				ps = append(ps, effectiveContains(effectiveColumn(`"glean_paper"`, field), q.Q))
+			}
+			ps = append(ps, sql.ContainsFold(sel.C("doi"), q.Q), sql.ContainsFold(sel.C("arxiv_id"), q.Q))
+			sel.Where(sql.Or(ps...))
+		}, observedTextPredicate(q.Q)))
+		// 来源文本匹配保留在独立 OR 分支。
 	}
 	if q.Year > 0 {
-		query.Where(gleanpaper.Year(q.Year))
+		query.Where(func(sel *sql.Selector) {
+			sel.Where(sql.P(func(b *sql.Builder) { b.WriteString(effectiveColumn(`"glean_paper"`, "year") + " = ").Arg(q.Year) }))
+		})
 	}
 	if q.Venue != "" {
-		query.Where(gleanpaper.Venue(q.Venue))
+		query.Where(func(sel *sql.Selector) {
+			sel.Where(sql.P(func(b *sql.Builder) { b.WriteString(effectiveColumn(`"glean_paper"`, "venue") + " = ").Arg(q.Venue) }))
+		})
 	}
 	if q.PublicationType != "" {
 		query.Where(gleanpaper.PublicationType(q.PublicationType))
@@ -141,9 +156,12 @@ func observedTextPredicate(text string) predicate.GleanPaper {
 	}
 }
 
-// Topics 返回固定主题和真实保存的成员数量。
+// Topics 返回内置及自定义主题、原始成员数量和有效审核集合数量。
 func (s *Service) Topics(ctx context.Context) ([]TopicVO, error) {
-	result := append([]TopicVO(nil), topics...)
+	result, err := s.topicConfigs(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for i := range result {
 		count, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug)).Count(ctx)
 		if err != nil {
@@ -155,9 +173,15 @@ func (s *Service) Topics(ctx context.Context) ([]TopicVO, error) {
 			return nil, bizerrors.WrapDBContext(ctx, err, "count historical members failed")
 		}
 		result[i].HistoricalCount = historical
-		result[i].CandidateCount = count - historical
-		curated, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), gleanmembership.InclusionStatus("historical"), func(sel *sql.Selector) {
-			sel.Where(sqljson.ValueContains(sel.C(gleanmembership.FieldDimensions), historicalCuratedDimensions(result[i].Slug)))
+		pending, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), func(sel *sql.Selector) {
+			sel.Where(collectionPredicate(sel.C("paper_id"), sel.C("topic"), sel.C("inclusion_status"), sel.C("dimensions"), "pending"))
+		}).Count(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result[i].CandidateCount = pending
+		curated, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), func(sel *sql.Selector) {
+			sel.Where(collectionPredicate(sel.C("paper_id"), sel.C("topic"), sel.C("inclusion_status"), sel.C("dimensions"), "curated"))
 		}).Count(ctx)
 		if err != nil {
 			return nil, bizerrors.WrapDBContext(ctx, err, "count curated historical members failed")
@@ -169,6 +193,9 @@ func (s *Service) Topics(ctx context.Context) ([]TopicVO, error) {
 
 // Papers 返回过滤后的全局去重分页目录。
 func (s *Service) Papers(ctx context.Context, q PaperQuery) (PaperPageVO, error) {
+	if err := s.topicExists(ctx, q.Topic); err != nil {
+		return PaperPageVO{}, err
+	}
 	if err := validateQuery(&q); err != nil {
 		return PaperPageVO{}, err
 	}
@@ -193,11 +220,11 @@ func (s *Service) Papers(ctx context.Context, q PaperQuery) (PaperPageVO, error)
 			sel.OrderExpr(sql.ExprFunc(func(b *sql.Builder) { b.WriteByte('(').Join(latest).WriteString(") DESC NULLS LAST") }))
 		}, ent.Desc(gleanpaper.FieldID))
 	case "title":
-		query.Order(ent.Asc(gleanpaper.FieldTitle), ent.Asc(gleanpaper.FieldID))
+		query.Order(func(sel *sql.Selector) { sel.OrderExpr(sql.Expr(effectiveColumn(`"glean_paper"`, "title") + " ASC")) }, ent.Asc(gleanpaper.FieldID))
 	case "oldest":
-		query.Order(ent.Asc(gleanpaper.FieldYear), gleanpaper.ByFormalOnlineDate(sql.OrderNullsLast()), ent.Asc(gleanpaper.FieldID))
+		query.Order(func(sel *sql.Selector) { sel.OrderExpr(sql.Expr(effectiveColumn(`"glean_paper"`, "year") + " ASC")) }, gleanpaper.ByFormalOnlineDate(sql.OrderNullsLast()), ent.Asc(gleanpaper.FieldID))
 	default:
-		query.Order(ent.Desc(gleanpaper.FieldYear), gleanpaper.ByFormalOnlineDate(sql.OrderDesc(), sql.OrderNullsLast()), ent.Desc(gleanpaper.FieldID))
+		query.Order(func(sel *sql.Selector) { sel.OrderExpr(sql.Expr(effectiveColumn(`"glean_paper"`, "year") + " DESC")) }, gleanpaper.ByFormalOnlineDate(sql.OrderDesc(), sql.OrderNullsLast()), ent.Desc(gleanpaper.FieldID))
 	}
 	papers, err := query.Limit(q.PageSize).Offset((q.Page - 1) * q.PageSize).All(ctx)
 	if err != nil {
@@ -256,7 +283,7 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 		if !detail {
 			raw = map[string]any{}
 		}
-		memberships[m.PaperID] = append(memberships[m.PaperID], MembershipVO{ReadingNotes: notes, InclusionStatus: m.InclusionStatus, Topic: m.Topic, OriginalID: m.OriginalID, Tier: m.Tier, PrimaryCategory: m.PrimaryCategory, Categories: m.Categories, Dimensions: m.Dimensions, ReadStatus: m.ReadStatus, Source: m.Source, IsMock: m.IsMock, Raw: raw})
+		memberships[m.PaperID] = append(memberships[m.PaperID], MembershipVO{EffectiveStatus: historicalEffectiveStatus(m), ReadingNotes: notes, InclusionStatus: m.InclusionStatus, Topic: m.Topic, OriginalID: m.OriginalID, Tier: m.Tier, PrimaryCategory: m.PrimaryCategory, Categories: m.Categories, Dimensions: m.Dimensions, ReadStatus: m.ReadStatus, Source: m.Source, IsMock: m.IsMock, Raw: raw})
 	}
 	states, err := s.client.GleanPaperState.Query().Where(gleanpaperstate.UserID(uid), gleanpaperstate.PaperIDIn(ids...)).All(ctx)
 	if err != nil {
@@ -311,13 +338,16 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 	if err := s.attachObservations(ctx, result, detail); err != nil {
 		return nil, err
 	}
+	if err := s.attachManagement(ctx, result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
 // Venues 返回已保存的版本化资格证据。
 func (s *Service) Venues(ctx context.Context, q, topic string) ([]VenueVO, error) {
-	if topic != "" && !validTopic(topic) {
-		return nil, bizerrors.BadRequest("unknown topic")
+	if err := s.topicExists(ctx, topic); err != nil {
+		return nil, err
 	}
 	query := s.client.GleanVenue.Query()
 	if q != "" {
@@ -341,6 +371,9 @@ func (s *Service) Venues(ctx context.Context, q, topic string) ([]VenueVO, error
 
 // Facets 在数据库过滤后的集合上聚合，每个值按全局论文标识去重。
 func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
+	if err := s.topicExists(ctx, q.Topic); err != nil {
+		return FacetsVO{}, err
+	}
 	if err := validateQuery(&q); err != nil {
 		return FacetsVO{}, err
 	}
@@ -351,6 +384,9 @@ func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
 	papers, err := s.paperQuery(q, uid).Select(gleanpaper.FieldID, gleanpaper.FieldYear, gleanpaper.FieldVenue, gleanpaper.FieldPublicationType).All(ctx)
 	if err != nil {
 		return FacetsVO{}, bizerrors.WrapDBContext(ctx, err, "load facet papers failed")
+	}
+	if err := s.applyFacetCorrections(ctx, papers); err != nil {
+		return FacetsVO{}, err
 	}
 	counts := map[string]map[string]map[idgen.ID]bool{}
 	add := func(kind, value string, id idgen.ID) {
@@ -383,12 +419,36 @@ func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
 		if q.Topic != "" {
 			query.Where(gleanmembership.Topic(q.Topic))
 		}
-		records, err := query.Select(gleanmembership.FieldID, gleanmembership.FieldPaperID, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldCategories, gleanmembership.FieldDimensions, gleanmembership.FieldInclusionStatus).All(ctx)
+		if q.CollectionScope != "" && q.CollectionScope != "all" {
+			query.Where(func(sel *sql.Selector) {
+				sel.Where(collectionPredicate(sel.C("paper_id"), sel.C("topic"), sel.C("inclusion_status"), sel.C("dimensions"), q.CollectionScope))
+			})
+		}
+		records, err := query.Select(gleanmembership.FieldID, gleanmembership.FieldPaperID, gleanmembership.FieldTier, gleanmembership.FieldPrimaryCategory, gleanmembership.FieldCategories, gleanmembership.FieldDimensions, gleanmembership.FieldInclusionStatus, gleanmembership.FieldTopic).All(ctx)
 		if err != nil {
 			return FacetsVO{}, bizerrors.WrapDBContext(ctx, err, "load facet memberships failed")
 		}
+		reviews, err := s.client.GleanPaperReview.Query().Where(gleanpaperreview.PaperIDIn(batch...)).All(ctx)
+		if err != nil {
+			return FacetsVO{}, err
+		}
+		reviewMap := map[idgen.ID]map[string]*ent.GleanPaperReview{}
+		for _, r := range reviews {
+			if reviewMap[r.PaperID] == nil {
+				reviewMap[r.PaperID] = map[string]*ent.GleanPaperReview{}
+			}
+			reviewMap[r.PaperID][r.Topic] = r
+		}
 		for _, m := range records {
-			add("inclusionStatuses", m.InclusionStatus, m.PaperID)
+			status := m.InclusionStatus
+			if r := reviewMap[m.PaperID][m.Topic]; r != nil {
+				status = string(r.Status)
+				for _, label := range r.Labels {
+					dimensionKeys["manual_labels"] = true
+					add("dimension:manual_labels", label, m.PaperID)
+				}
+			}
+			add("inclusionStatuses", status, m.PaperID)
 			add("tiers", m.Tier, m.PaperID)
 			add("categories", m.PrimaryCategory, m.PaperID)
 			for _, c := range m.Categories {

@@ -9,6 +9,37 @@ import (
 )
 
 var (
+	// GleanCatalogChangeColumns holds the columns for the "glean_catalog_change" table.
+	GleanCatalogChangeColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "paper_id", Type: field.TypeInt64, Default: 0},
+		{Name: "topic", Type: field.TypeString, Default: ""},
+		{Name: "kind", Type: field.TypeString},
+		{Name: "before", Type: field.TypeJSON},
+		{Name: "after", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanCatalogChangeTable holds the schema information for the "glean_catalog_change" table.
+	GleanCatalogChangeTable = &schema.Table{
+		Name:       "glean_catalog_change",
+		Columns:    GleanCatalogChangeColumns,
+		PrimaryKey: []*schema.Column{GleanCatalogChangeColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleancatalogchange_paper_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanCatalogChangeColumns[1], GleanCatalogChangeColumns[0]},
+			},
+			{
+				Name:    "gleancatalogchange_topic_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanCatalogChangeColumns[2], GleanCatalogChangeColumns[0]},
+			},
+		},
+	}
 	// GleanMembershipColumns holds the columns for the "glean_membership" table.
 	GleanMembershipColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -188,6 +219,56 @@ var (
 			},
 		},
 	}
+	// GleanPaperCorrectionColumns holds the columns for the "glean_paper_correction" table.
+	GleanPaperCorrectionColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "paper_id", Type: field.TypeInt64, Unique: true},
+		{Name: "fields", Type: field.TypeJSON},
+		{Name: "reason", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "version", Type: field.TypeInt, Default: 1},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanPaperCorrectionTable holds the schema information for the "glean_paper_correction" table.
+	GleanPaperCorrectionTable = &schema.Table{
+		Name:       "glean_paper_correction",
+		Columns:    GleanPaperCorrectionColumns,
+		PrimaryKey: []*schema.Column{GleanPaperCorrectionColumns[0]},
+	}
+	// GleanPaperReviewColumns holds the columns for the "glean_paper_review" table.
+	GleanPaperReviewColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "paper_id", Type: field.TypeInt64},
+		{Name: "topic", Type: field.TypeString},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "included", "excluded"}},
+		{Name: "note", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "labels", Type: field.TypeJSON},
+		{Name: "version", Type: field.TypeInt, Default: 1},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanPaperReviewTable holds the schema information for the "glean_paper_review" table.
+	GleanPaperReviewTable = &schema.Table{
+		Name:       "glean_paper_review",
+		Columns:    GleanPaperReviewColumns,
+		PrimaryKey: []*schema.Column{GleanPaperReviewColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleanpaperreview_paper_id_topic",
+				Unique:  true,
+				Columns: []*schema.Column{GleanPaperReviewColumns[1], GleanPaperReviewColumns[2]},
+			},
+			{
+				Name:    "gleanpaperreview_topic_status",
+				Unique:  false,
+				Columns: []*schema.Column{GleanPaperReviewColumns[2], GleanPaperReviewColumns[3]},
+			},
+		},
+	}
 	// GleanPaperStateColumns holds the columns for the "glean_paper_state" table.
 	GleanPaperStateColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -233,6 +314,27 @@ var (
 		Name:       "glean_preference",
 		Columns:    GleanPreferenceColumns,
 		PrimaryKey: []*schema.Column{GleanPreferenceColumns[0]},
+	}
+	// GleanTopicColumns holds the columns for the "glean_topic" table.
+	GleanTopicColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "slug", Type: field.TypeString, Unique: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "rule", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "search_enabled", Type: field.TypeBool, Default: true},
+		{Name: "term_groups", Type: field.TypeJSON},
+		{Name: "version", Type: field.TypeInt, Default: 1},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanTopicTable holds the schema information for the "glean_topic" table.
+	GleanTopicTable = &schema.Table{
+		Name:       "glean_topic",
+		Columns:    GleanTopicColumns,
+		PrimaryKey: []*schema.Column{GleanTopicColumns[0]},
 	}
 	// GleanVenueColumns holds the columns for the "glean_venue" table.
 	GleanVenueColumns = []*schema.Column{
@@ -575,13 +677,17 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		GleanCatalogChangeTable,
 		GleanMembershipTable,
 		GleanMonitorStateTable,
 		GleanObservationTable,
 		GleanObservationMatchTable,
 		GleanPaperTable,
+		GleanPaperCorrectionTable,
+		GleanPaperReviewTable,
 		GleanPaperStateTable,
 		GleanPreferenceTable,
+		GleanTopicTable,
 		GleanVenueTable,
 		SysConfigTable,
 		SysDictCollectionTable,
@@ -595,6 +701,9 @@ var (
 )
 
 func init() {
+	GleanCatalogChangeTable.Annotation = &entsql.Annotation{
+		Table: "glean_catalog_change",
+	}
 	GleanMembershipTable.Annotation = &entsql.Annotation{
 		Table: "glean_membership",
 	}
@@ -610,11 +719,20 @@ func init() {
 	GleanPaperTable.Annotation = &entsql.Annotation{
 		Table: "glean_paper",
 	}
+	GleanPaperCorrectionTable.Annotation = &entsql.Annotation{
+		Table: "glean_paper_correction",
+	}
+	GleanPaperReviewTable.Annotation = &entsql.Annotation{
+		Table: "glean_paper_review",
+	}
 	GleanPaperStateTable.Annotation = &entsql.Annotation{
 		Table: "glean_paper_state",
 	}
 	GleanPreferenceTable.Annotation = &entsql.Annotation{
 		Table: "glean_preference",
+	}
+	GleanTopicTable.Annotation = &entsql.Annotation{
+		Table: "glean_topic",
 	}
 	GleanVenueTable.Annotation = &entsql.Annotation{
 		Table: "glean_venue",
