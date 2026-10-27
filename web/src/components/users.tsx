@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { request } from '../lib/api'
@@ -172,6 +172,7 @@ function UserEditor({
       mounted.current = false
     }
   }, [])
+  const userTypeId = useId()
   const self = user?.id === currentUserId
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -262,9 +263,10 @@ function UserEditor({
                 onChange={(event) => setNickname(event.target.value)}
               />
             </label>
-            <label className="block text-sm">
-              用户类型
+            <div className="text-sm">
+              <label htmlFor={userTypeId}>用户类型</label>
               <select
+                id={userTypeId}
                 className={fieldClass}
                 disabled={self}
                 value={admin ? 'admin' : 'user'}
@@ -273,7 +275,7 @@ function UserEditor({
                 <option value="user">普通用户</option>
                 <option value="admin">管理员</option>
               </select>
-            </label>
+            </div>
             <label className="flex min-h-11 items-center gap-2 text-sm">
               <input
                 type="checkbox"

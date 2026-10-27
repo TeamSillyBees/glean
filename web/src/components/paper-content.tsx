@@ -197,7 +197,10 @@ export function PaperOverview({
                       m.topic}
                   </Badge>
                   {m.dimensions?.display_review_status?.map((status) => (
-                    <Badge key={status}>{reviewLabels[status] || status}</Badge>
+                    <Badge key={status}>
+                      {m.manualReview && '原核验：'}
+                      {reviewLabels[status] || status}
+                    </Badge>
                   ))}
                 </div>
                 <dl className="space-y-4">
@@ -317,7 +320,10 @@ export function PaperOverview({
                   <Badge tone="amber">新发现 · 待审</Badge>
                 )}
                 {m.dimensions?.display_review_status?.map((status) => (
-                  <Badge key={status}>{reviewLabels[status] || status}</Badge>
+                  <Badge key={status}>
+                    {m.manualReview && '原核验：'}
+                    {reviewLabels[status] || status}
+                  </Badge>
                 ))}
               </div>
               {m.manualReview && (

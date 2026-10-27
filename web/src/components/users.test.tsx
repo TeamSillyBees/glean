@@ -158,7 +158,14 @@ describe('simple user management', () => {
     mount()
     await edit('admin')
     expect(screen.getByLabelText('启用账号')).toBeDisabled()
-    expect(screen.getByLabelText('用户类型')).toBeDisabled()
+    const userType = screen.getByRole('combobox', {
+      name: '用户类型',
+    }) as HTMLSelectElement
+    expect(userType).toBeDisabled()
+    // Keep the associated label text exact in real browsers: option descendants
+    // inside a wrapping label can become part of Playwright's label match.
+    expect(userType.labels?.[0].textContent).toBe('用户类型')
+    expect(userType.labels?.[0]).not.toContainElement(userType)
     fireEvent.click(screen.getByRole('button', { name: '保存修改' }))
     await waitFor(() => expect(writes).toHaveLength(1))
     expect(writes[0].body).toEqual({ nickname: '管理员甲' })

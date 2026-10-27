@@ -52,7 +52,11 @@ export function PaperCard({
       <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
         <span className="font-medium text-muted-foreground">{paper.venue || '来源待核验'}</span>
         {paper.year > 0 && <span className="text-muted-foreground">· {paper.year}</span>}
-        {membership?.tier && <Badge tone="violet">{membership.tier}</Badge>}
+        {membership?.tier && (
+          <Badge tone="violet">
+            {membership.manualReview ? `原目录：${membership.tier}` : membership.tier}
+          </Badge>
+        )}
         <span className="ml-auto flex items-center gap-2">
           {membership?.manualReview && (
             <Badge>{manualReviewLabels[membership.manualReview.status]}</Badge>
@@ -105,6 +109,7 @@ export function PaperCard({
         ))}
         {reviewStatus && (
           <span className="text-xs text-muted-foreground">
+            {membership?.manualReview && '原核验：'}
             {reviewLabels[reviewStatus] || reviewStatus}
           </span>
         )}

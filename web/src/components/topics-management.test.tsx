@@ -63,6 +63,12 @@ describe('simple research topic management', () => {
     rows[0].version = 4
     mount()
     await edit()
+    for (const name of ['主题说明', '纳入规则', '检索词组']) {
+      const field = screen.getByRole('textbox', { name })
+      const label = document.getElementById(field.getAttribute('aria-labelledby') || '')
+      expect(label?.textContent).toBe(name)
+      expect(label).not.toContainElement(field)
+    }
     fireEvent.change(screen.getByLabelText('主题名称'), { target: { value: '未保存' } })
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     await edit()

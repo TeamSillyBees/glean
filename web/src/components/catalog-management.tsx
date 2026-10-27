@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
 import type { CorrectionFields, ManualReview, Membership, Paper, Topic } from '../lib/types'
@@ -120,6 +120,7 @@ function ReviewEditor({
   topicName: string
   notify: (message: string) => void
 }) {
+  const reviewStatusId = useId()
   const review = membership.manualReview
   const [status, setStatus] = useState<ManualReview['status'] | ''>(review?.status ?? '')
   const [note, setNote] = useState(review?.note || '')
@@ -151,9 +152,10 @@ function ReviewEditor({
         </p>
       )}
       <fieldset disabled={write.pending} className="space-y-3">
-        <label className="block text-sm">
-          审核结论
+        <div className="text-sm">
+          <label htmlFor={reviewStatusId}>审核结论</label>
           <select
+            id={reviewStatusId}
             required
             className={managementField}
             value={status}
@@ -164,10 +166,11 @@ function ReviewEditor({
             <option value="included">纳入此主题</option>
             <option value="excluded">移出此主题</option>
           </select>
-        </label>
+        </div>
         <label className="block text-sm">
-          审核备注
+          <span id={`${reviewStatusId}-note`}>审核备注</span>
           <textarea
+            aria-labelledby={`${reviewStatusId}-note`}
             className={managementField}
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -199,6 +202,7 @@ const correctionNames = {
   abstract: '摘要',
 } as const
 function CorrectionEditor({ paper, notify }: { paper: Paper; notify: (message: string) => void }) {
+  const labelId = useId()
   const [fields, setFields] = useState<CorrectionFields>(paper.correction?.fields || {})
   const [reason, setReason] = useState(paper.correction?.reason || '')
   const [validation, setValidation] = useState('')
@@ -248,7 +252,9 @@ function CorrectionEditor({ paper, notify }: { paper: Paper; notify: (message: s
               </label>
               {selected && (
                 <label className="block text-sm">
-                  <span className="sr-only">{correctionNames[key]}</span>
+                  <span id={`${labelId}-${key}`} className="sr-only">
+                    {correctionNames[key]}
+                  </span>
                   {key === 'year' ? (
                     <input
                       type="number"
@@ -267,6 +273,7 @@ function CorrectionEditor({ paper, notify }: { paper: Paper; notify: (message: s
                     />
                   ) : (
                     <textarea
+                      aria-labelledby={`${labelId}-${key}`}
                       rows={key === 'abstract' ? 5 : 2}
                       className={managementField}
                       value={Array.isArray(value) ? value.join('\n') : String(value ?? '')}
@@ -284,8 +291,9 @@ function CorrectionEditor({ paper, notify }: { paper: Paper; notify: (message: s
           )
         })}
         <label className="block text-sm">
-          纠错原因
+          <span id={`${labelId}-reason`}>纠错原因</span>
           <textarea
+            aria-labelledby={`${labelId}-reason`}
             required
             className={managementField}
             value={reason}

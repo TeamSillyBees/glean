@@ -64,6 +64,33 @@ describe('historical venue discovery is not current qualification', () => {
   })
 })
 describe('rich reading without fabricated completeness', () => {
+  it('distinguishes superseded historical badges from the shared manual decision', () => {
+    const value = actualRecord()
+    value.memberships[0].tier = '正式纳入'
+    value.memberships[0].manualReview = {
+      status: 'excluded',
+      note: '主题范围外',
+      labels: [],
+      version: 1,
+      updatedAt: '',
+      updatedBy: '9',
+    }
+    const original = structuredClone(value)
+    const { unmount } = render(
+      <TooltipProvider>
+        <PaperCard paper={value} topic="biomed-ai" onOpen={() => {}} />
+      </TooltipProvider>,
+    )
+    expect(screen.getByText('已移出此主题')).toBeInTheDocument()
+    expect(screen.getByText('原目录：正式纳入')).toBeInTheDocument()
+    expect(screen.getByText('原核验：尚未审读')).toBeInTheDocument()
+    expect(screen.queryByText('正式纳入', { exact: true })).not.toBeInTheDocument()
+    unmount()
+    render(<PaperOverview paper={value} />)
+    expect(screen.getByText('已移出此主题')).toBeInTheDocument()
+    expect(screen.getAllByText('原核验：尚未审读')).toHaveLength(2)
+    expect(value).toEqual(original)
+  })
   it('shows historical notes on real paper cards without marking the source paper mock', () => {
     const value = actualRecord()
     render(

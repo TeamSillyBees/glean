@@ -82,7 +82,14 @@ describe('shared paper management separate from personal state', () => {
     mount()
     await openManagement()
     const form = screen.getByRole('form', { name: '审核 大模型知识工程' })
-    expect(within(form).getByLabelText('审核结论')).toHaveValue('')
+    const decision = within(form).getByRole('combobox', {
+      name: '审核结论',
+    }) as HTMLSelectElement
+    expect(decision).toHaveValue('')
+    expect(decision.labels?.[0].textContent).toBe('审核结论')
+    expect(decision.labels?.[0]).not.toContainElement(decision)
+    const allDecisions = screen.getAllByRole('combobox', { name: '审核结论' })
+    expect(new Set(allDecisions.map((select) => select.id)).size).toBe(allDecisions.length)
     fireEvent.change(within(form).getByLabelText('审核备注'), { target: { value: '仅备注' } })
     fireEvent.submit(form)
     expect(api.review).not.toHaveBeenCalled()
@@ -119,6 +126,10 @@ describe('shared paper management separate from personal state', () => {
     const forms = screen.getAllByRole('form')
     expect(forms[0]).toHaveAttribute('aria-label', '审核 大模型知识工程')
     const form = within(forms[0])
+    const note = form.getByRole('textbox', { name: '审核备注' })
+    expect(document.getElementById(note.getAttribute('aria-labelledby') || '')?.textContent).toBe(
+      '审核备注',
+    )
     fireEvent.change(form.getByLabelText('审核结论'), { target: { value: 'excluded' } })
     fireEvent.change(form.getByLabelText('审核备注'), { target: { value: '与该主题无关' } })
     fireEvent.change(form.getByLabelText('手动标签'), { target: { value: '复核，方法' } })
@@ -141,6 +152,12 @@ describe('shared paper management separate from personal state', () => {
     await openManagement()
     const form = within(screen.getByRole('form', { name: '元数据纠错' }))
     fireEvent.click(form.getByLabelText('纠正原文标题'))
+    for (const name of ['原文标题', '纠错原因']) {
+      const field = form.getByRole('textbox', { name })
+      expect(
+        document.getElementById(field.getAttribute('aria-labelledby') || '')?.textContent,
+      ).toBe(name)
+    }
     fireEvent.change(form.getByLabelText('原文标题'), { target: { value: 'Corrected title' } })
     fireEvent.change(form.getByLabelText('纠错原因'), { target: { value: '依据来源核对' } })
     fireEvent.click(form.getByRole('button', { name: '保存纠错' }))

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
 import type { Topic, TopicInput } from '../lib/types'
@@ -85,6 +85,7 @@ function TopicEditor({
   notify: (message: string) => void
 }) {
   const client = useQueryClient()
+  const labelId = useId()
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -161,8 +162,9 @@ function TopicEditor({
           />
         </label>
         <label className="block text-sm">
-          主题说明
+          <span id={`${labelId}-description`}>主题说明</span>
           <textarea
+            aria-labelledby={`${labelId}-description`}
             className={managementField}
             maxLength={2000}
             value={description}
@@ -170,8 +172,9 @@ function TopicEditor({
           />
         </label>
         <label className="block text-sm">
-          纳入规则
+          <span id={`${labelId}-rule`}>纳入规则</span>
           <textarea
+            aria-labelledby={`${labelId}-rule`}
             className={managementField}
             maxLength={4000}
             value={rule}
@@ -179,8 +182,9 @@ function TopicEditor({
           />
         </label>
         <label className="block text-sm">
-          检索词组
+          <span id={`${labelId}-terms`}>检索词组</span>
           <textarea
+            aria-labelledby={`${labelId}-terms`}
             required={
               enabled &&
               !['biomed-ai', 'llm-agent', 'biomed-worldmodel'].includes(topic?.slug || '')
