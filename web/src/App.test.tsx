@@ -6,6 +6,9 @@ import App from './App'
 import { clearSession } from './lib/api'
 import { paper, topics, facets } from './test/fixtures'
 import type { Paper } from './lib/types'
+let canManage: boolean
+let failAccess: boolean
+let currentTopics: typeof topics
 let currentPaper: Paper
 let saved: Record<string, unknown>
 let paths: string[]
@@ -20,6 +23,9 @@ const ok = (data: unknown) =>
   })
 beforeEach(() => {
   clearSession()
+  canManage = false
+  failAccess = false
+  currentTopics = structuredClone(topics)
   currentPaper = structuredClone(paper)
   saved = {}
   paths = []
@@ -39,7 +45,17 @@ beforeEach(() => {
           user: { userId: '9', username: 'researcher', nickname: '测试研究员' },
         })
       if (url.pathname === '/api/v1/auth/logout') return logoutGate || ok({})
-      if (url.pathname.endsWith('/topics')) return ok({ items: topics })
+      if (url.pathname.endsWith('/catalog/access'))
+        return failAccess
+          ? new Response(JSON.stringify({ message: 'unavailable' }), { status: 503 })
+          : ok({ canManage })
+      if (url.pathname.endsWith('/topics') && init?.method === 'POST') {
+        const input = JSON.parse(String(init.body))
+        const topic = { ...input, slug: 'custom-topic', membershipCount: 0, version: 1 }
+        currentTopics.push(topic)
+        return ok(topic)
+      }
+      if (url.pathname.endsWith('/topics')) return ok({ items: currentTopics })
       if (url.pathname.endsWith('/preferences')) {
         if (init?.method === 'PUT') saved = JSON.parse(String(init.body)).filters
         return ok({ filters: saved })
@@ -106,6 +122,35 @@ async function signIn(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole('heading', { name: '论文工作台', level: 1 })
 }
 describe('Glean query workspace', () => {
+  it('keeps management hidden for readers and still renders papers if capability lookup fails', async () => {
+    failAccess = true
+    const user = mount()
+    await signIn(user)
+    await screen.findByRole('heading', { name: paper.titleZh })
+    expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '研究主题' })).not.toBeInTheDocument()
+  })
+  it('uses server capability and exposes a newly created topic in navigation with generic filters', async () => {
+    canManage = true
+    const user = mount()
+    await signIn(user)
+    expect(await screen.findByRole('button', { name: '用户管理' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '研究主题' }))
+    await user.click(screen.getByRole('button', { name: '新增研究主题' }))
+    fireEvent.change(screen.getByLabelText('主题名称'), { target: { value: '测试新方向' } })
+    fireEvent.change(screen.getByLabelText('检索词组'), {
+      target: { value: 'genomics | genetics' },
+    })
+    await user.click(screen.getByRole('button', { name: '保存主题' }))
+    await screen.findByRole('button', { name: '编辑主题 测试新方向' })
+    const nav = within(screen.getByRole('complementary', { name: '工作台导航' }))
+    await user.click(nav.getByRole('button', { name: /测试新方向/ }))
+    await waitFor(() =>
+      expect(paths.some((path) => path.includes('topic=custom-topic'))).toBe(true),
+    )
+    expect(screen.getByRole('combobox', { name: '发表年份' })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '世界模型的作用' })).not.toBeInTheDocument()
+  })
   it('logs in against the backend, shows API counts and ordered original taxonomy filters', async () => {
     const user = mount()
     await signIn(user)
@@ -173,7 +218,10 @@ describe('Glean query workspace', () => {
         paths.some((path) => path.includes('/papers?') && path.includes('collectionScope=all')),
       ).toBe(true),
     )
-    await user.click(within(scopes).getByRole('button', { name: '新发现待审' }))
+    await user.click(within(scopes).getByRole('button', { name: '待审核' }))
+    expect(
+      screen.getByText('包括新发现及手动转回待审核的记录，尚未完成科学审读。'),
+    ).toBeInTheDocument()
     await waitFor(() =>
       expect(
         paths.some((path) => path.includes('/facets?') && path.includes('collectionScope=pending')),

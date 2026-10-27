@@ -1,4 +1,9 @@
 import type {
+  CatalogHistory,
+  Correction,
+  CorrectionFields,
+  ManualReview,
+  TopicInput,
   Facets,
   Filters,
   Identity,
@@ -129,6 +134,32 @@ export function queryString(filters: Partial<Filters> | Record<string, unknown>)
   return params.toString()
 }
 export const api = {
+  catalogAccess: (signal?: AbortSignal) =>
+    request<{ canManage: boolean }>('/api/v1/catalog/access', { signal }),
+  saveTopic: (input: TopicInput, slug?: string) =>
+    request<Topic>(`/api/v1/catalog/topics${slug ? `/${encodeURIComponent(slug)}` : ''}`, {
+      method: slug ? 'PUT' : 'POST',
+      body: JSON.stringify(input),
+    }),
+  review: (
+    id: string,
+    topic: string,
+    input: Pick<ManualReview, 'status' | 'note' | 'labels'> & { expectedVersion: number },
+  ) =>
+    request<ManualReview>(
+      `/api/v1/catalog/papers/${encodeURIComponent(id)}/topics/${encodeURIComponent(topic)}/review`,
+      { method: 'PUT', body: JSON.stringify(input) },
+    ),
+  correct: (id: string, fields: CorrectionFields, reason: string, expectedVersion: number) =>
+    request<Correction>(`/api/v1/catalog/papers/${encodeURIComponent(id)}/correction`, {
+      method: 'PUT',
+      body: JSON.stringify({ fields, reason, expectedVersion }),
+    }),
+  history: (id: string, signal?: AbortSignal) =>
+    request<{ items: CatalogHistory[] }>(
+      `/api/v1/catalog/papers/${encodeURIComponent(id)}/history`,
+      { signal },
+    ),
   async login(username: string, password: string) {
     clearSession()
     const epoch = sessionEpoch

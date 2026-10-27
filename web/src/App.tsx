@@ -45,6 +45,8 @@ import { Select } from './components/ui/select'
 import { FilterCombobox } from './components/ui/filter-combobox'
 import { Tooltip, TooltipProvider } from './components/ui/tooltip'
 import { QuarantineView } from './components/quarantine'
+import { UsersView } from './components/users'
+import { TopicsView } from './components/topics-management'
 import { PaperCard, PaperDetail } from './components/papers'
 import {
   FreshnessStrip,
@@ -54,9 +56,16 @@ import {
   VenuesView,
 } from './components/monitor'
 
-type View = 'papers' | 'sources' | 'runs' | 'templates' | 'venues' | 'quarantine'
-const topicIcons = { 'biomed-ai': Dna, 'llm-agent': Network, 'biomed-worldmodel': Layers3 }
+type View =
+  'papers' | 'sources' | 'runs' | 'templates' | 'venues' | 'quarantine' | 'users' | 'topics'
+const topicIcons: Record<string, typeof Dna> = {
+  'biomed-ai': Dna,
+  'llm-agent': Network,
+  'biomed-worldmodel': Layers3,
+}
 const viewMeta: Record<View, { title: string; description: string }> = {
+  users: { title: '用户管理', description: '管理登录账号与独立的个人记录。' },
+  topics: { title: '研究主题', description: '维护主题说明、纳入规则与后续检索。' },
   quarantine: {
     title: '隔离记录',
     description: '追溯隔离原因，核验安全证据。',
@@ -123,7 +132,7 @@ function Login({ onLogin, expired }: { onLogin: (user: Identity) => void; expire
           <p>连接历史积累与新的发现。以清晰的主题、可追溯的来源和有序的阅读，保持研究的连续性。</p>
           <div className="login-topics">
             {Object.entries(topicLabels).map(([slug, name]) => {
-              const Icon = topicIcons[slug as TopicSlug]
+              const Icon = Object.hasOwn(topicIcons, slug) ? topicIcons[slug] : Layers3
               return (
                 <div key={slug}>
                   <Icon className="size-4" />
@@ -382,6 +391,12 @@ function WorkspaceReady({
     queryFn: ({ signal }) => api.preferences(signal),
   })
   const topics = useQuery({ queryKey: ['topics'], queryFn: ({ signal }) => api.topics(signal) })
+  const access = useQuery({
+    queryKey: ['catalog-access', user.userId],
+    queryFn: ({ signal }) => api.catalogAccess(signal),
+    retry: false,
+  })
+  const canManage = access.data?.canManage === true && !access.isError
   useEffect(() => {
     if (!message) return
     const timeout = setTimeout(() => setMessage(''), 4500)
@@ -464,6 +479,7 @@ function WorkspaceReady({
     setSelected(null)
   }
   const chooseTopic = (topic: TopicSlug) => {
+    setView('papers')
     setFilters({ ...defaultFilters, topic })
     setSearch('')
     setMobileNav(false)
@@ -510,9 +526,9 @@ function WorkspaceReady({
       </div>
       <div className="sidebar-section-label">我的研究主题</div>
       <div className="space-y-1">
-        {Object.entries(topicLabels).map(([slug, label]) => {
-          const Icon = topicIcons[slug as TopicSlug]
-          const topic = topics.data?.items?.find((item) => item.slug === slug)
+        {(topics.data?.items || []).map((topic) => {
+          const { slug, name: label } = topic
+          const Icon = Object.hasOwn(topicIcons, slug) ? topicIcons[slug] : Layers3
           return (
             <button
               key={slug}
@@ -558,6 +574,19 @@ function WorkspaceReady({
           期刊与会议
         </NavButton>
       </div>
+      {canManage && (
+        <>
+          <div className="sidebar-section-label">管理</div>
+          <div className="space-y-1">
+            <NavButton icon={Settings2} active={view === 'users'} onClick={() => navigate('users')}>
+              用户管理
+            </NavButton>
+            <NavButton icon={Layers3} active={view === 'topics'} onClick={() => navigate('topics')}>
+              研究主题
+            </NavButton>
+          </div>
+        </>
+      )}
       <div className="sidebar-account">
         <button
           onClick={() => {
@@ -603,7 +632,7 @@ function WorkspaceReady({
             <span className="hidden sm:inline">研究空间</span>
             <ChevronRight className="hidden size-3 sm:inline" />
             <span className="truncate font-medium text-slate-600">
-              {topicLabels[filters.topic]}
+              {activeTopic?.name || topicLabels[filters.topic] || filters.topic}
             </span>
           </div>
           <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -762,8 +791,9 @@ function WorkspaceReady({
                     {(
                       [
                         { value: 'curated', label: '精选目录' },
-                        { value: 'pending', label: '新发现待审' },
+                        { value: 'pending', label: '待审核' },
                         { value: 'all', label: '全部记录' },
+                        { value: 'excluded', label: '已移出主题' },
                       ] as const
                     ).map((scope) => (
                       <button
@@ -811,10 +841,12 @@ function WorkspaceReady({
                 </div>
                 <p className="mb-3 text-xs leading-5 text-muted-foreground">
                   {filters.collectionScope === 'curated'
-                    ? '沿用原目录的正式纳入范围，不将新发现自动纳入。'
+                    ? '正式纳入范围包含原目录与人工纳入；不会自动纳入新发现。'
                     : filters.collectionScope === 'pending'
-                      ? '真实来源的新发现，尚未完成科学审读。'
-                      : '全部记录包含精选、待核、背景与范围外资料。'}
+                      ? '包括新发现及手动转回待审核的记录，尚未完成科学审读。'
+                      : filters.collectionScope === 'excluded'
+                        ? '人工移出当前主题的记录；可在论文管理中重新纳入，不会删除论文。'
+                        : '全部记录包含精选、待核、背景与范围外资料。'}
                 </p>
                 {activeCount > 0 && (
                   <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -891,12 +923,12 @@ function WorkspaceReady({
                   <Empty
                     title={
                       filters.collectionScope === 'pending' && activeCount === 0
-                        ? '还没有待审的新发现'
+                        ? '暂无待审核记录'
                         : undefined
                     }
                     description={
                       filters.collectionScope === 'pending' && activeCount === 0
-                        ? '真实来源完成新发现采集后会显示在这里。历史待核资料可在「全部记录」中查看。'
+                        ? '新发现及手动转回待审核的记录会显示在这里。原始历史待核资料仍可在「全部记录」中查看。'
                         : filters.hidden === 'only' && activeCount === 0
                           ? '当前主题暂无隐藏记录。你可以在论文详情里管理可见性。'
                           : '试试减少筛选条件，或换一个关键词。'
@@ -983,6 +1015,18 @@ function WorkspaceReady({
                 )}
               </section>
             </div>
+          ) : view === 'users' ? (
+            canManage ? (
+              <UsersView currentUserId={user.userId} notify={setMessage} />
+            ) : (
+              <p>没有管理权限。</p>
+            )
+          ) : view === 'topics' ? (
+            canManage ? (
+              <TopicsView currentUserId={user.userId} notify={setMessage} />
+            ) : (
+              <p>没有管理权限。</p>
+            )
           ) : view === 'sources' ? (
             <SourcesView
               topic={filters.topic}
@@ -1012,6 +1056,9 @@ function WorkspaceReady({
             ? detailTrigger.current.focus()
             : searchRef.current?.focus()
         }
+        canManage={canManage}
+        topics={topics.data?.items || []}
+        activeTopic={filters.topic}
         id={selected}
         onClose={() => setSelected(null)}
         notify={setMessage}
@@ -1123,7 +1170,7 @@ function TopicIntro({ topic, loading }: { topic?: Topic; loading: boolean }) {
           </span>
         )}
         {topic?.historicalCount != null && <span>历史 {number(topic.historicalCount)}</span>}
-        {topic?.candidateCount != null && <span>新发现待审 {number(topic.candidateCount)}</span>}
+        {topic?.candidateCount != null && <span>待审核 {number(topic.candidateCount)}</span>}
       </div>
     </section>
   )

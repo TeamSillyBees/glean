@@ -193,7 +193,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
 
   expect((await collectionScope(page, '全部记录', 'all')).total).toBe(31399)
   await screenshot(page, info, 'all-records')
-  const pending = await collectionScope(page, '新发现待审', 'pending')
+  const pending = await collectionScope(page, '待审核', 'pending')
   expect(pending.total).toBe(0)
   expect(pending.items).toEqual([])
   await expect(page.getByTestId('paper-card')).toHaveCount(0)

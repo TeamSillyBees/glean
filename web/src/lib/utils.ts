@@ -41,13 +41,19 @@ export function safeLink(value: string | undefined): string | undefined {
   }
 }
 export const readLabels: Record<string, string> = { unread: '未读', reading: '在读', read: '已读' }
-export const topicLabels: Record<string, string> = {
+export const topicLabels: Record<string, string> = Object.assign(Object.create(null), {
   'biomed-ai': '生物医学 × AI',
   'llm-agent': '大模型知识工程',
   'biomed-worldmodel': '生物医学世界模型',
-}
+})
 
 export const reviewLabels: Record<string, string> = {
   reviewed_current: '本轮已审读',
   not_reviewed_current: '本轮尚未审读',
+}
+
+export const manualReviewLabels: Record<string, string> = {
+  pending: '人工待审核',
+  included: '人工纳入',
+  excluded: '已移出此主题',
 }

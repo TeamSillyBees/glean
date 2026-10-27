@@ -34,10 +34,14 @@ export function encodeFilters(
   filters: Partial<Filters> | Record<string, unknown>,
 ): Record<string, unknown> {
   const result = { ...filters }
-  const mapping = topicDimensions[filters.topic as TopicSlug]
-  if (!mapping) return result
+  const mapping = Object.hasOwn(topicDimensions, String(filters.topic))
+    ? topicDimensions[filters.topic as TopicSlug]
+    : undefined
   const dimension: Record<string, string> = {}
-  for (const [key, sourceKey] of Object.entries(mapping)) {
+  if (typeof filters.manualLabel === 'string' && filters.manualLabel)
+    dimension.manual_labels = filters.manualLabel
+  delete result.manualLabel
+  for (const [key, sourceKey] of Object.entries(mapping || {})) {
     if (
       typeof filters[key as keyof typeof filters] === 'string' &&
       filters[key as keyof typeof filters]
@@ -54,7 +58,10 @@ export function filterFacets(
   key: keyof Filters,
   fallback: keyof Facets,
 ): Facet[] {
-  const dimension = topicDimensions[topic]?.[key]
+  if (key === 'manualLabel') return facets?.dimensions?.manual_labels || []
+  const dimension = Object.hasOwn(topicDimensions, topic)
+    ? topicDimensions[topic]?.[key]
+    : undefined
   if (dimension) return facets?.dimensions?.[dimension] || []
   return (facets?.[fallback] as Facet[] | undefined) || []
 }
@@ -66,6 +73,7 @@ export function restoreFilters(saved: Record<string, unknown>): Partial<Filters>
     'venue',
     'publicationType',
     'category',
+    'manualLabel',
     'direction',
     'aiMethod',
     'status',
@@ -80,11 +88,11 @@ export function restoreFilters(saved: Record<string, unknown>): Partial<Filters>
   textKeys.forEach((key) => {
     if (typeof saved[key] === 'string') result[key] = saved[key]
   })
-  if (typeof saved.topic === 'string' && saved.topic in topicDimensions)
+  if (typeof saved.topic === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(saved.topic))
     result.topic = saved.topic as TopicSlug
   if (['unread', 'reading', 'read', ''].includes(String(saved.readStatus)))
     result.readStatus = String(saved.readStatus)
-  if (['curated', 'pending', 'all'].includes(String(saved.collectionScope)))
+  if (['curated', 'pending', 'excluded', 'all'].includes(String(saved.collectionScope)))
     result.collectionScope = saved.collectionScope as Filters['collectionScope']
   if (['exclude', 'include', 'only'].includes(String(saved.hidden)))
     result.hidden = saved.hidden as Filters['hidden']
@@ -171,5 +179,15 @@ export function getFilterSpecs(topic: TopicSlug): FilterSpec[] {
       help: '可输入名称快速找到来源，结果与其他筛选条件取交集。',
     },
   ]
+  if (!Object.hasOwn(topicDimensions, topic))
+    return [
+      ...common.filter((spec) => ['year', 'venue'].includes(spec.key)),
+      {
+        key: 'manualLabel',
+        label: '人工标签',
+        facet: 'categories',
+        help: '按当前主题的人工审核标签筛选，与来源原分类分开。',
+      },
+    ]
   return common
 }

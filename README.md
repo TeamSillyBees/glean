@@ -2,7 +2,7 @@
 
 **持续生长的文献库。只有 LLM 调用暂用 mock，其他运行链路均为真实实现。**
 
-Glean 将历史论文、增量发现与证据核验分开管理：一个 Go 后端，三个主题视图，一个中文优先的 React 阅读与查询工作台。基于 [initra](https://github.com/TeamSillyBees/initra) 源码模板构建，沿用认证、权限、Ent/PostgreSQL、Redis 和任务抽象，而不是另起平行基础框架。
+Glean 将历史论文、增量发现与证据核验分开管理：一个 Go 后端，三个内置主题及可新增的研究主题，一个中文优先的 React 阅读与管理工作台。基于 [initra](https://github.com/TeamSillyBees/initra) 源码模板构建，沿用认证、权限、Ent/PostgreSQL、Redis 和任务抽象，而不是另起平行基础框架。
 
 ## 当前能力与边界
 
@@ -10,22 +10,23 @@ Glean 将历史论文、增量发现与证据核验分开管理：一个 Go 后�
 - 文献检索、主题筛选、精确历史分类、来源证据、正式在线/卷期日期、版本化载体证据；个人阅读/隐藏与原科学结论相互独立。
 - 72 小时扫描窗口、重叠补漏、分页断点、重试预算、并发租约与采集/模型处理/入库分离；Crossref、PubMed、arXiv OAI、bioRxiv、Europe PMC、medRxiv 均为真实公开 API，已通过有界真实 Go 请求验证和离线回归。
 - 模型阅读与总结目前为**明确标识的 mock**。Mock 不构成科学核验，不将模拟论文插入历史文献库。真实模型密钥未配置。
-- 前端只访问本服务 API，不自行调用外部文献库、运行模型或修改科学分类。
+- 管理员可管理账号、按主题审核与标注、纠正六项书目字段、新增或暂停研究主题；共享修改保留原始证据与历史，个人阅读/隐藏仍各自独立。详见[简单管理指南](docs/glean/management.md)。
+- 前端只访问本服务 API，不自行调用外部文献库、运行模型或自动推断科学分类；共享审核由管理员明确保存。
 - 只有 LLM API 暂用 mock。正常服务和监控命令使用真实数据源、真实 PostgreSQL 与真实目录入库；合成来源仅存在于测试或显式 `--demo`。自动调度默认关闭，配置运行账号后可用一个开关启用真实采集。尚无外部部署。
 
 完整历史数据已打包，不等于已经导入你自己的数据库；实际导入数量以导入报告为准。源码测试、CI 数据库测试和真实浏览器视觉验收是不同的验证层。
 
 ## 技术与目录
 
-| 位置 | 用途 |
-|---|---|
-| `cmd/server` | 独立 Go HTTP API，Gin + Huma，initra 安全边界 |
-| `internal/modules/catalog` | 文献、主题、证据、载体与个人状态 |
-| `internal/modules/monitor` | 增量编排、来源适配器、mock 审核、持久进度 |
-| `internal/baseline`、`tools/importbaseline` | 历史数据提取、校验、幂等导入、失败隔离 |
-| `internal/data/schema`、`db/migrations` | Ent 定义、生成代码、显式迁移 |
-| `web` | React、TypeScript、shadcn/ui-style 开放源码组件、Radix、Tailwind |
-| `data/baselines` | 42 个压缩历史分片、显示分类、校验清单 |
+| 位置                                        | 用途                                                             |
+| ------------------------------------------- | ---------------------------------------------------------------- |
+| `cmd/server`                                | 独立 Go HTTP API，Gin + Huma，initra 安全边界                    |
+| `internal/modules/catalog`                  | 文献、主题、证据、载体与个人状态                                 |
+| `internal/modules/monitor`                  | 增量编排、来源适配器、mock 审核、持久进度                        |
+| `internal/baseline`、`tools/importbaseline` | 历史数据提取、校验、幂等导入、失败隔离                           |
+| `internal/data/schema`、`db/migrations`     | Ent 定义、生成代码、显式迁移                                     |
+| `web`                                       | React、TypeScript、shadcn/ui-style 开放源码组件、Radix、Tailwind |
+| `data/baselines`                            | 42 个压缩历史分片、显示分类、校验清单                            |
 
 ## 本地启动
 
@@ -46,6 +47,8 @@ setup 只生成 Git 忽略的本地配置与管理员 seed；不会执行数据�
 atlas -c file://db/atlas.hcl migrate apply --env local
 psql "$DATABASE_URL" --set ON_ERROR_STOP=1 --single-transaction -f db/seeds/001_seed_admin.local.sql
 ```
+
+已有数据库升级同样使用上述 Atlas 迁移流程；本次管理模块新增 `20261027163000_catalog_management.sql`，启动新代码前需应用迁移。不要为升级重复初始化管理员或清空历史库。
 
 ### 2. 校验并导入真实历史基线
 
@@ -96,7 +99,7 @@ go run ./cmd/glean-monitor --node 11 \
   --max-pages 6 --allow-local-insecure
 ```
 
-真实来源记录随已获取页面写入真实目录，位于“新发现待审”，不是演示论文。只有模型阅读/总结结果明确标识为占位；不会因此获得科学核验或正式纳入资格。有限命令可能因预算、退避或尚有分页返回待继续状态，不冒充完整扫描。
+真实来源记录随已获取页面写入真实目录，位于“待审核”，不是演示论文。只有模型阅读/总结结果明确标识为占位；不会因此获得科学核验或正式纳入资格。有限命令可能因预算、退避或尚有分页返回待继续状态，不冒充完整扫描。
 
 省略时间窗可恢复未完成任务或启动到期任务。需要持续每 72 小时更新时，为后端配置 `INITRA_MONITOR_OPERATOR_ID`，并开启 `INITRA_MONITOR_SCHEDULER_ENABLED=true`；这一个主开关统一装配所需任务 worker/scheduler。每分钟只是检查持久化进度的唤醒，不是每分钟全量抓取。默认不开启，是为了在账号、数据库和来源配置确认前不静默启动网络任务。
 
@@ -143,7 +146,7 @@ CI 启动隔离 PostgreSQL 16，强制检查真实迁移、文献导入/查询�
 
 同一论文的来源更新、科学版本、正式出版事件与模型处理分别记录。后来的题名、摘要、DOI 来源信息也可搜索；它们不会静默覆盖原始历史核验。永久的单条身份冲突/坏记录隔离，其他记录继续；来源失败、长 Retry-After、隔离数和覆盖水位都可观察。
 
-默认阅读范围是经过核验的历史纳入集合，另有新发现待审与全部记录。个人隐藏目前明确作用于所有主题，和科学结论无关；隐藏可恢复。
+默认精选目录包含原历史纳入集合与管理员明确纳入的记录，另有待审核、已移出主题与全部记录。历史“待核”不会自动成为人工待审；移出主题可再次改为纳入或待审，不物理删除论文。个人隐藏目前明确作用于所有主题，和科学结论无关；隐藏可恢复。
 
 ## 设计原则
 

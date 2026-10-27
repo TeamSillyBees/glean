@@ -1,6 +1,6 @@
 import { CalendarDays, FileText, History, Link2, Quote } from 'lucide-react'
 import type { AbstractEvidence, Paper, SourceObservation } from '../lib/types'
-import { date, number, reviewLabels, topicLabels } from '../lib/utils'
+import { date, number, reviewLabels, topicLabels, manualReviewLabels } from '../lib/utils'
 import { Badge, ExternalLink } from './common'
 
 const noteLabels: Record<string, string> = {
@@ -112,7 +112,13 @@ function AbstractProvenance({ evidence }: { evidence: AbstractEvidence }) {
     </div>
   )
 }
-export function PaperOverview({ paper }: { paper: Paper }) {
+export function PaperOverview({
+  paper,
+  topicNames = {},
+}: {
+  paper: Paper
+  topicNames?: Record<string, string>
+}) {
   const notes = (paper.memberships || []).filter((m) =>
     Object.values(m.readingNotes || {}).some(Boolean),
   )
@@ -185,7 +191,11 @@ export function PaperOverview({ paper }: { paper: Paper }) {
                 className="border-b pb-5 last:border-b-0 last:pb-0"
               >
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <Badge tone="violet">{topicLabels[m.topic] || m.topic}</Badge>
+                  <Badge tone="violet">
+                    {(Object.hasOwn(topicNames, m.topic) ? topicNames[m.topic] : undefined) ||
+                      topicLabels[m.topic] ||
+                      m.topic}
+                  </Badge>
                   {m.dimensions?.display_review_status?.map((status) => (
                     <Badge key={status}>{reviewLabels[status] || status}</Badge>
                   ))}
@@ -297,14 +307,25 @@ export function PaperOverview({ paper }: { paper: Paper }) {
               className="border-b pb-5 last:border-b-0 last:pb-0"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <strong className="text-sm">{topicLabels[m.topic] || m.topic}</strong>
-                {m.inclusionStatus === 'pending-review' && (
+                <strong className="text-sm">
+                  {(Object.hasOwn(topicNames, m.topic) ? topicNames[m.topic] : undefined) ||
+                    topicLabels[m.topic] ||
+                    m.topic}
+                </strong>
+                {m.manualReview && <Badge>{manualReviewLabels[m.manualReview.status]}</Badge>}
+                {!m.manualReview && m.inclusionStatus === 'pending-review' && (
                   <Badge tone="amber">新发现 · 待审</Badge>
                 )}
                 {m.dimensions?.display_review_status?.map((status) => (
                   <Badge key={status}>{reviewLabels[status] || status}</Badge>
                 ))}
               </div>
+              {m.manualReview && (
+                <div className="mt-3 space-y-2 text-xs">
+                  <p>共享审核备注：{m.manualReview.note || '无'}</p>
+                  <p>手动标签：{m.manualReview.labels.join(' · ') || '无'}</p>
+                </div>
+              )}
               <dl className="mt-4 space-y-3">
                 {Object.entries(dimensionLabels)
                   .filter(([key]) => m.dimensions?.[key]?.length)
@@ -423,7 +444,13 @@ function Observation({ item }: { item: SourceObservation }) {
     </details>
   )
 }
-export function PaperEvidence({ paper }: { paper: Paper }) {
+export function PaperEvidence({
+  paper,
+  topicNames = {},
+}: {
+  paper: Paper
+  topicNames?: Record<string, string>
+}) {
   return (
     <div className="space-y-8 [&>section+section]:border-t [&>section+section]:pt-7">
       <section>
@@ -492,7 +519,7 @@ export function PaperEvidence({ paper }: { paper: Paper }) {
           <RawRecord
             key={`${m.topic}-${m.originalId}`}
             value={m.raw}
-            label={`${topicLabels[m.topic] || m.topic} · ${m.originalId}`}
+            label={`${(Object.hasOwn(topicNames, m.topic) ? topicNames[m.topic] : undefined) || topicLabels[m.topic] || m.topic} · ${m.originalId}`}
           />
         ))}
       </section>

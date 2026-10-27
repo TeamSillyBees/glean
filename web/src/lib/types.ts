@@ -1,4 +1,4 @@
-export type TopicSlug = 'biomed-ai' | 'llm-agent' | 'biomed-worldmodel'
+export type TopicSlug = string
 export type ReadStatus = 'unread' | 'reading' | 'read'
 export interface Topic {
   slug: TopicSlug
@@ -8,6 +8,9 @@ export interface Topic {
   curatedCount?: number
   historicalCount?: number
   candidateCount?: number
+  searchEnabled?: boolean
+  termGroups?: string[][]
+  version?: number
   membershipCount: number
 }
 export interface Facet {
@@ -48,6 +51,8 @@ export interface Membership {
   isMock: boolean
   raw: Record<string, unknown>
   inclusionStatus?: string
+  effectiveStatus?: 'included' | 'excluded' | 'pending'
+  manualReview?: ManualReview
   readingNotes?: Record<string, string>
 }
 // AbstractEvidence 仅包含可公开的摘要恢复依据，不包含本地缓存路径或原始响应。
@@ -75,6 +80,7 @@ export interface Paper {
   title: string
   titleZh: string
   abstract: string
+  correction?: Correction
   abstractEnrichment?: AbstractEnrichment | null
   abstractZh?: string
   translationStatus?: string
@@ -123,12 +129,13 @@ export interface Venue {
 }
 export interface Filters {
   topic: TopicSlug
-  collectionScope: 'curated' | 'pending' | 'all'
+  collectionScope: 'curated' | 'pending' | 'excluded' | 'all'
   q: string
   year: string
   venue: string
   publicationType: string
   category: string
+  manualLabel: string
   direction: string
   aiMethod: string
   status: string
@@ -152,6 +159,8 @@ export interface Identity {
   userId: string
   username: string
   nickname: string
+  isSuperAdmin?: boolean
+  roleCodes?: string[]
 }
 export const defaultFilters: Filters = {
   topic: 'biomed-ai',
@@ -161,6 +170,7 @@ export const defaultFilters: Filters = {
   venue: '',
   publicationType: '',
   category: '',
+  manualLabel: '',
   direction: '',
   aiMethod: '',
   status: '',
@@ -221,4 +231,41 @@ export interface SourceObservation {
   review?: Review | null
   topics: string[]
   raw: Record<string, unknown>
+}
+
+export interface ManualReview {
+  status: 'pending' | 'included' | 'excluded'
+  note: string
+  labels: string[]
+  version: number
+  updatedAt: string
+  updatedBy: string | null
+}
+export type CorrectionFields = Partial<
+  Pick<Paper, 'title' | 'titleZh' | 'authors' | 'year' | 'venue' | 'abstract'>
+>
+export interface Correction {
+  fields: CorrectionFields
+  reason: string
+  version: number
+  updatedAt: string
+  updatedBy: string | null
+}
+export interface CatalogHistory {
+  id: string
+  kind: string
+  topic: string
+  before: unknown
+  after: unknown
+  actorId: string | null
+  createdAt: string
+}
+export interface TopicInput {
+  slug?: string
+  name: string
+  description: string
+  rule: string
+  searchEnabled: boolean
+  termGroups: string[][]
+  expectedVersion: number
 }

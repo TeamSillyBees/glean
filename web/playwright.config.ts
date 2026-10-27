@@ -35,6 +35,16 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1080 } },
     },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
+    ...(!live
+      ? [
+          {
+            name: 'management',
+            testMatch: 'management.spec.ts',
+            dependencies: ['desktop', 'mobile'],
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1080 } },
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: `npm run preview -- --host 127.0.0.1 --port ${target.port || '18081'} --strictPort`,

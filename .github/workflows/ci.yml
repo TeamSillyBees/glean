@@ -76,6 +76,8 @@ jobs:
               (module + "/internal/modules/catalog", "TestCatalogPostgresEndToEnd"),
               (module + "/internal/modules/catalog", "TestCatalogLiveObservationPostgres"),
               (module + "/internal/modules/catalog", "TestHistoricalAbstractEnrichmentPostgres"),
+              (module + "/internal/modules/catalog", "TestCatalogManagementPostgres"),
+              (module + "/internal/modules/user", "TestUserAdministrationPostgres"),
               (module + "/internal/modules/monitor", "TestMonitorPostgresDurableMockRun"),
               (module + "/internal/modules/monitor", "TestMonitorRealPipelinePostgres"),
               (module + "/test/integration", "TestMigrationsAndSeedOnPostgres"),
@@ -420,7 +422,7 @@ jobs:
           npm run build
           npx playwright install --with-deps chromium
 
-      - name: Exercise real login, catalog and durable state in desktop and mobile browsers
+      - name: Exercise real catalog, personal state and administrator workflows in browsers
         working-directory: web
         run: npm run test:e2e
 

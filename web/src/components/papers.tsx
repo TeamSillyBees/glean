@@ -1,3 +1,6 @@
+import { manualReviewLabels } from '../lib/utils'
+import { CatalogManagement } from './catalog-management'
+import type { Topic } from '../lib/types'
 import { useEffect } from 'react'
 import {
   type Query,
@@ -51,7 +54,10 @@ export function PaperCard({
         {paper.year > 0 && <span className="text-muted-foreground">· {paper.year}</span>}
         {membership?.tier && <Badge tone="violet">{membership.tier}</Badge>}
         <span className="ml-auto flex items-center gap-2">
-          {membership?.inclusionStatus === 'pending-review' && (
+          {membership?.manualReview && (
+            <Badge>{manualReviewLabels[membership.manualReview.status]}</Badge>
+          )}
+          {!membership?.manualReview && membership?.inclusionStatus === 'pending-review' && (
             <Badge tone="amber">新发现 · 待审</Badge>
           )}
           <span
@@ -131,7 +137,13 @@ export function PaperDetail({
   onClose,
   notify,
   restoreFocus,
+  canManage = false,
+  topics = [],
+  activeTopic,
 }: {
+  canManage?: boolean
+  topics?: Topic[]
+  activeTopic?: string
   id: string | null
   onClose: () => void
   notify: (message: string) => void
@@ -364,12 +376,27 @@ export function PaperDetail({
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="overview">
-                  <PaperOverview paper={paper} />
+                  <PaperOverview
+                    paper={paper}
+                    topicNames={Object.fromEntries(topics.map((topic) => [topic.slug, topic.name]))}
+                  />
                 </TabsContent>
                 <TabsContent value="evidence">
-                  <PaperEvidence paper={paper} />
+                  <PaperEvidence
+                    paper={paper}
+                    topicNames={Object.fromEntries(topics.map((topic) => [topic.slug, topic.name]))}
+                  />
                 </TabsContent>
               </Tabs>
+              {canManage && (
+                <CatalogManagement
+                  key={paper.id}
+                  paper={paper}
+                  topics={topics}
+                  activeTopic={activeTopic}
+                  notify={notify}
+                />
+              )}
             </div>
           )
         )}

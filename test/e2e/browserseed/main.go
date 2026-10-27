@@ -1,4 +1,4 @@
-// browserseed 仅在隔离 CI 数据库创建普通浏览器测试账号，不生成或修改用户配置。
+// browserseed 仅在隔离 CI 数据库创建浏览器测试账号，不生成或修改用户配置。
 package main
 
 import (
@@ -67,11 +67,14 @@ func seed() error {
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sys_user`).Scan(&existing); err != nil || existing != 0 {
 		return fmt.Errorf("refusing to seed an uninitialized or nonempty account database")
 	}
-	for i, username := range []string{"glean-browser", "glean-browser-other"} {
+	for i, account := range []struct {
+		username string
+		admin    bool
+	}{{"glean-browser", false}, {"glean-browser-other", false}, {"glean-browser-admin", true}} {
 		_, err := tx.ExecContext(ctx, `INSERT INTO sys_user
 			(id, username, password_hash, nickname, is_super_admin, is_enable, session_version, sort_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, false, true, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-			7+i, username, string(hash), "浏览器验收用户")
+			VALUES ($1, $2, $3, $4, $5, true, 1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+			7+i, account.username, string(hash), "浏览器验收用户", account.admin)
 		if err != nil {
 			return fmt.Errorf("test account insert failed")
 		}
@@ -79,6 +82,6 @@ func seed() error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("test account transaction commit failed")
 	}
-	fmt.Println("Created two ordinary CI-only accounts; baseline operator ID is 7.")
+	fmt.Println("Created two ordinary and one administrator CI-only accounts; baseline operator ID is 7.")
 	return nil
 }

@@ -43,10 +43,41 @@ describe('backend taxonomy transport', () => {
     ])
     expect(filterFacets(undefined, 'biomed-ai', 'method', 'methods')).toEqual([])
   })
+  it('restores dynamic topic slugs and uses only supported generic dimensions', () => {
+    expect(restoreFilters({ topic: 'custom-research', collectionScope: 'excluded' })).toEqual({
+      topic: 'custom-research',
+      collectionScope: 'excluded',
+    })
+    expect(getFilterSpecs('custom-research').map((item) => item.key)).toEqual([
+      'year',
+      'venue',
+      'manualLabel',
+    ])
+    expect(encodeFilters({ topic: 'custom-research', year: '2026' })).toEqual({
+      topic: 'custom-research',
+      year: '2026',
+    })
+  })
+  it('encodes manual labels separately from immutable imported categories', () => {
+    const result = encodeFilters({ ...defaultFilters, manualLabel: '需复核', method: '原创研究' })
+    expect(JSON.parse(String(result.dimension))).toEqual({
+      manual_labels: '需复核',
+      paper_types: '原创研究',
+    })
+    expect(result).not.toHaveProperty('manualLabel')
+    expect(
+      filterFacets(
+        { ...facets, dimensions: { manual_labels: [{ value: '需复核', count: 1 }] } },
+        'custom-topic',
+        'manualLabel',
+        'categories',
+      ),
+    ).toEqual([{ value: '需复核', count: 1 }])
+  })
   it('rejects invalid saved enums and pagination values', () => {
     expect(
       restoreFilters({
-        topic: 'unknown',
+        topic: 'invalid/topic',
         page: -10,
         hidden: 'everything',
         sort: 'unsafe',

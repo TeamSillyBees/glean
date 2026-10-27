@@ -192,7 +192,7 @@ export function SourcesView({
       <div>
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <Radio className="size-4 text-primary" />
-          {topicLabels[topic]} · 来源进度
+          {topicLabels[topic] || topic} · 来源进度
         </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           只有本主题所有分页完成，才推进该主题窗口。没有完成记录时显示未知，不以“无错误”代表最新。
