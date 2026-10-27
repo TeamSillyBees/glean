@@ -3,7 +3,11 @@ package user
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"github.com/danielgtaylor/huma/v2/humatest"
+	"github.com/teamsillybees/glean/internal/platform/server"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -165,4 +169,36 @@ func TestUserAdministrationPostgres(t *testing.T) {
 			require.Equal(t, 1, remaining)
 		})
 	}
+	t.Run("create ordinary account over HTTP with default viewer", func(t *testing.T) {
+		_, err := db.ExecContext(ctx, `INSERT INTO "`+schema+`".sys_role
+            (id,code,name,is_builtin,is_enable,created_at,updated_at)
+            VALUES (1000000000102,'viewer','只读用户',true,true,now(),now())`)
+		require.NoError(t, err)
+		var actor int64
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT id FROM "`+schema+`".sys_user WHERE is_enable AND is_super_admin`).Scan(&actor))
+		generator, err := idgen.NewGenerator(1)
+		require.NoError(t, err)
+		idgen.SetDefaultGenerator(generator)
+		driver := &userPostgresDriver{Driver: entsql.OpenDB(dialect.Postgres, db), schema: schema}
+		service := NewService(appent.NewClient(appent.Driver(driver)), &fakeUserCache{}, &fakePasswordManager{})
+		_, api := humatest.New(t)
+		NewModule(NewHandler(service)).Register(api, server.NewRouteRegistry())
+		actorCtx := platformauth.WithPrincipal(ctx, platformauth.Principal{UserID: idgen.ID(actor), IsSuperAdmin: true})
+		res := api.DoCtx(actorCtx, http.MethodPost, "/api/v1/users", map[string]any{
+			"username": "http-created-reader", "password": "test-only-password", "nickname": "HTTP 读者", "isEnable": true, "isSuperAdmin": false,
+		})
+		require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+		var envelope struct {
+			Data UserVO `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(res.Body.Bytes(), &envelope))
+		require.Equal(t, "http-created-reader", envelope.Data.Username)
+		require.False(t, envelope.Data.IsSuperAdmin)
+		require.True(t, envelope.Data.IsEnable)
+		require.Equal(t, []string{"viewer"}, envelope.Data.RoleCodes)
+		var count int
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM "`+schema+`".sys_user u JOIN "`+schema+`".sys_user_role ur ON u.id=ur.user_id JOIN "`+schema+`".sys_role r ON ur.role_id=r.id WHERE u.username='http-created-reader' AND r.code='viewer' AND ur.deleted_at IS NULL AND u.is_enable AND NOT u.is_super_admin`).Scan(&count))
+		require.Equal(t, 1, count, "ordinary account and default viewer membership must both persist")
+	})
+
 }

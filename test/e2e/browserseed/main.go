@@ -67,6 +67,10 @@ func seed() error {
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sys_user`).Scan(&existing); err != nil || existing != 0 {
 		return fmt.Errorf("refusing to seed an uninitialized or nonempty account database")
 	}
+	// 与正常部署 seed 保持相同的默认 viewer 角色；管理员创建普通账号会解析它。
+	if err := seedDefaultRole(ctx, tx); err != nil {
+		return fmt.Errorf("test default role insert failed")
+	}
 	for i, account := range []struct {
 		username string
 		admin    bool
@@ -84,4 +88,12 @@ func seed() error {
 	}
 	fmt.Println("Created two ordinary and one administrator CI-only accounts; baseline operator ID is 7.")
 	return nil
+}
+
+// seedDefaultRole 只补齐用户创建依赖的基础角色，不授予管理权限。
+func seedDefaultRole(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO sys_role
+        (id, code, name, remark, is_builtin, is_enable, sort_id, created_at, updated_at)
+        VALUES (1000000000102, 'viewer', '只读用户', '默认基础只读角色', true, true, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+	return err
 }
