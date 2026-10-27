@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { Activity, FileCode2, ShieldCheck } from 'lucide-react'
+import { Activity, FileCode2, RefreshCw, ShieldCheck } from 'lucide-react'
 import { api, request } from '../lib/api'
 import { date, number, topicLabels } from '../lib/utils'
 import type { TopicSlug } from '../lib/types'
 import { Badge, Empty, ErrorState, Loading } from './common'
+import { Button } from './ui/button'
 export { SourcesView, FreshnessStrip } from './source-health'
 interface Progress {
   acquired: boolean
@@ -55,6 +56,9 @@ const venueStatusLabels: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   completed: '已完成',
   completed_with_quarantine: '完成 · 有隔离记录',
+  completed_with_errors: '已结束 · 存在失败',
+  retry_wait: '等待重试',
+  canceled: '已取消',
   running: '进行中',
   failed: '失败',
   pending: '待运行',
@@ -66,12 +70,40 @@ export function RunsView() {
   const query = useQuery({
     queryKey: ['runs'],
     queryFn: ({ signal }) => request<{ items: Run[] }>('/api/v1/monitor/runs', { signal }),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   })
-  if (query.isLoading) return <Loading />
-  if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />
+  if (query.isLoading) return <Loading label="正在读取扫描记录…" />
+  if (query.isError && !query.data)
+    return <ErrorState error={query.error} retry={() => query.refetch()} />
   const items = query.data?.items || []
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
+          {query.isFetching
+            ? '正在刷新扫描状态…'
+            : `页面可见时每 60 秒更新 · 最近更新 ${new Date(query.dataUpdatedAt).toLocaleTimeString('zh-CN')}`}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={query.isFetching}
+          onClick={() => query.refetch()}
+        >
+          <RefreshCw className={query.isFetching ? 'animate-spin' : undefined} />
+          刷新扫描状态
+        </Button>
+      </div>
+      {query.isError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900"
+        >
+          刷新失败，以下保留上次成功读取的记录，可能不是最新进度。
+          {query.error instanceof Error && <p>{query.error.message}</p>}
+        </div>
+      )}
       <p className="text-xs leading-6 text-muted-foreground">
         采集、模型占位与目录写入分开记录；模型阶段尚待真实模型接入，不代表科学审读。
       </p>
@@ -96,13 +128,29 @@ export function RunsView() {
               <Badge
                 className="ml-auto"
                 tone={
-                  run.status === 'completed' ? 'green' : run.status === 'failed' ? 'red' : 'amber'
+                  run.status === 'completed'
+                    ? 'green'
+                    : ['failed', 'completed_with_errors'].includes(run.status)
+                      ? 'red'
+                      : run.status === 'canceled'
+                        ? 'neutral'
+                        : 'amber'
                 }
               >
                 {statusLabels[run.status] || run.status}
               </Badge>
               <Badge tone="violet">{run.mode === 'mock' ? '历史模拟运行' : '真实来源采集'}</Badge>
             </div>
+            {run.status === 'completed_with_errors' && (
+              <p className="mt-4 text-xs leading-6 text-red-700">
+                本次运行已结束，但有来源未完成。已获取的数据会保留，不代表整个扫描窗口已完成。
+              </p>
+            )}
+            {run.status === 'retry_wait' && (
+              <p className="mt-4 text-xs leading-6 text-amber-800">
+                正在等待来源退避或重试条件，刷新此页面不会提前发起采集请求。
+              </p>
+            )}
             <div className="mt-5 grid gap-4 border-t pt-5 sm:grid-cols-2">
               <p className="text-xs text-muted-foreground">
                 固定结束水位{' '}
@@ -146,8 +194,11 @@ export function RunsView() {
                       目录写入 {progress.published ? '✓' : '—'}
                     </Badge>
                   </span>
+                  {progress.failed && <Badge tone="red">来源处理失败</Badge>}
                   {progress.lastError && (
-                    <p className="w-full text-amber-800">{progress.lastError}</p>
+                    <p className={`w-full ${progress.failed ? 'text-red-700' : 'text-amber-800'}`}>
+                      最近错误：{progress.lastError}
+                    </p>
                   )}
                 </div>
               ))}

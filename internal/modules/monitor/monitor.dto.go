@@ -169,6 +169,8 @@ type Checkpoint struct {
 
 // SourceProgress 保存单次运行每个来源的可恢复游标。
 type SourceProgress struct {
+	RetryableFailure  bool                `json:"retryableFailure,omitempty"`
+	RetryNotBefore    time.Time           `json:"retryNotBefore,omitempty"`
 	RegistryByTopic   map[string][]string `json:"registryByTopic,omitempty"`
 	CoreWide          bool                `json:"coreWide"`
 	IncrementalWindow Window              `json:"incrementalWindow"`
@@ -195,17 +197,20 @@ type SourceProgress struct {
 
 // Run 保存一次固定水位的运行，取消或退避后恢复同一 ID。
 type Run struct {
-	Requests        int                        `json:"requests"`
-	RequestKey      string                     `json:"requestKey,omitempty"`
-	ID              idgen.ID                   `json:"id"`
-	Number          int                        `json:"number"`
-	StartedAt       time.Time                  `json:"startedAt"`
-	FixedEnd        time.Time                  `json:"fixedEnd"`
-	FinishedAt      time.Time                  `json:"finishedAt"`
-	Status          string                     `json:"status"`
-	Mode            string                     `json:"mode"`
-	TemplateVersion string                     `json:"templateVersion"`
-	Sources         map[string]*SourceProgress `json:"sources"`
+	RetryCandidateKeys map[string][]string        `json:"retryCandidateKeys,omitempty"`
+	RetryOf            idgen.ID                   `json:"retryOf,omitempty"`
+	RetriedBy          idgen.ID                   `json:"retriedBy,omitempty"`
+	Requests           int                        `json:"requests"`
+	RequestKey         string                     `json:"requestKey,omitempty"`
+	ID                 idgen.ID                   `json:"id"`
+	Number             int                        `json:"number"`
+	StartedAt          time.Time                  `json:"startedAt"`
+	FixedEnd           time.Time                  `json:"fixedEnd"`
+	FinishedAt         time.Time                  `json:"finishedAt"`
+	Status             string                     `json:"status"`
+	Mode               string                     `json:"mode"`
+	TemplateVersion    string                     `json:"templateVersion"`
+	Sources            map[string]*SourceProgress `json:"sources"`
 }
 
 // Schedule 保存 UTC 锚点，防止进程重启或运行耗时造成计划漂移。

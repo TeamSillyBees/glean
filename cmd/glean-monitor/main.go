@@ -43,6 +43,7 @@ func main() {
 func run(ctx context.Context, args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("glean-monitor", flag.ContinueOnError)
 	demo := flags.Bool("demo", false, "explicit synthetic fixture mode; normal mode uses real source APIs and PostgreSQL")
+	retryFailed := flags.String("retry-failed", "", "explicitly resume classified transient failures from a retained run ID; original sources/window are preserved")
 	doctor := flags.Bool("doctor", false, "check database, actor and real-source configuration without calling source APIs")
 	since := flags.String("since", "", "inclusive real source update lower bound, RFC3339; omit with until to resume scheduled window")
 	until := flags.String("until", "", "exclusive fixed real source watermark, RFC3339")
@@ -79,11 +80,21 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if *scenario != "baseline" && *scenario != "incremental" && *scenario != "failure" {
 		return fmt.Errorf("unknown mock scenario")
 	}
+	var retryID idgen.ID
+	if *retryFailed != "" {
+		retryID, err = idgen.Parse(*retryFailed)
+		if err != nil || retryID <= 0 {
+			return fmt.Errorf("--retry-failed requires a positive run ID")
+		}
+		if *demo || *doctor || *since != "" || *until != "" {
+			return fmt.Errorf("--retry-failed cannot be combined with --demo/--doctor/--since/--until")
+		}
+	}
 	if !*demo {
 		if *persist {
 			return fmt.Errorf("--persist-mock requires explicit --demo; normal mode is real")
 		}
-		return runLive(ctx, out, *node, *operator, os.Getenv("INITRA_MONITOR_DATABASE_URL"), *allowLocal, *sourceNames, *since, *until, *maxPages, *pageSize, *contact, *doctor, *full, *requireObservation)
+		return runLive(ctx, out, *node, *operator, os.Getenv("INITRA_MONITOR_DATABASE_URL"), *allowLocal, *sourceNames, *since, *until, *maxPages, *pageSize, *contact, *doctor, *full, *requireObservation, retryID)
 	}
 	if *doctor || *since != "" || *until != "" || *requireObservation {
 		return fmt.Errorf("--doctor/--since/--until apply to real mode, not --demo")
@@ -205,7 +216,7 @@ func validateDSN(dsn string, allowLocal bool) error {
 	return fmt.Errorf("database requires sslmode=verify-full; loopback development may explicitly allow sslmode=disable")
 }
 
-func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn string, allowLocal bool, sourceNames, since, until string, maxPages, pageSize int, contact string, doctor, full, requireObservation bool) error {
+func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn string, allowLocal bool, sourceNames, since, until string, maxPages, pageSize int, contact string, doctor, full, requireObservation bool, retryID idgen.ID) error {
 	if pageSize < 1 || pageSize > 1000 {
 		return fmt.Errorf("--page-size must be 1-1000")
 	}
@@ -315,7 +326,9 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 		return nil
 	}
 	var snapshot monitor.Snapshot
-	if window != nil {
+	if retryID > 0 {
+		snapshot, err = service.RetryFailedFinite(ctx, retryID, maxPages)
+	} else if window != nil {
 		snapshot, err = service.RunFinite(ctx, *window, maxPages)
 	} else {
 		snapshot, err = service.ResumeFinite(ctx, maxPages)
@@ -323,12 +336,19 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 	if err != nil {
 		return fmt.Errorf("real scan interrupted or blocked; durable progress preserved; inspect actor/database or resume original sources/window")
 	}
-	observations, readErr := readRunObservations(ctx, client, snapshot)
+	reportSnapshot := snapshot
+	if retryID > 0 {
+		reportSnapshot, err = retryReportSnapshot(snapshot, retryID)
+		if err != nil {
+			return err
+		}
+	}
+	observations, readErr := readRunObservations(ctx, client, reportSnapshot)
 	if readErr != nil {
 		return fmt.Errorf("scan persisted but observation report could not be read")
 	}
-	status := realRunStatus(snapshot)
-	result := map[string]any{"mode": "real", "status": status, "llmReview": "mock; scientific inclusion remains pending", "schedule": snapshot.Schedule, "runs": snapshot.Runs, "sources": snapshot.Sources, "requestBudget": maxPages, "pageSize": pageSize, "observations": observations}
+	status := realRunStatus(reportSnapshot)
+	result := map[string]any{"mode": "real", "status": status, "selectedRunId": selectedRunID(reportSnapshot), "llmReview": "mock; scientific inclusion remains pending", "schedule": snapshot.Schedule, "runs": snapshot.Runs, "sources": snapshot.Sources, "requestBudget": maxPages, "pageSize": pageSize, "observations": observations}
 	if full {
 		result["snapshot"] = snapshot
 	}
@@ -415,4 +435,45 @@ func realRunStatus(snapshot monitor.Snapshot) string {
 		return "completed"
 	}
 	return "bounded-partial"
+}
+
+// retryReportSnapshot 仅筛选报告视图，不更改持久化历史；旧恢复运行不借用最新无关运行的状态。
+func retryReportSnapshot(snapshot monitor.Snapshot, originalID idgen.ID) (monitor.Snapshot, error) {
+	var target idgen.ID
+	for _, run := range snapshot.Runs {
+		if run.ID == originalID {
+			target = run.RetriedBy
+			break
+		}
+	}
+	if target == 0 {
+		for _, run := range snapshot.Runs {
+			if run.RetryOf == originalID {
+				if target != 0 {
+					return monitor.Snapshot{}, fmt.Errorf("ambiguous retry report target")
+				}
+				target = run.ID
+			}
+		}
+	}
+	for _, run := range snapshot.Runs {
+		if target != 0 && run.ID == target {
+			view := snapshot
+			view.Runs = []monitor.Run{run}
+			if !run.FinishedAt.IsZero() {
+				view.Sources = map[string]*monitor.Checkpoint{}
+				for name, p := range run.Sources {
+					view.Sources[name] = &monitor.Checkpoint{Source: name, Blocked: p.Failed, LastError: p.LastError}
+				}
+			}
+			return view, nil
+		}
+	}
+	return monitor.Snapshot{}, fmt.Errorf("retry report target is not retained")
+}
+func selectedRunID(snapshot monitor.Snapshot) idgen.ID {
+	if len(snapshot.Runs) == 0 {
+		return 0
+	}
+	return snapshot.Runs[len(snapshot.Runs)-1].ID
 }

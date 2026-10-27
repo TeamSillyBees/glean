@@ -45,7 +45,15 @@ func (h *Handler) runs(ctx context.Context, _ *runsRequest) (*runsResponse, erro
 		return nil, err
 	}
 	items := append([]Run{}, snapshot.Runs...)
-	sort.Slice(items, func(i, j int) bool { return items[i].Number > items[j].Number })
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Number != items[j].Number {
+			return items[i].Number > items[j].Number
+		}
+		if !items[i].StartedAt.Equal(items[j].StartedAt) {
+			return items[i].StartedAt.After(items[j].StartedAt)
+		}
+		return items[i].ID > items[j].ID
+	})
 	return &runsResponse{Body: response.OK(ctx, RunsVO{Items: items})}, nil
 }
 func (h *Handler) templates(ctx context.Context, _ *templatesRequest) (*templatesResponse, error) {

@@ -85,13 +85,22 @@ async function updateState(page: Page, id: string, button: string) {
       new URL(response.url()).pathname === `/api/v1/catalog/papers/${id}/state` &&
       response.request().method() === 'PUT',
   )
-  const refreshed = catalogResponse(page, `papers/${id}`)
-  await page
-    .getByRole('dialog', { name: '论文详情', exact: true })
-    .getByRole('button', { name: button, exact: true })
-    .click()
-  expect((await update).status()).toBe(200)
-  return data<Paper>(await refreshed)
+  const drawer = page.getByRole('dialog', { name: '论文详情', exact: true })
+  await drawer.getByRole('button', { name: button, exact: true }).click()
+  // The authoritative PUT response is merged into the UI cache. A redundant GET
+  // is not part of the contract; normal close/reopen and reload below verify DB state.
+  const state = await data<Pick<Paper, 'hidden' | 'readStatus'>>(await update)
+  const readLabels = { unread: '未读', reading: '在读', read: '已读' }
+  const selectedRead = drawer.getByRole('button', {
+    name: readLabels[state.readStatus],
+    exact: true,
+  })
+  await expect(selectedRead.locator('svg.lucide-check')).toBeVisible()
+  await expect(selectedRead).toBeEnabled()
+  await expect(
+    drawer.getByRole('button', { name: state.hidden ? '恢复显示' : '隐藏', exact: true }),
+  ).toBeVisible()
+  return state
 }
 
 async function screenshot(page: Page, info: TestInfo, name: string) {
@@ -255,9 +264,9 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await screenshot(page, info, 'source-evidence')
   const read = await updateState(page, target.id, '已读')
   expect(read.readStatus).toBe('read')
-  expect(read.memberships).toEqual(original.memberships)
   const hidden = await updateState(page, target.id, '隐藏')
   expect(hidden.hidden).toBe(true)
+  expect(hidden.readStatus).toBe('read')
   await expect(
     page.locator(`[data-testid="paper-card"][data-paper-id="${target.id}"]`),
   ).toBeHidden()
@@ -269,8 +278,13 @@ test('real historical catalog: login, filters, detail, durable personal state an
   expect(
     (await data<PaperPage>(await hiddenList)).items.some((paper) => paper.id === target.id),
   ).toBe(true)
-  await detail(page, target)
-  expect((await updateState(page, target.id, '恢复显示')).hidden).toBe(false)
+  const persistedHidden = await detail(page, target)
+  expect(persistedHidden.hidden).toBe(true)
+  expect(persistedHidden.readStatus).toBe('read')
+  expect(persistedHidden.memberships).toEqual(original.memberships)
+  const restored = await updateState(page, target.id, '恢复显示')
+  expect(restored.hidden).toBe(false)
+  expect(restored.readStatus).toBe('read')
   await expect(
     page.locator(`[data-testid="paper-card"][data-paper-id="${target.id}"]`),
   ).toBeHidden()
@@ -284,7 +298,10 @@ test('real historical catalog: login, filters, detail, durable personal state an
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0])
   await login(page, username)
   await search(page, query)
-  expect((await detail(page, target)).readStatus).toBe('read')
+  const persistedRead = await detail(page, target)
+  expect(persistedRead.readStatus).toBe('read')
+  expect(persistedRead.hidden).toBe(false)
+  expect(persistedRead.memberships).toEqual(original.memberships)
 
   // A separate browser context/account must not inherit either personal flag.
   const otherContext = await browser.newContext({

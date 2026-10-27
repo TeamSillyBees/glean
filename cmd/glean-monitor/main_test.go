@@ -100,3 +100,50 @@ func TestCanaryBudgetAndStatusAreExplicit(t *testing.T) {
 	snapshot.Sources["europepmc"].Blocked = true
 	require.Equal(t, "blocked", realRunStatus(snapshot))
 }
+
+// TestRetryFlagRejectsWindowOverrides 验证恢复运行不允许改变原窗口或混入诊断/模拟模式。
+func TestRetryFlagRejectsWindowOverrides(t *testing.T) {
+	for _, args := range [][]string{
+		{"--node", "11", "--retry-failed", "bad"},
+		{"--node", "11", "--retry-failed", "0"},
+		{"--node", "11", "--retry-failed", "7", "--demo"},
+		{"--node", "11", "--retry-failed", "7", "--doctor"},
+		{"--node", "11", "--retry-failed", "7", "--since", "2026-10-01T00:00:00Z"},
+		{"--node", "11", "--retry-failed", "7", "--until", "2026-10-01T00:00:00Z"},
+	} {
+		require.ErrorContains(t, run(context.Background(), args, &bytes.Buffer{}), "--retry-failed")
+	}
+}
+
+// TestRetryReportsSelectedChildNotNewestRun 验证旧恢复运行状态不被新运行成功掩盖。
+func TestRetryReportsSelectedChildNotNewestRun(t *testing.T) {
+	snapshot := monitor.Snapshot{Runs: []monitor.Run{
+		{ID: 1, RetriedBy: 2},
+		{ID: 2, RetryOf: 1, Status: "completed_with_errors", FinishedAt: time.Now(), Sources: map[string]*monitor.SourceProgress{"arxiv": {Failed: true, LastError: "http"}}},
+		{ID: 3, Status: "completed", FinishedAt: time.Now(), Sources: map[string]*monitor.SourceProgress{"arxiv": {Published: true}}},
+	}, Sources: map[string]*monitor.Checkpoint{"arxiv": {}}}
+	view, err := retryReportSnapshot(snapshot, 1)
+	require.NoError(t, err)
+	require.Equal(t, "2", selectedRunID(view).String())
+	require.Equal(t, "blocked", realRunStatus(view))
+	require.Len(t, snapshot.Runs, 3)
+	require.False(t, snapshot.Sources["arxiv"].Blocked)
+	snapshot.Runs[1].Status = "completed"
+	snapshot.Runs[1].Sources["arxiv"] = &monitor.SourceProgress{Published: true}
+	snapshot.Sources["arxiv"].Blocked = true
+	view, err = retryReportSnapshot(snapshot, 1)
+	require.NoError(t, err)
+	require.Equal(t, "completed", realRunStatus(view))
+}
+
+// TestRetryReportSurvivesOriginalHistoryCompaction 验证仅保留恢复运行时仍能正确报告目标。
+func TestRetryReportSurvivesOriginalHistoryCompaction(t *testing.T) {
+	snapshot := monitor.Snapshot{Runs: []monitor.Run{{ID: 2, RetryOf: 1, FinishedAt: time.Now(), Status: "completed", Sources: map[string]*monitor.SourceProgress{"arxiv": {Published: true}}}}}
+	view, err := retryReportSnapshot(snapshot, 1)
+	require.NoError(t, err)
+	require.Equal(t, "2", selectedRunID(view).String())
+	require.Equal(t, "completed", realRunStatus(view))
+	snapshot.Runs = append(snapshot.Runs, monitor.Run{ID: 3, RetryOf: 1})
+	_, err = retryReportSnapshot(snapshot, 1)
+	require.ErrorContains(t, err, "ambiguous")
+}

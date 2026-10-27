@@ -82,3 +82,21 @@ go run ./cmd/glean-monitor --node 18 --operator 7 --sources europepmc \
 ```
 
 The JSON report includes `status`, actual committed `observations` with paper/observation/run IDs, canonical catalog `title`, `observationTitle`, official source URL, and independent `llmIsMock`/`scientificReviewed` flags. `bounded-partial` with a committed observation is success, not a claim of full coverage. `blocked`, `quarantined`, a database error, or no committed observation with `--require-observation` exits nonzero; no fixture fallback is allowed. `--page-size` requests 1–1000 items, but some providers impose fixed page sizes (bio/medRxiv and arXiv OAI). A successful older canary does not establish current upstream availability.
+
+## 显式恢复已结束的暂时失败
+
+普通相同窗口调用仍保持幂等，不自动重新打开 `completed_with_errors`。当已知暂时错误（例如 503）耗尽预算且来源恢复后，可使用输出中的失败运行 ID：
+
+```sh
+go run ./cmd/glean-monitor --node 11 --sources crossref,pubmed,europepmc \
+  --retry-failed '<failed-run-id>' --max-pages 6 --allow-local-insecure
+```
+
+- 必须配置原运行的**完全相同源集**，不能同时指定 `--since`、`--until`、`--doctor` 或 `--demo`。原检索模板版本必须仍受支持。
+- 创建关联的恢复运行（`retryOf` / `retriedBy`），保留原运行、失败分类和时间证据；使用原窗口、期刊集、分页游标及成功阶段，不扩大扫描范围。
+- 只有持久化标为可重试的失败来源获得一次新预算。永久错误、单条隔离、403 持久阻断及旧版本未分类的失败不据字符串猜测为暂时错误。
+- 严格遵守原运行及当前来源的 `Retry-After`/退避，不清除访问阻断。已有其他运行或有效 worker 租约时拒绝抢占；状态写入使用 CAS。
+- 重复同一 `--retry-failed` 只恢复同一关联运行。若该恢复运行再次耗尽预算，不会用重复原命令无限重试；需检查原因后明确指定新的失败运行 ID。
+- 已移出保留历史的运行无法从此入口恢复；不臆造其游标。来源获取不等于科学审核，恢复不会自动解除隔离或把模拟 LLM 结果改为正式纳入。
+
+恢复运行沿用原周期编号，不额外消耗“每十次扫描”的宽窗口补漏计数。报告以 `selectedRunId` 指向本次恢复目标，即使之后已有新运行也不会借用其成功状态或观察记录。`retryCandidateKeys` 固定记录恢复起点的候选证据键；正常投影后原文仍由目录观察记录持久保存，监控的工作缓存/`candidateKeys` 仍按既有策略压缩，并非永远保存全部内存副本。运行历史仍受配置的保留数量限制。

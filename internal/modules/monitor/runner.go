@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/teamsillybees/glean/internal/modules/bizerrors"
+	"github.com/teamsillybees/glean/internal/platform/idgen"
 )
 
 // RunFinite 在全局请求预算内推进显式窗口，只等待正常限速，不等待或绕过上游错误退避。
@@ -14,21 +15,38 @@ func (s *Service) RunFinite(ctx context.Context, window Window, maxRequests int)
 	if window.Start.IsZero() || !window.Start.Before(window.End) || window.End.Sub(window.Start) > 90*24*time.Hour || (s.config.RealFetchEnabled && window.End.After(s.clock().UTC())) {
 		return Snapshot{}, bizerrors.BadRequest("invalid scan window")
 	}
-	return s.runFinite(ctx, &window, maxRequests)
+	return s.runFinite(ctx, &window, maxRequests, 0)
 }
 
 // ResumeFinite 在请求预算内恢复当前运行；无待办时遵循持久化 72 小时计划与首次三十日窗口。
 func (s *Service) ResumeFinite(ctx context.Context, maxRequests int) (Snapshot, error) {
-	return s.runFinite(ctx, nil, maxRequests)
+	return s.runFinite(ctx, nil, maxRequests, 0)
 }
 
-func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int) (Snapshot, error) {
+func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int, target idgen.ID) (Snapshot, error) {
 	if maxRequests < 1 || maxRequests > 200 {
 		return Snapshot{}, bizerrors.BadRequest("max-pages must be between 1 and 200")
 	}
 	latest, err := s.Snapshot(ctx)
 	if err != nil {
 		return Snapshot{}, err
+	}
+	if target != 0 {
+		found := false
+		for _, run := range latest.Runs {
+			if run.ID == target {
+				found = true
+				if !run.FinishedAt.IsZero() {
+					return latest, nil
+				}
+			}
+		}
+		if !found {
+			return latest, bizerrors.BadRequest("retry target is not retained")
+		}
+		if active := activeSnapshotRun(latest); active == nil || active.ID != target {
+			return latest, bizerrors.BadRequest("another run is active")
+		}
 	}
 	initialRequests := 0
 	key := ""
@@ -63,7 +81,7 @@ func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int
 		if window != nil {
 			latest, err = copy.RunWindow(ctx, *window)
 		} else {
-			latest, err = copy.RunOnce(ctx, s.clock().UTC())
+			latest, err = copy.runOnce(ctx, s.clock().UTC(), nil, target)
 		}
 		if err != nil {
 			return latest, err

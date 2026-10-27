@@ -167,7 +167,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 // RunOnce 执行一个有预算的工作片段，退避未到期时立即返回而不忙循环。
 // 未完成的运行恢复同一固定 End；来源分页全部成功前不推进采集水位。
 func (s *Service) RunOnce(ctx context.Context, now time.Time) (Snapshot, error) {
-	return s.runOnce(ctx, now, nil)
+	return s.runOnce(ctx, now, nil, 0)
 }
 
 // RunWindow 执行显式有界真实扫描窗口，重试保持同一窗口与运行 ID，不跨越未覆盖的来源缺口。
@@ -177,10 +177,10 @@ func (s *Service) RunWindow(ctx context.Context, window Window) (Snapshot, error
 	if window.Start.IsZero() || !window.Start.Before(window.End) || window.End.Sub(window.Start) > 90*24*time.Hour || (s.config.RealFetchEnabled && window.End.After(s.clock().UTC())) {
 		return Snapshot{}, bizerrors.BadRequest("scan window must be positive and at most 90 days")
 	}
-	return s.runOnce(ctx, s.clock().UTC(), &window)
+	return s.runOnce(ctx, s.clock().UTC(), &window, 0)
 }
 
-func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window) (Snapshot, error) {
+func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window, target idgen.ID) (Snapshot, error) {
 	if s.requireOperator && s.operatorID <= 0 {
 		return Snapshot{}, bizerrors.BadRequest("real scan requires an explicit audited operator")
 	}
@@ -199,6 +199,16 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window)
 	}
 	defer s.release(ctx, state)
 	run := activeRun(state)
+	if target != 0 {
+		if run == nil || run.ID != target {
+			for _, previous := range state.Runs {
+				if previous.ID == target && !previous.FinishedAt.IsZero() {
+					return state.Snapshot, nil
+				}
+			}
+			return state.Snapshot, bizerrors.BadRequest("retry target is not the active run")
+		}
+	}
 	if run != nil {
 		if run.TemplateVersion != TemplateVersion {
 			return state.Snapshot, bizerrors.BadRequest("active monitor run requires its original template version")
@@ -529,7 +539,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window)
 			run.Status = "completed_with_errors"
 		}
 		run.FinishedAt = now
-		state.Schedule.CompletedRuns++
+		if run.RetryOf == 0 {
+			state.Schedule.CompletedRuns++
+		}
 		state.Schedule.NextRunUTC = later(state.Schedule.NextRunUTC, nextAnchor(state.Schedule.AnchorUTC, run.FixedEnd))
 	} else {
 		run.Status = "pending"
@@ -666,12 +678,17 @@ func (s *Service) fail(progress *SourceProgress, checkpoint *Checkpoint, cause e
 		}
 	}
 	// Deliberately do not persist raw error strings: URLs and upstream bodies may contain credentials.
+	progress.RetryableFailure = retryable && !checkpoint.Blocked
+	progress.RetryNotBefore = time.Time{}
+	if progress.RetryableFailure {
+		progress.RetryNotBefore = now.Add(delay)
+	}
 	progress.LastError = kind
 	checkpoint.LastError = kind
 	if !retryable || progress.Attempts >= s.config.RetryBudget {
 		progress.Failed = true
 		checkpoint.NextRetryAt = time.Time{}
-		if sourceErr != nil && sourceErr.RetryAfter > 0 {
+		if progress.RetryableFailure || (sourceErr != nil && sourceErr.RetryAfter > 0) {
 			checkpoint.NextRetryAt = now.Add(delay)
 		}
 	} else {

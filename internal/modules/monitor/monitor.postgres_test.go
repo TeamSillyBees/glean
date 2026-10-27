@@ -129,4 +129,32 @@ func TestMonitorPostgresDurableMockRun(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, apiService.save(actorCtx, fresh))
 	require.ErrorContains(t, restored.save(actorCtx, stale), "lease lost")
+	// 新状态键隔离恢复测试；重建 Ent client 必须读取 JSONB 中的失败分类与关联 ID。
+	retryCfg := DefaultConfig()
+	retryCfg.StateKey = "retry-failed-postgres"
+	retryCfg.RetryBudget = 1
+	retrySource := &countSource{fixture: DemoSources(scenarioTime, false)[0].(*FixtureSource)}
+	retrySource.fixture.Failure = &SourceError{Kind: "http", StatusCode: 503, Retryable: true}
+	retryService, err := NewService(makeClient(), ids, retryCfg, []Source{retrySource}, nil, nil)
+	require.NoError(t, err)
+	retryService.clock = func() time.Time { return scenarioTime }
+	failed, err := retryService.RunFinite(actorCtx, Window{Start: scenarioTime.Add(-24 * time.Hour), End: scenarioTime}, 10)
+	require.NoError(t, err)
+	require.Equal(t, "completed_with_errors", failed.Runs[0].Status)
+	retrySource.fixture.Failure = nil
+	retryRestored, err := NewService(makeClient(), ids, retryCfg, []Source{retrySource}, nil, nil)
+	require.NoError(t, err)
+	retryRestored.clock = func() time.Time { return scenarioTime.Add(time.Hour) }
+	recovered, err := retryRestored.RetryFailedFinite(actorCtx, failed.Runs[0].ID, 10)
+	require.NoError(t, err)
+	require.Len(t, recovered.Runs, 2)
+	require.Equal(t, "completed", recovered.Runs[1].Status)
+	require.Equal(t, failed.Runs[0].ID, recovered.Runs[1].RetryOf)
+	require.Equal(t, recovered.Runs[1].ID, recovered.Runs[0].RetriedBy)
+	calls := retrySource.calls
+	repeated, err := retryRestored.RetryFailedFinite(actorCtx, failed.Runs[0].ID, 10)
+	require.NoError(t, err)
+	require.Len(t, repeated.Runs, 2)
+	require.Equal(t, calls, retrySource.calls)
+
 }
