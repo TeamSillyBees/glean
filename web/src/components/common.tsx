@@ -14,10 +14,10 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium leading-none',
+        'inline-flex max-w-full items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium leading-4 [overflow-wrap:anywhere]',
         {
-          neutral: 'bg-slate-100 text-slate-600',
-          violet: 'bg-violet-50 text-violet-700',
+          neutral: 'bg-secondary text-secondary-foreground',
+          violet: 'bg-accent text-accent-foreground',
           green: 'bg-emerald-50 text-emerald-700',
           amber: 'bg-amber-50 text-amber-800',
           red: 'bg-red-50 text-red-700',
@@ -44,7 +44,7 @@ export function ErrorState({ error, retry }: { error: unknown; retry: () => void
   return (
     <div
       role="alert"
-      className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-white p-8 text-center"
+      className="flex min-h-48 flex-col items-center justify-center gap-3 border-y bg-card px-6 py-10 text-center"
     >
       <AlertCircle className="size-6 text-amber-600" />
       <h3 className="font-semibold">暂时没能读取数据</h3>
@@ -68,9 +68,9 @@ export function Empty({
   children?: ReactNode
 }) {
   return (
-    <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed bg-white px-6 text-center">
-      <span className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-violet-50">
-        <FileSearch className="size-6 text-primary" />
+    <div className="flex min-h-64 flex-col items-center justify-center border-y bg-card px-6 py-10 text-center">
+      <span className="mb-4 text-muted-foreground">
+        <FileSearch className="size-6" />
       </span>
       <h3 className="text-lg font-semibold">{title}</h3>
       <p className="mb-5 mt-2 max-w-md text-sm leading-6 text-muted-foreground">{description}</p>
@@ -94,7 +94,7 @@ export function ExternalLink({
       target="_blank"
       rel="noreferrer noopener"
       className={cn(
-        'inline-flex items-center gap-1.5 text-sm text-primary hover:underline',
+        'inline-flex max-w-full items-center gap-1.5 rounded-sm text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [overflow-wrap:anywhere]',
         className,
       )}
     >

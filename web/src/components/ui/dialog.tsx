@@ -23,13 +23,13 @@ export function DialogContent({
   const returnFocus = React.useRef<HTMLElement | null>(null)
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-slate-950/25 backdrop-blur-[3px] data-[state=open]:animate-in" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-foreground/35 data-[state=open]:animate-in" />
       <DialogPrimitive.Content
         className={cn(
-          'fixed z-50 bg-background shadow-2xl focus:outline-none',
+          'fixed z-50 bg-card shadow-[0_12px_60px_-20px_rgba(20,40,30,.3)] focus:outline-none',
           drawer
-            ? 'inset-y-0 right-0 w-full max-w-[680px] overflow-y-auto border-l'
-            : 'left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border p-7',
+            ? 'inset-y-0 right-0 w-full max-w-[740px] overflow-y-auto border-l'
+            : 'left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border p-7',
           className,
         )}
         {...props}
@@ -48,7 +48,7 @@ export function DialogContent({
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
-            className="absolute right-5 top-5 flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="dialog-close absolute right-5 top-5 flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="关闭"
           >
             <X className="size-4" />

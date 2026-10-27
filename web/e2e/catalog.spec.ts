@@ -117,6 +117,34 @@ async function noHorizontalOverflow(page: Page) {
   ).toBe(true)
 }
 
+// Resize the actual authenticated application, never a rendered fixture. Keep
+// this in the historical phase: no public provider uptime is involved.
+async function responsiveCatalog(page: Page, info: TestInfo) {
+  if (info.project.name !== 'desktop') return
+  const original = page.viewportSize()!
+  try {
+    for (const width of [320, 375, 768, 1024, 1280, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 1000 })
+      await page.evaluate(() => window.scrollTo(0, 0))
+      await noHorizontalOverflow(page)
+      const search = page.getByRole('textbox', { name: '搜索论文或来源' })
+      const paper = page.getByTestId('paper-card').first()
+      for (const element of [search, paper]) {
+        await expect(element).toBeVisible()
+        const box = await element.boundingBox()
+        expect(box).not.toBeNull()
+        expect(box!.x).toBeGreaterThanOrEqual(0)
+        expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1)
+      }
+      await expect(page.getByRole('button', { name: '搜索', exact: true })).toBeVisible()
+      await page.screenshot({ path: info.outputPath(`desktop-catalog-${width}-viewport.png`) })
+    }
+  } finally {
+    await page.setViewportSize(original)
+    await page.evaluate(() => window.scrollTo(0, 0))
+  }
+}
+
 test('real historical catalog: login, filters, detail, durable personal state and account isolation', async ({
   page,
   browser,
@@ -161,6 +189,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   )
   await noHorizontalOverflow(page)
   await screenshot(page, info, 'catalog')
+  await responsiveCatalog(page, info)
 
   expect((await collectionScope(page, '全部记录', 'all')).total).toBe(31399)
   await screenshot(page, info, 'all-records')

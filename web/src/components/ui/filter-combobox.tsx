@@ -55,8 +55,8 @@ export function FilterCombobox({
           aria-expanded={open}
           data-filter-key={filterKey}
           className={cn(
-            'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-left text-xs outline-none transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-default disabled:opacity-60',
-            value && 'border-violet-200 bg-violet-50/40 text-violet-800',
+            'flex min-h-9 w-full items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-left text-xs outline-none transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60',
+            value && 'border-primary/40 bg-accent text-accent-foreground',
           )}
         >
           <span className="truncate">{selected?.label || value || placeholder}</span>
@@ -67,7 +67,7 @@ export function FilterCombobox({
         aria-label={`${label}筛选`}
         sideOffset={6}
         align="start"
-        className="z-[70] w-[min(360px,calc(100vw-32px))] min-w-[var(--radix-popover-trigger-width)] p-0 overflow-hidden rounded-xl border bg-white shadow-xl"
+        className="z-[70] w-[min(360px,calc(100vw-32px))] min-w-[var(--radix-popover-trigger-width)] p-0 overflow-hidden rounded-lg border bg-white shadow-xl"
       >
         <Command label={`查找${label}选项`} shouldFilter={false} loop>
           <div className="flex items-center gap-2 border-b px-3">
@@ -108,7 +108,7 @@ export function FilterCombobox({
               >
                 <span className="min-w-0 flex-1 break-words leading-5">{option.label}</span>
                 {option.count != null && (
-                  <span className="pt-0.5 text-[10px] tabular-nums text-muted-foreground">
+                  <span className="pt-0.5 text-xs tabular-nums text-muted-foreground">
                     {number(option.count)}
                   </span>
                 )}
@@ -119,7 +119,7 @@ export function FilterCombobox({
             ))}
           </Command.List>
         </Command>
-        <div className="border-t bg-slate-50/70 px-3 py-2 text-[10px] leading-5 text-muted-foreground">
+        <div className="border-t bg-secondary/60 px-3 py-2 text-xs leading-5 text-muted-foreground">
           {matches.length > 100
             ? `显示前 100 项，输入关键词查找其余 ${number(matches.length - 100)} 项。`
             : `${number(matches.length)} 个精确标签 · 数量为当前主题内条目数`}

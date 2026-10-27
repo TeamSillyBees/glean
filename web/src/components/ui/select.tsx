@@ -32,7 +32,7 @@ export function Select({
       <SelectPrimitive.Trigger
         aria-label={label}
         className={cn(
-          'flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-left text-[13px] outline-none transition-colors hover:border-primary/40 focus:ring-2 focus:ring-ring/25 disabled:opacity-50 [&>span]:truncate',
+          'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-left text-[13px] outline-none transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 [&>span]:truncate',
           className,
         )}
       >
@@ -45,7 +45,7 @@ export function Select({
         <SelectPrimitive.Content
           position="popper"
           sideOffset={5}
-          className="z-[60] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border bg-popover p-1 shadow-xl"
+          className="z-[60] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border bg-popover p-1 shadow-xl"
         >
           <SelectPrimitive.ScrollUpButton className="flex justify-center">
             <ChevronUp className="size-4" />

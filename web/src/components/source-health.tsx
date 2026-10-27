@@ -86,7 +86,7 @@ export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: ()
     (item) => item.blocked || item.consecutiveFailures > 0 || (item.quarantined || 0) > 0,
   ).length
   return (
-    <div className="mb-5 hidden flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground sm:flex">
+    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b py-3 text-xs text-muted-foreground">
       <span className="flex items-center gap-1.5">
         <Radio className="size-3.5 text-primary" />
         {query.isLoading
@@ -100,7 +100,7 @@ export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: ()
       {failures > 0 && <span className="text-amber-700">{failures} 个来源待处理</span>}
       <button
         onClick={onOpen}
-        className="ml-auto inline-flex items-center gap-1 rounded text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="ml-auto inline-flex min-h-8 items-center gap-1 rounded px-1 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         查看来源进度
         <ArrowUpRight className="size-3" />
@@ -145,7 +145,7 @@ export function SourcesView({
       {!!query.data?.counts?.quarantinedCandidates && (
         <p
           role="status"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
         >
           {number(query.data.counts.quarantinedCandidates)}{' '}
           条来源记录已隔离待处理，其他有效记录会继续处理。隔离未解决前，目录写入窗口保持保守。
@@ -156,7 +156,7 @@ export function SourcesView({
           )}
         </p>
       )}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <dl className="grid divide-y rounded-xl border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         {[
           {
             icon: Timer,
@@ -177,22 +177,24 @@ export function SourcesView({
             detail: schedule.schedulerEnabled ? '以实际运行状态为准' : '未启用，不代表将自动运行',
           },
         ].map(({ icon: Icon, label, value, detail }) => (
-          <div key={label} className="rounded-xl border bg-white p-5">
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Icon className="size-4" />
+          <div key={label} className="min-w-0 px-4 py-4 sm:px-5">
+            <dt className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Icon className="size-4" aria-hidden="true" />
               {label}
-            </p>
-            <p className="mt-3 text-xl font-semibold tracking-tight">{value}</p>
-            <p className="mt-2 text-[11px] text-muted-foreground">{detail}</p>
+            </dt>
+            <dd className="mt-2 break-words text-lg font-semibold tabular-nums">
+              {value}
+              <p className="mt-1 text-xs font-normal text-muted-foreground">{detail}</p>
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
       <div>
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <Radio className="size-4 text-primary" />
           {topicLabels[topic]} · 来源进度
         </h2>
-        <p className="mt-2 text-xs leading-6 text-muted-foreground">
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
           只有本主题所有分页完成，才推进该主题窗口。没有完成记录时显示未知，不以“无错误”代表最新。
         </p>
       </div>
@@ -218,11 +220,9 @@ export function SourcesView({
                         ? '已有完整窗口'
                         : '尚无完成记录'
             return (
-              <section key={source.source} className="rounded-xl border bg-white p-5">
+              <section key={source.source} className="min-w-0 rounded-xl border bg-card p-4 sm:p-5">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="flex size-9 items-center justify-center rounded-xl bg-secondary">
-                    <Database className="size-4 text-slate-500" />
-                  </span>
+                  <Database className="size-4 shrink-0 text-primary" aria-hidden="true" />
                   <h3 className="text-sm font-semibold">{source.source}</h3>
                   {!!source.quarantined && onOpenQuarantine && (
                     <Button
@@ -247,13 +247,13 @@ export function SourcesView({
                     {status}
                   </Badge>
                 </div>
-                <div className="mt-5 rounded-lg bg-violet-50/50 p-3">
-                  <p className="text-[11px] text-violet-700">本主题已完整采集至</p>
-                  <p className="mt-1.5 text-sm font-medium text-slate-700">
+                <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2 border-y py-3">
+                  <p className="text-xs text-accent-foreground">本主题已完整采集至</p>
+                  <p className="text-sm font-medium tabular-nums text-foreground">
                     {timestamp(source.topicAcquiredThrough?.[topic])}
                   </p>
                 </div>
-                <dl className="mt-4 space-y-3 text-xs">
+                <dl className="mt-4 space-y-3 text-sm">
                   {[
                     [
                       '本主题窗口距今',
@@ -280,7 +280,7 @@ export function SourcesView({
                   ].map(([label, value]) => (
                     <div key={label} className="flex flex-wrap justify-between gap-2">
                       <dt className="text-muted-foreground">{label}</dt>
-                      <dd>{value}</dd>
+                      <dd className="min-w-0 break-words tabular-nums">{value}</dd>
                     </div>
                   ))}
                 </dl>
@@ -288,7 +288,7 @@ export function SourcesView({
                   <p className="mt-4 text-xs text-muted-foreground">核心来源回溯仍待完成。</p>
                 )}
                 {source.lastError && (
-                  <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs leading-6 text-amber-800">
+                  <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-800">
                     <p className="flex gap-2">
                       <TriangleAlert className="mt-1 size-3.5 shrink-0" />
                       <span className="min-w-0 break-words">
@@ -310,7 +310,7 @@ export function SourcesView({
           })}
         </div>
       )}
-      <p className="text-xs leading-6 text-muted-foreground">
+      <p className="text-sm leading-6 text-muted-foreground">
         {schedule.reviewMode === 'mock'
           ? '模型总结待接入，不影响真实论文检索。模型处理窗口仅代表模拟流程完成，不代表科学审读。'
           : '模型处理、目录写入与科学审读分别记录。'}{' '}

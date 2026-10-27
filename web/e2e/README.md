@@ -19,6 +19,9 @@ not a jsdom or mocked-network test. It:
   query, refreshes real source-health data, and checks that disabled scheduling
   plus no completed collection window stays visibly unknown rather than healthy.
   Historical records must not acquire invented source versions or scan history.
+- Resizes the real authenticated catalog at 320, 375, 768, 1024, 1280, 1440 and
+  1920 pixels, checks document and key-content bounds, and captures each width.
+  These layout checks complement, not replace, human visual inspection.
 - Uploads viewport and full-page screenshots plus a private Actions HTML report.
   No trace, HAR, auth-state file, token, server log or quarantine is uploaded.
   Before upload, exact generated secrets and JWT-shaped tokens are redacted from

@@ -86,7 +86,7 @@ export function QuarantineView({ initialSource = '' }: { initialSource?: string 
       <p className="text-sm leading-6 text-muted-foreground">
         这里只读展示被采集流程隔离的来源记录与证据，不会释放、重试或修改记录。隔离不等于论文撤稿或科学结论有误。
       </p>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 border-b pb-4">
         <div className="w-full sm:w-56">
           <Select
             label="隔离记录来源"
@@ -137,12 +137,12 @@ export function QuarantineView({ initialSource = '' }: { initialSource?: string 
           ) : (
             <div className="space-y-3">
               {query.data.items.map((item) => (
-                <article key={item.id} className="rounded-xl border bg-white p-5">
+                <article key={item.id} className="min-w-0 rounded-xl border bg-card p-4 sm:p-5">
                   <div className="flex flex-wrap gap-2">
                     <Badge>{item.source}</Badge>
                     <Badge tone="amber">隔离待核验</Badge>
                   </div>
-                  <h3 className="mt-3 break-words font-semibold">
+                  <h3 className="mt-3 break-words text-base font-semibold leading-7">
                     {item.title || item.sourceId || '无标题来源记录'}
                   </h3>
                   <p className="mt-2 break-words text-sm text-muted-foreground">
@@ -179,7 +179,7 @@ export function QuarantineView({ initialSource = '' }: { initialSource?: string 
             >
               上一页
             </Button>
-            <span className="text-sm">
+            <span className="text-sm tabular-nums">
               第 {page} 页 / 共 {Math.max(1, Math.ceil(query.data.total / query.data.pageSize))} 页
             </span>
             <Button
@@ -240,7 +240,7 @@ function EvidenceDetail({ id }: { id: string }) {
         </h3>
         <p className="mt-2 break-words text-sm">隔离原因：{reason(item.reason)}</p>
       </div>
-      <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 border-y py-5 text-sm sm:grid-cols-2">
         {Object.entries({
           '来源记录 ID': item.sourceId,
           DOI: item.doi,
@@ -261,7 +261,7 @@ function EvidenceDetail({ id }: { id: string }) {
       <ExternalLink href={item.sourceUrl}>查看来源页面</ExternalLink>
       <section aria-label="安全证据预览" className="space-y-3">
         <h4 className="font-semibold">证据预览</h4>
-        <p className="text-xs leading-6 text-muted-foreground">
+        <p className="text-sm leading-6 text-muted-foreground">
           预览为安全字段投影，并非完整原始内容。字节数和 SHA-256 对应原始证据。
         </p>
         <div className="flex flex-wrap gap-2">
@@ -270,11 +270,11 @@ function EvidenceDetail({ id }: { id: string }) {
           {item.evidence.redacted && <Badge tone="amber">已过滤敏感字段</Badge>}
           {item.evidence.truncated && <Badge tone="amber">预览已截断</Badge>}
         </div>
-        <p className="break-all text-xs text-muted-foreground">
+        <p className="break-all font-mono text-xs leading-6 text-muted-foreground">
           SHA-256：{item.evidence.sha256 || '未记录'}
         </p>
         {item.evidence.preview ? (
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-xl border bg-secondary p-4 text-xs leading-6">
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-secondary p-4 font-mono text-sm leading-6">
             {item.evidence.preview}
           </pre>
         ) : (

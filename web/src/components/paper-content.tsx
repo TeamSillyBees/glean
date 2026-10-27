@@ -1,4 +1,4 @@
-import { CalendarDays, FileText, History, Link2, Quote, Sparkles } from 'lucide-react'
+import { CalendarDays, FileText, History, Link2, Quote } from 'lucide-react'
 import type { AbstractEvidence, Paper, SourceObservation } from '../lib/types'
 import { date, number, reviewLabels, topicLabels } from '../lib/utils'
 import { Badge, ExternalLink } from './common'
@@ -45,16 +45,18 @@ const dimensionLabels: Record<string, string> = {
 }
 function Paragraph({ children }: { children: string }) {
   return (
-    <p className="mt-3 whitespace-pre-line break-words text-[13px] leading-7 text-slate-600">
+    <p className="mt-3 max-w-prose whitespace-pre-line break-words text-[15px] leading-[1.85] text-foreground [overflow-wrap:anywhere]">
       {children}
     </p>
   )
 }
 function RawRecord({ value, label = '查看原始字段' }: { value: unknown; label?: string }) {
   return (
-    <details className="mt-4 rounded-lg border border-dashed px-3 py-2.5">
-      <summary className="cursor-pointer text-xs text-muted-foreground">{label}</summary>
-      <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-secondary/60 p-3 text-[11px] leading-6">
+    <details className="mt-4 border-t py-3">
+      <summary className="cursor-pointer rounded-sm py-1 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {label}
+      </summary>
+      <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-sm bg-secondary p-4 text-xs leading-6">
         {JSON.stringify(value, null, 2)}
       </pre>
     </details>
@@ -70,8 +72,8 @@ function AbstractProvenance({ evidence }: { evidence: AbstractEvidence }) {
           : '尚未完成来源响应核验，不作为内容概览中的已核验摘要。'}
       </p>
       <ExternalLink href={evidence.sourceUrl}>查看官方摘要来源</ExternalLink>
-      <details className="rounded-lg border border-dashed px-3 py-2.5">
-        <summary className="cursor-pointer text-xs text-muted-foreground">
+      <details className="border-t py-3">
+        <summary className="cursor-pointer rounded-sm py-1 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           查看来源与核对依据
         </summary>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -125,26 +127,26 @@ export function PaperOverview({ paper }: { paper: Paper }) {
       ? enrichment
       : null
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 [&>section+section]:border-t [&>section+section]:pt-7">
       <section>
         <h3 className="section-title">
           <Quote className="size-4" />
           摘要
         </h3>
         {paper.abstractZh && (
-          <div className="mt-4 rounded-xl bg-violet-50/50 p-4">
+          <div className="mt-4 rounded-sm bg-accent/50 p-4">
             <Badge tone="violet">历史来源中文摘要</Badge>
             <Paragraph>{paper.abstractZh}</Paragraph>
           </div>
         )}
         {canonicalAbstract ? (
           <div className="mt-4">
-            <p className="text-[11px] font-medium text-muted-foreground">原文摘要</p>
+            <p className="text-xs font-medium text-muted-foreground">原文摘要</p>
             <Paragraph>{paper.abstract}</Paragraph>
           </div>
         ) : recoveredAbstract ? (
-          <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
-            <h4 className="text-xs font-semibold text-slate-700">补充的来源摘要</h4>
+          <div className="mt-4 rounded-sm bg-accent/50 p-4">
+            <h4 className="text-sm font-semibold text-foreground">补充的来源摘要</h4>
             <p className="mt-2 text-xs leading-6 text-muted-foreground">
               来源：{recoveredAbstract.source} · 历史目录和阅读笔记保持不变。
             </p>
@@ -152,7 +154,7 @@ export function PaperOverview({ paper }: { paper: Paper }) {
             <AbstractProvenance evidence={recoveredAbstract} />
           </div>
         ) : (
-          <p className="mt-3 rounded-xl bg-secondary/50 p-4 text-xs leading-6 text-muted-foreground">
+          <p className="mt-3 border-y bg-secondary/40 px-4 py-5 text-sm leading-7 text-muted-foreground">
             {enrichment?.abstract.trim()
               ? enrichment.verificationStatus !== 'source-response-verified'
                 ? '来源摘要尚未核验，暂不在内容概览中展示。'
@@ -164,9 +166,7 @@ export function PaperOverview({ paper }: { paper: Paper }) {
           </p>
         )}
         {!paper.abstractZh && (canonicalAbstract || recoveredAbstract) && (
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            当前未获取中文摘要；模型翻译未接入。
-          </p>
+          <p className="mt-3 text-xs text-muted-foreground">当前未获取中文摘要；模型翻译未接入。</p>
         )}
       </section>
       {notes.length > 0 && (
@@ -180,7 +180,10 @@ export function PaperOverview({ paper }: { paper: Paper }) {
           </p>
           <div className="mt-4 space-y-4">
             {notes.map((m) => (
-              <div key={`${m.topic}-${m.originalId}`} className="rounded-xl border p-4">
+              <div
+                key={`${m.topic}-${m.originalId}`}
+                className="border-b pb-5 last:border-b-0 last:pb-0"
+              >
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <Badge tone="violet">{topicLabels[m.topic] || m.topic}</Badge>
                   {m.dimensions?.display_review_status?.map((status) => (
@@ -192,7 +195,7 @@ export function PaperOverview({ paper }: { paper: Paper }) {
                     .filter(([, value]) => value.trim())
                     .map(([key, value]) => (
                       <div key={key}>
-                        <dt className="text-xs font-semibold text-slate-700">
+                        <dt className="text-sm font-semibold text-foreground">
                           {noteLabels[key] || key}
                         </dt>
                         <dd>
@@ -206,9 +209,9 @@ export function PaperOverview({ paper }: { paper: Paper }) {
           </div>
         </section>
       )}
-      <section className="rounded-xl border border-violet-100 bg-violet-50/30 p-4">
+      <section className="border-t pt-7">
         <h3 className="section-title">
-          <Sparkles className="size-4 text-primary" />
+          <FileText className="size-4" />
           {paper.review?.isMock ? '模型模拟输出' : paper.review ? '模型阅读记录' : '模型总结待接入'}
         </h3>
         <p className="mt-2 text-xs leading-6 text-muted-foreground">
@@ -220,11 +223,11 @@ export function PaperOverview({ paper }: { paper: Paper }) {
         </p>
         {paper.review?.summary && (
           <details className="mt-3">
-            <summary className="cursor-pointer text-xs font-medium text-primary">
+            <summary className="cursor-pointer rounded-sm py-1 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {paper.review.isMock ? '查看明确标记的模拟总结' : '查看模型总结'}
             </summary>
             <Paragraph>{paper.review.summary}</Paragraph>
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               {paper.review.provider} · {paper.review.model} · {paper.review.promptVersion} ·{' '}
               {date(paper.review.reviewedAt)}
             </p>
@@ -241,7 +244,7 @@ export function PaperOverview({ paper }: { paper: Paper }) {
             ['正式在线发表', paper.formalOnlineDate],
             ['卷期发表', paper.issueDate],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-xl bg-secondary/60 p-4">
+            <div key={label} className="border-b py-3">
               <p className="text-xs text-muted-foreground">{label}</p>
               <p className="mt-2 text-sm font-semibold">{date(value)}</p>
             </div>
@@ -289,7 +292,10 @@ export function PaperOverview({ paper }: { paper: Paper }) {
         </h3>
         <div className="mt-4 space-y-3">
           {paper.memberships?.map((m) => (
-            <div key={`${m.topic}-${m.originalId}`} className="rounded-xl border p-4">
+            <div
+              key={`${m.topic}-${m.originalId}`}
+              className="border-b pb-5 last:border-b-0 last:pb-0"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <strong className="text-sm">{topicLabels[m.topic] || m.topic}</strong>
                 {m.inclusionStatus === 'pending-review' && (
@@ -309,7 +315,7 @@ export function PaperOverview({ paper }: { paper: Paper }) {
                     </div>
                   ))}
               </dl>
-              <p className="mt-4 border-t pt-3 text-[11px] text-muted-foreground">
+              <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
                 {m.source || '历史目录'} · 原始 ID {m.originalId}
               </p>
             </div>
@@ -327,9 +333,9 @@ function Observation({ item }: { item: SourceObservation }) {
     <details
       data-testid="source-observation"
       data-observation-id={item.id}
-      className="group rounded-xl border bg-white p-4"
+      className="group border-b bg-card py-4"
     >
-      <summary className="cursor-pointer list-none">
+      <summary className="cursor-pointer list-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="violet">{item.source}</Badge>
           {enrichment && <Badge>历史摘要恢复</Badge>}
@@ -348,7 +354,7 @@ function Observation({ item }: { item: SourceObservation }) {
         <p className="mt-3 break-words text-sm font-medium leading-6">
           {item.title || '来源版本记录'}
         </p>
-        <p className="mt-2 text-[11px] text-primary">展开版本内容与日期依据</p>
+        <p className="mt-2 text-xs text-primary">展开版本内容与日期依据</p>
       </summary>
       <div className="mt-4 border-t pt-4">
         <div className="flex flex-wrap gap-4">
@@ -390,7 +396,7 @@ function Observation({ item }: { item: SourceObservation }) {
         {item.publicationEvents?.length > 0 && (
           <dl className="mt-4 space-y-3">
             {item.publicationEvents.map((event, i) => (
-              <div key={i} className="rounded-lg bg-secondary/50 p-3">
+              <div key={i} className="rounded-sm bg-secondary/60 p-3">
                 <dt className="flex justify-between gap-3 text-xs font-medium">
                   <span>{eventLabels[event.kind] || event.kind}</span>
                   <span>{date(event.date)}</span>
@@ -419,7 +425,7 @@ function Observation({ item }: { item: SourceObservation }) {
 }
 export function PaperEvidence({ paper }: { paper: Paper }) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 [&>section+section]:border-t [&>section+section]:pt-7">
       <section>
         <h3 className="section-title">
           <History className="size-4" />
@@ -433,7 +439,7 @@ export function PaperEvidence({ paper }: { paper: Paper }) {
           {paper.observations?.length ? (
             paper.observations.map((item) => <Observation key={item.id} item={item} />)
           ) : (
-            <p className="rounded-xl bg-secondary/50 p-4 text-xs leading-6 text-muted-foreground">
+            <p className="border-y bg-secondary/40 px-4 py-5 text-sm leading-7 text-muted-foreground">
               暂无新增来源版本。下方仍保留导入目录中的证据记录。
             </p>
           )}
@@ -450,12 +456,15 @@ export function PaperEvidence({ paper }: { paper: Paper }) {
           )}
           {paper.evidence?.length ? (
             paper.evidence.map((evidence, index) => (
-              <section key={`${evidence.source}-${index}`} className="rounded-xl border p-4">
+              <section
+                key={`${evidence.source}-${index}`}
+                className="border-b pb-5 last:border-b-0 last:pb-0"
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <strong className="text-sm">{evidence.source || '原始来源'}</strong>
                   <ExternalLink href={evidence.url}>访问来源</ExternalLink>
                 </div>
-                <dl className="mt-4 flex flex-wrap justify-between gap-3 rounded-lg bg-secondary/50 p-3 text-xs">
+                <dl className="mt-4 flex flex-wrap justify-between gap-3 rounded-sm bg-secondary/60 p-3 text-xs">
                   <dt className="text-muted-foreground">
                     {eventLabels[evidence.dateType] || evidence.dateType || '未标记日期类型'}
                   </dt>
@@ -465,7 +474,7 @@ export function PaperEvidence({ paper }: { paper: Paper }) {
               </section>
             ))
           ) : (
-            <p className="rounded-xl bg-secondary/50 p-4 text-xs leading-6 text-muted-foreground">
+            <p className="border-y bg-secondary/40 px-4 py-5 text-sm leading-7 text-muted-foreground">
               暂无结构化来源证据。缺失的日期和链接保持待核验，不以模型结果补齐。
             </p>
           )}

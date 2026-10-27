@@ -75,13 +75,13 @@ export function RunsView() {
       {query.isError && (
         <div
           role="alert"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
         >
           刷新失败，以下保留上次成功读取的记录，可能不是最新进度。
           {query.error instanceof Error && <p>{query.error.message}</p>}
         </div>
       )}
-      <p className="text-xs leading-6 text-muted-foreground">
+      <p className="text-sm leading-6 text-muted-foreground">
         采集、模型占位与目录写入分开记录；模型阶段尚待真实模型接入，不代表科学审读。
       </p>
       {!items.length ? (
@@ -96,12 +96,10 @@ export function RunsView() {
             id={`scan-run-${run.id}`}
             tabIndex={-1}
             aria-label={`运行 ${run.id}`}
-            className="rounded-xl border bg-white p-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-w-0 rounded-xl border bg-card p-4 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div className="flex flex-wrap items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-violet-50">
-                <Activity className="size-4 text-primary" />
-              </span>
+              <Activity className="size-5 shrink-0 text-primary" aria-hidden="true" />
               <div>
                 <h2 className="font-semibold">第 {run.number} 次扫描</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -125,12 +123,12 @@ export function RunsView() {
               <Badge tone="violet">{run.mode === 'mock' ? '历史模拟运行' : '真实来源采集'}</Badge>
             </div>
             {run.status === 'completed_with_errors' && (
-              <p className="mt-4 text-xs leading-6 text-red-700">
+              <p className="mt-4 text-sm leading-6 text-red-700">
                 本次运行已结束，但有来源未完成。已获取的数据会保留，不代表整个扫描窗口已完成。
               </p>
             )}
             {run.status === 'retry_wait' && (
-              <p className="mt-4 text-xs leading-6 text-amber-800">
+              <p className="mt-4 text-sm leading-6 text-amber-800">
                 正在等待来源退避或重试条件，刷新此页面不会提前发起采集请求。
               </p>
             )}
@@ -149,11 +147,11 @@ export function RunsView() {
                 </strong>
               </p>
             </div>
-            <div className="mt-5 space-y-2">
+            <div className="mt-4 divide-y border-t">
               {Object.entries(run.sources || {}).map(([name, progress]) => (
                 <div
                   key={name}
-                  className="flex flex-wrap items-center gap-3 rounded-lg bg-secondary/50 px-3 py-2.5 text-xs"
+                  className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-3 text-sm"
                 >
                   <span className="min-w-24 font-medium">{name}</span>
                   <span className="text-muted-foreground">
@@ -180,7 +178,9 @@ export function RunsView() {
                   </span>
                   {progress.failed && <Badge tone="red">来源处理失败</Badge>}
                   {progress.lastError && (
-                    <p className={`w-full ${progress.failed ? 'text-red-700' : 'text-amber-800'}`}>
+                    <p
+                      className={`w-full break-words ${progress.failed ? 'text-red-700' : 'text-amber-800'}`}
+                    >
                       最近错误：{progress.lastError}
                     </p>
                   )}
@@ -206,8 +206,8 @@ export function TemplatesView({ topic }: { topic: TopicSlug }) {
   const items = (query.data?.items || []).filter((item) => item.topic === topic)
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border bg-white p-5">
-        <div className="flex items-center gap-2">
+      <div className="border-b pb-5">
+        <div className="flex flex-wrap items-center gap-2">
           <ShieldCheck className="size-4 text-primary" />
           <h2 className="text-sm font-semibold">检索与纳入，分开判断</h2>
           <Badge className="ml-auto">{query.data?.version}</Badge>
@@ -220,24 +220,22 @@ export function TemplatesView({ topic }: { topic: TopicSlug }) {
         <Empty title="暂无该主题的检索模板" description="已配置的版本化模板会在这里展示。" />
       ) : (
         items.map((template) => (
-          <section key={template.id} className="overflow-hidden rounded-xl border bg-white">
-            <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
+          <section key={template.id} className="overflow-hidden rounded-xl border bg-card">
+            <div className="flex flex-wrap items-center gap-3 border-b px-4 py-4 sm:px-5">
               <FileCode2 className="size-4 text-primary" />
               <h3 className="text-sm font-semibold">
                 {topicLabels[template.topic] || template.topic}
               </h3>
               {template.core && <Badge tone="violet">核心模板</Badge>}
-              <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                {template.id}
-              </span>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">{template.id}</span>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-5">
               <div className="flex flex-wrap gap-2">
                 {(template.terms || []).map((term) => (
                   <Badge key={term}>{term}</Badge>
                 ))}
               </div>
-              <pre className="mt-5 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-5 font-mono text-xs leading-7 text-slate-200">
+              <pre className="mt-5 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-secondary p-4 font-mono text-sm leading-7 text-foreground">
                 {template.query}
               </pre>
               <div className="mt-5 flex flex-wrap gap-2">
@@ -280,7 +278,7 @@ export function VenuesView({ topic, q }: { topic: TopicSlug; q: string }) {
         <>
           <div className="space-y-3 md:hidden">
             {items.map((venue) => (
-              <section key={venue.id} className="rounded-xl border bg-white p-5">
+              <section key={venue.id} className="min-w-0 rounded-xl border bg-card p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="text-sm font-semibold leading-6">{venue.name}</h2>
                   <Badge>{venue.kind || '待核验'}</Badge>
@@ -295,10 +293,10 @@ export function VenuesView({ topic, q }: { topic: TopicSlug; q: string }) {
                     {venue.metricYear ? `${venue.metricYear} 年指标` : '指标年份待核验'}
                   </Badge>
                 </div>
-                <p className="mt-4 break-words text-[11px] leading-6 text-muted-foreground">
+                <p className="mt-4 break-words text-sm leading-6 text-muted-foreground">
                   {venue.source || '来源待补充'} · {venue.registryVersion || '版本待补充'}
                 </p>
-                <p className="mt-2 text-xs text-slate-600">
+                <p className="mt-2 text-xs text-muted-foreground">
                   {venueStatusLabels[venue.qualificationStatus] ||
                     venue.qualificationStatus ||
                     '待核验'}
@@ -306,7 +304,7 @@ export function VenuesView({ topic, q }: { topic: TopicSlug; q: string }) {
               </section>
             ))}
           </div>
-          <div className="hidden overflow-x-auto rounded-xl border bg-white md:block">
+          <div className="hidden overflow-x-auto rounded-xl border bg-card md:block">
             <table className="w-full min-w-[660px] text-left">
               <thead className="border-b bg-secondary/50 text-xs text-muted-foreground">
                 <tr>
@@ -326,14 +324,14 @@ export function VenuesView({ topic, q }: { topic: TopicSlug; q: string }) {
               <tbody>
                 {items.map((venue) => (
                   <tr key={venue.id} className="border-b last:border-0 hover:bg-secondary/30">
-                    <td className="max-w-80 px-5 py-5">
+                    <td className="max-w-80 break-words px-5 py-4">
                       <div className="text-sm font-semibold">{venue.name}</div>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {venue.source || '来源待补充'} · {venue.registryVersion || '版本待补充'}
                       </p>
                     </td>
                     <td className="px-5 text-xs text-muted-foreground">{venue.kind || '待核验'}</td>
-                    <td className="px-5 text-sm font-medium">
+                    <td className="px-5 text-sm font-medium tabular-nums">
                       {venue.jif != null && venue.jif > 0 ? venue.jif : venue.ccf || '待核验'}
                     </td>
                     <td className="px-5 text-xs text-muted-foreground">
@@ -353,7 +351,7 @@ export function VenuesView({ topic, q }: { topic: TopicSlug; q: string }) {
           </div>
         </>
       )}
-      <p className="mt-4 text-xs leading-6 text-muted-foreground">
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">
         指标变化不会回写历史主题归属。缺失的期刊影响因子、CCF 会议评级和指标年份均保持待核验。
       </p>
     </div>

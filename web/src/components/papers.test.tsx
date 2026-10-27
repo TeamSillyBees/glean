@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../lib/api'
@@ -58,6 +58,37 @@ function mount() {
 }
 
 describe('personal paper state consistency', () => {
+  it('exposes original-source actions before long content and keeps reading selection explicit', async () => {
+    current.url = 'https://example.com/verified-paper'
+    mount()
+    const original = await screen.findByRole('link', { name: '打开论文原文' })
+    expect(original).toHaveAttribute('href', current.url)
+    expect(original).toHaveAttribute('rel', 'noreferrer noopener')
+    const controls = screen.getByRole('group', { name: '个人阅读与隐藏' })
+    expect(within(controls).getByRole('button', { name: '未读' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(within(controls).getByRole('button', { name: '已读' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(
+      original.compareDocumentPosition(screen.getByRole('tablist')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    fireEvent.click(within(controls).getByRole('button', { name: '已读' }))
+    await waitFor(() =>
+      expect(within(controls).getByRole('button', { name: '已读' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    )
+    expect(within(controls).getByRole('button', { name: '未读' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
   it('merges the canonical write response before a subsequent hide, without waiting for a detail GET', async () => {
     const client = mount()
     await screen.findByRole('button', { name: '已读' })

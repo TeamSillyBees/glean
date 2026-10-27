@@ -8,10 +8,10 @@ export function Tooltip({ children, label }: { children: ReactNode; label: strin
       <Primitive.Portal>
         <Primitive.Content
           sideOffset={6}
-          className="z-[70] rounded-md bg-slate-900 px-3 py-2 text-xs text-white shadow-lg"
+          className="z-[70] rounded-md bg-foreground px-3 py-2 text-xs text-white shadow-lg"
         >
           {label}
-          <Primitive.Arrow className="fill-slate-900" />
+          <Primitive.Arrow className="fill-foreground" />
         </Primitive.Content>
       </Primitive.Portal>
     </Primitive.Root>

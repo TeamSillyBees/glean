@@ -75,7 +75,7 @@ describe('scan progress visibility', () => {
     mount()
     expect(await screen.findByText('已结束 · 存在失败')).toHaveClass('text-red-700')
     expect(screen.getByText('等待重试')).toBeVisible()
-    expect(screen.getByText('已取消')).toHaveClass('text-slate-600')
+    expect(screen.getByText('已取消')).toHaveClass('text-secondary-foreground')
     expect(screen.getByText('完成 · 有隔离记录')).toHaveClass('text-amber-800')
     expect(screen.getByText('已完成')).toHaveClass('text-emerald-700')
     expect(screen.getByText('来源处理失败')).toBeVisible()

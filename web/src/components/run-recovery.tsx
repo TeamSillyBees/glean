@@ -17,7 +17,7 @@ const sourceNames = new Set(['arxiv', 'crossref', 'pubmed', 'europepmc', 'biorxi
 function RunLink({ id, label, runs }: { id: string; label: string; runs: Run[] }) {
   const present = runs.some((item) => item.id === id)
   return (
-    <p className="break-all text-xs leading-6">
+    <p className="break-all text-sm leading-6">
       {label}：{id}{' '}
       {present ? (
         <Button
@@ -133,7 +133,7 @@ function RecoveryDetails({
                 ? '仍在退避期，不能提前恢复。'
                 : '已记录为暂时失败，已知退避时间已过；仍须后端校验后才能恢复。'
     return (
-      <li key={name} className="space-y-1 rounded-lg bg-secondary/50 p-3">
+      <li key={name} className="min-w-0 space-y-1 py-3">
         <strong>{name}</strong>
         <p>{message}</p>
         {temporary && retryAt > 0 && (
@@ -155,7 +155,7 @@ function RecoveryDetails({
     run.mode === 'live' &&
     names.every((name) => sourceNames.has(name))
   return (
-    <div id={`recovery-${run.id}`} className="space-y-3 rounded-xl border p-4 text-xs leading-6">
+    <div id={`recovery-${run.id}`} className="space-y-3 border-y py-4 text-sm leading-6">
       <p>只读诊断，不会启动采集。来源状态与历史可能在查看后变化，实际执行由后端再次校验。</p>
       {query.isFetching && <p role="status">正在核对当前来源状态…</p>}
       {(query.isError || historyStale) && (
@@ -175,13 +175,13 @@ function RecoveryDetails({
           当前保留历史中还有未结束运行（{active.id}），应先处理该运行，不能抢占。
         </p>
       ) : null}
-      <ul className="space-y-2">{rows}</ul>
+      <ul className="divide-y">{rows}</ul>
       {!failed.length && <p>未找到明确的来源失败证据，需检查后端记录。</p>}
       {canExplain && (
         <div className="space-y-1 border-t pt-3">
           <p className="font-medium">供管理员核对的 CLI 参数（不是已获准执行）</p>
-          <p className="break-all">--retry-failed {run.id}</p>
-          <p className="break-all">--sources {names.join(',')}</p>
+          <p className="break-all font-mono text-sm">--retry-failed {run.id}</p>
+          <p className="break-all font-mono text-sm">--sources {names.join(',')}</p>
           <p>
             完整源集和原模板版本必须匹配；另需明确独立节点 --node、启用账号 --operator 与有限
             --max-pages 预算。不要添加新时间窗，不要在页面输入数据库凭据。

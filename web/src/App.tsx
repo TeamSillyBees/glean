@@ -12,7 +12,6 @@ import {
   Dna,
   EyeOff,
   FileCode2,
-  FlaskConical,
   Layers3,
   LoaderCircle,
   LogOut,
@@ -25,7 +24,6 @@ import {
   Settings2,
   ShieldAlert,
   SlidersHorizontal,
-  Sparkles,
   X,
 } from 'lucide-react'
 import { api, setSessionExpired } from './lib/api'
@@ -58,47 +56,41 @@ import {
 
 type View = 'papers' | 'sources' | 'runs' | 'templates' | 'venues' | 'quarantine'
 const topicIcons = { 'biomed-ai': Dna, 'llm-agent': Network, 'biomed-worldmodel': Layers3 }
-const viewMeta: Record<View, { title: string; description: string; eyebrow: string }> = {
+const viewMeta: Record<View, { title: string; description: string }> = {
   quarantine: {
     title: '隔离记录',
     description: '追溯隔离原因，核验安全证据。',
-    eyebrow: 'READ-ONLY EVIDENCE',
   },
   papers: {
     title: '论文工作台',
     description: '从海量研究中，找到值得认真阅读的下一篇。',
-    eyebrow: 'YOUR RESEARCH, IN FOCUS',
   },
   sources: {
     title: '来源健康',
     description: '每个来源各自前进，数据从哪里来始终清楚。',
-    eyebrow: 'CONNECTED KNOWLEDGE',
   },
   runs: {
     title: '扫描记录',
     description: '采集、审核与目录投影，每一步都留下记录。',
-    eyebrow: 'A TRACEABLE WORKFLOW',
   },
   templates: {
     title: '检索模板',
     description: '统一检索意图，保留各来源的语法与证据。',
-    eyebrow: 'SEARCH WITH INTENTION',
   },
   venues: {
     title: '期刊与会议',
     description: '可追溯的指标，可核验的纳入依据。',
-    eyebrow: 'KNOW YOUR SOURCES',
   },
 }
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className="brand-symbol">
-        <Sparkles className="size-5" strokeWidth={1.7} />
+        <BookOpen className="size-5" strokeWidth={1.6} />
       </span>
       {!compact && (
-        <span className="text-[26px] font-semibold tracking-[-1.3px] text-slate-900">
-          glean<span className="text-primary">.</span>
+        <span className="brand-wordmark">
+          glean<span className="brand-dot">.</span>
         </span>
       )}
     </div>
@@ -122,40 +114,26 @@ function Login({ onLogin, expired }: { onLogin: (user: Identity) => void; expire
     <div className="login-layout">
       <section className="login-story">
         <Logo />
-        <div className="relative z-10 my-auto max-w-xl py-20">
-          <span className="mb-7 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/60 px-3 py-1.5 text-xs text-violet-700">
-            <span className="size-1.5 rounded-full bg-violet-500" />
-            一个安静、专注的研究空间
-          </span>
-          <h1 className="text-4xl font-semibold leading-[1.6] tracking-tight xl:text-5xl">
+        <div className="login-introduction">
+          <h1>
             让下一篇重要论文，
             <br />
-            <span className="text-primary">更早被看见。</span>
+            更早被看见。
           </h1>
-          <p className="mt-6 max-w-sm text-sm leading-8 text-slate-500">
-            连接历史积累与新的发现。以清晰的主题、可追溯的来源和有序的阅读，保持研究的连续性。
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
+          <p>连接历史积累与新的发现。以清晰的主题、可追溯的来源和有序的阅读，保持研究的连续性。</p>
+          <div className="login-topics">
             {Object.entries(topicLabels).map(([slug, name]) => {
               const Icon = topicIcons[slug as TopicSlug]
               return (
-                <span
-                  key={slug}
-                  className="flex items-center gap-2 rounded-lg border border-white/80 bg-white/65 px-3 py-2 text-xs text-slate-600"
-                >
-                  <Icon className="size-3.5 text-primary" />
-                  {name}
-                </span>
+                <div key={slug}>
+                  <Icon className="size-4" />
+                  <span>{name}</span>
+                </div>
               )
             })}
           </div>
         </div>
-        <div className="relative z-10 flex items-center gap-2 text-xs text-slate-400">
-          <BookOpen className="size-3.5" />
-          Keep the signal. Make room for discovery.
-        </div>
-        <div className="login-orbit orbit-one" />
-        <div className="login-orbit orbit-two" />
+        <p className="login-footnote">检索有据，阅读有序。</p>
       </section>
       <main className="flex items-center justify-center px-7 py-12 sm:px-12">
         <div className="w-full max-w-sm">
@@ -163,8 +141,7 @@ function Login({ onLogin, expired }: { onLogin: (user: Identity) => void; expire
             <Logo />
           </div>
           <div className="mb-8">
-            <p className="eyebrow">WELCOME TO GLEAN</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight">回到你的研究工作台</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">回到你的研究工作台</h2>
             <p className="mt-3 text-sm leading-7 text-muted-foreground">
               使用后端账户登录，继续检索与阅读。
             </p>
@@ -226,7 +203,7 @@ function Login({ onLogin, expired }: { onLogin: (user: Identity) => void; expire
             访问令牌仅保留在本次页面内存中。此界面只连接 Glean 后端，不直接调用外部检索或模型服务。
           </p>
           <div className="mt-10 border-t pt-5">
-            <span className="inline-flex items-center gap-2 text-xs text-slate-400">
+            <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
               <CircleHelp className="size-3.5" />
               首次使用？请先完成后端本地账户初始化。
             </span>
@@ -262,9 +239,9 @@ function FilterPanel({
     <div
       data-testid={loading ? 'filters-loading' : failed ? 'filters-error' : 'filters-ready'}
       aria-busy={loading}
-      className="rounded-xl border bg-white"
+      className="filter-panel"
     >
-      <div className="flex items-center justify-between border-b px-5 py-4">
+      <div className="flex items-center justify-between border-b px-4 py-3.5">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <SlidersHorizontal className="size-4" />
           筛选条件
@@ -293,7 +270,7 @@ function FilterPanel({
           </button>
         </div>
       )}
-      <div className="space-y-3 px-5 py-4">
+      <div className="space-y-3.5 px-4 py-4">
         {filterSpecs.map((spec) => {
           let values: Facet[] = filterFacets(facets, filters.topic, spec.key, spec.facet)
           if (spec.key === 'readStatus' && !values.length)
@@ -303,13 +280,13 @@ function FilterPanel({
           if (selected && !hasSelected) values = [{ value: selected, count: 0 }, ...values]
           return (
             <div key={spec.key}>
-              <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <span>{spec.label}</span>
                 <Tooltip label={spec.help}>
                   <button
                     type="button"
                     aria-label={`${spec.label}说明`}
-                    className="rounded text-slate-300 hover:text-primary"
+                    className="filter-help rounded text-muted-foreground hover:text-primary"
                   >
                     <CircleHelp className="size-3" />
                   </button>
@@ -349,7 +326,7 @@ function FilterPanel({
         <Button variant="outline" className="w-full" size="sm" onClick={onSave} disabled={saving}>
           {saving ? <LoaderCircle className="animate-spin" /> : <Save />}保存当前筛选
         </Button>
-        <p className="mt-3 text-center text-[10px] text-muted-foreground">
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
           条件之间取交集 · 标签保留原目录含义
         </p>
       </div>
@@ -506,7 +483,7 @@ function WorkspaceReady({
   }
   const navigation = (
     <>
-      <div className="mb-9 px-2">
+      <div className="sidebar-brand">
         <Logo />
       </div>
       <div className="space-y-1">
@@ -531,9 +508,7 @@ function WorkspaceReady({
           已隐藏
         </NavButton>
       </div>
-      <div className="mb-3 mt-8 px-3 text-[10px] font-semibold tracking-[.14em] text-slate-400">
-        我的研究主题
-      </div>
+      <div className="sidebar-section-label">我的研究主题</div>
       <div className="space-y-1">
         {Object.entries(topicLabels).map(([slug, label]) => {
           const Icon = topicIcons[slug as TopicSlug]
@@ -543,21 +518,18 @@ function WorkspaceReady({
               key={slug}
               onClick={() => chooseTopic(slug as TopicSlug)}
               className={cn('topic-button', filters.topic === slug && 'active')}
+              aria-pressed={filters.topic === slug}
             >
               <span className="topic-icon">
                 <Icon className="size-4" />
               </span>
               <span className="flex-1 text-left text-xs font-medium">{label}</span>
-              <span className="text-[10px] tabular-nums opacity-60">
-                {number(topic?.membershipCount)}
-              </span>
+              <span className="topic-count">{number(topic?.membershipCount)}</span>
             </button>
           )
         })}
       </div>
-      <div className="mb-3 mt-8 px-3 text-[10px] font-semibold tracking-[.14em] text-slate-400">
-        监测与来源
-      </div>
+      <div className="sidebar-section-label">监测与来源</div>
       <div className="space-y-1">
         <NavButton icon={Radio} active={view === 'sources'} onClick={() => navigate('sources')}>
           来源健康
@@ -586,33 +558,24 @@ function WorkspaceReady({
           期刊与会议
         </NavButton>
       </div>
-      <div className="mt-auto pt-10">
-        <div className="mb-5 rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50 to-white p-4">
-          <FlaskConical className="mb-2.5 size-4 text-primary" />
-          <p className="text-xs font-medium text-slate-700">让研究，保持连贯。</p>
-          <p className="mt-2 text-[11px] leading-5 text-slate-400">
-            历史积累与每一次新发现，
-            <br />
-            都在同一个地方。
-          </p>
-        </div>
+      <div className="sidebar-account">
         <button
           onClick={() => {
             setSettings(true)
             setMobileNav(false)
           }}
-          className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-secondary"
+          className="account-button"
         >
-          <span className="flex size-8 items-center justify-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700">
+          <span className="account-avatar">
             {(user.nickname || user.username).slice(0, 1).toUpperCase()}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-medium">
               {user.nickname || user.username}
             </span>
-            <span className="text-[10px] text-slate-400">个人研究空间</span>
+            <span className="account-caption">个人研究空间</span>
           </span>
-          <Settings2 className="size-4 text-slate-400" />
+          <Settings2 className="size-4 text-muted-foreground" />
         </button>
       </div>
     </>
@@ -622,7 +585,9 @@ function WorkspaceReady({
       <a href="#main-content" className="skip-link">
         跳到主要内容
       </a>
-      <aside className="desktop-sidebar">{navigation}</aside>
+      <aside className="desktop-sidebar" aria-label="工作台导航">
+        {navigation}
+      </aside>
       <div className="workspace">
         <header className="topbar">
           <Button
@@ -641,7 +606,7 @@ function WorkspaceReady({
               {topicLabels[filters.topic]}
             </span>
           </div>
-          <span className="ml-auto flex items-center gap-1.5 text-[11px] text-slate-400">
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <span className="size-1.5 rounded-full bg-emerald-500" />
             已登录
           </span>
@@ -655,23 +620,18 @@ function WorkspaceReady({
           </Tooltip>
         </header>
         <main id="main-content" tabIndex={-1} className="main-content outline-none">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-7 sm:gap-5">
+          <div className="workspace-heading">
             <div>
-              <p className="eyebrow hidden sm:block">{viewMeta[view].eyebrow}</p>
-              <h1 className="text-[21px] font-semibold tracking-tight text-slate-900 sm:mt-2 sm:text-[28px]">
+              <h1>
                 {view === 'papers' && filters.hidden === 'only'
                   ? '已隐藏的论文'
                   : viewMeta[view].title}
               </h1>
-              <p className="mt-2 hidden text-[13px] leading-6 text-muted-foreground sm:block">
+              <p>
                 {view === 'papers' && filters.hidden === 'only'
                   ? '这里保存你在所有主题中隐藏的论文，随时可以恢复。'
                   : viewMeta[view].description}
               </p>
-            </div>
-            <div className="hidden items-center gap-2 rounded-lg border bg-white px-3 py-2.5 text-xs text-slate-600 sm:flex">
-              <span className="size-1.5 rounded-full bg-primary" />
-              {topicLabels[filters.topic]}
             </div>
           </div>
           {view === 'papers' && (
@@ -681,8 +641,8 @@ function WorkspaceReady({
             </>
           )}
           {(view === 'papers' || view === 'venues') && (
-            <form onSubmit={submitSearch} className="search-bar mb-6">
-              <Search className="size-[18px] shrink-0 text-slate-400" />
+            <form onSubmit={submitSearch} className="search-bar">
+              <Search className="size-[18px] shrink-0 text-muted-foreground" />
               <input
                 ref={searchRef}
                 value={view === 'venues' ? venueSearch : search}
@@ -694,7 +654,7 @@ function WorkspaceReady({
                 }
                 placeholder={view === 'venues' ? '搜索期刊或会议名称…' : '搜索论文标题、摘要、DOI…'}
                 aria-label={view === 'venues' ? '搜索期刊或会议' : '搜索论文或来源'}
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
               {(view === 'venues' ? venueSearch : search) && (
                 <button
@@ -709,12 +669,12 @@ function WorkspaceReady({
                       change('q', '')
                     }
                   }}
-                  className="rounded p-1 hover:bg-secondary"
+                  className="search-clear rounded p-1 hover:bg-secondary"
                 >
-                  <X className="size-3.5 text-slate-400" />
+                  <X className="size-3.5 text-muted-foreground" />
                 </button>
               )}
-              <kbd className="hidden rounded border bg-secondary/60 px-1.5 py-1 text-[10px] text-slate-400 sm:block">
+              <kbd className="hidden rounded border bg-secondary/60 px-1.5 py-1 text-xs text-muted-foreground sm:block">
                 ⌘ / Ctrl K
               </kbd>
               <Button size="sm" type="submit">
@@ -726,7 +686,7 @@ function WorkspaceReady({
             <ErrorState error={prefs.error} retry={() => prefs.refetch()} />
           ) : view === 'papers' ? (
             <div className="papers-layout">
-              <aside className="hidden xl:block">
+              <aside className="filter-column hidden xl:block">
                 <FilterPanel
                   filters={filters}
                   facets={facetQuery.data}
@@ -744,7 +704,7 @@ function WorkspaceReady({
                 className="min-w-0 scroll-mt-5"
                 aria-busy={paperQuery.isFetching}
               >
-                <div className="mb-4 flex flex-wrap items-center gap-3">
+                <div className="results-toolbar">
                   <h2 data-testid="results-count" className="text-sm font-medium text-slate-600">
                     找到{' '}
                     <strong className="mx-1 text-base text-slate-900">
@@ -767,7 +727,7 @@ function WorkspaceReady({
                     <SlidersHorizontal />
                     筛选{activeCount > 0 && <Badge tone="violet">{activeCount}</Badge>}
                   </Button>
-                  <div className="ml-auto flex gap-2">
+                  <div className="results-controls flex gap-2">
                     <div className="w-28">
                       <Select
                         label="个人阅读状态"
@@ -797,12 +757,8 @@ function WorkspaceReady({
                     </div>
                   </div>
                 </div>
-                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-white px-3 py-2.5">
-                  <div
-                    role="group"
-                    aria-label="目录范围"
-                    className="flex w-full gap-1 rounded-md bg-secondary/70 p-1 sm:w-auto"
-                  >
+                <div className="collection-toolbar">
+                  <div role="group" aria-label="目录范围" className="collection-tabs">
                     {(
                       [
                         { value: 'curated', label: '精选目录' },
@@ -823,9 +779,9 @@ function WorkspaceReady({
                           }))
                         }
                         className={cn(
-                          'flex-1 whitespace-nowrap rounded px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          'collection-tab outline-none focus-visible:ring-2 focus-visible:ring-ring',
                           filters.collectionScope === scope.value
-                            ? 'bg-white font-semibold text-primary shadow-sm'
+                            ? 'active'
                             : 'text-muted-foreground hover:text-foreground',
                         )}
                       >
@@ -833,7 +789,7 @@ function WorkspaceReady({
                       </button>
                     ))}
                   </div>
-                  <div className="min-w-36 flex-1 sm:max-w-56">
+                  <div className="collection-source">
                     <FilterCombobox
                       disabled={facetQuery.isPending || facetQuery.isError}
                       label="采集来源"
@@ -853,7 +809,7 @@ function WorkspaceReady({
                     />
                   </div>
                 </div>
-                <p className="mb-4 text-[11px] leading-5 text-muted-foreground">
+                <p className="mb-3 text-xs leading-5 text-muted-foreground">
                   {filters.collectionScope === 'curated'
                     ? '沿用原目录的正式纳入范围，不将新发现自动纳入。'
                     : filters.collectionScope === 'pending'
@@ -921,7 +877,7 @@ function WorkspaceReady({
                 {paperQuery.isLoading ? (
                   <div className="space-y-4" role="status" aria-label="正在载入论文">
                     {[1, 2, 3].map((item) => (
-                      <div className="h-52 animate-pulse rounded-xl border bg-white p-6" key={item}>
+                      <div className="h-44 animate-pulse border-b bg-white p-5" key={item}>
                         <div className="h-3 w-1/4 rounded bg-secondary" />
                         <div className="mt-6 h-5 w-4/5 rounded bg-secondary" />
                         <div className="mt-4 h-3 w-full rounded bg-secondary" />
@@ -952,7 +908,7 @@ function WorkspaceReady({
                   </Empty>
                 ) : (
                   <>
-                    <div className="space-y-3.5">
+                    <div className="paper-list">
                       {paperQuery.data.items.map((paper) => (
                         <PaperCard
                           key={paper.id}
@@ -1044,8 +1000,7 @@ function WorkspaceReady({
           ) : (
             <VenuesView topic={filters.topic} q={venueQuery} />
           )}
-          <footer className="mt-10 flex flex-wrap items-center gap-2 border-t pt-5 text-[10px] text-slate-400">
-            <Sparkles className="size-3" />
+          <footer className="workspace-footer">
             <span>Glean · 为认真阅读留出空间</span>
             <span className="ml-auto">目录与指标均由独立后端提供</span>
           </footer>
@@ -1062,7 +1017,7 @@ function WorkspaceReady({
         notify={setMessage}
       />
       <Dialog open={mobileNav} onOpenChange={setMobileNav}>
-        <DialogContent drawer className="left-0 right-auto max-w-[270px] p-5">
+        <DialogContent drawer className="mobile-navigation left-0 right-auto max-w-[280px] p-5">
           <DialogTitle className="sr-only">导航</DialogTitle>
           <DialogDescription className="sr-only">研究主题与来源导航</DialogDescription>
           <div className="flex min-h-full flex-col pt-5">{navigation}</div>
@@ -1138,7 +1093,7 @@ function WorkspaceReady({
           role="status"
           className="fixed bottom-6 left-1/2 z-[80] flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl border bg-slate-900 px-5 py-3.5 text-sm text-white shadow-xl"
         >
-          <Check className="size-4 shrink-0 text-violet-300" />
+          <Check className="size-4 shrink-0 text-emerald-200" />
           <span>{message}</span>
           <button onClick={() => setMessage('')} aria-label="关闭提示" className="ml-2">
             <X className="size-3.5" />
@@ -1150,40 +1105,27 @@ function WorkspaceReady({
 }
 function TopicIntro({ topic, loading }: { topic?: Topic; loading: boolean }) {
   return (
-    <>
-      <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground sm:hidden">
-        主题共 {number(topic?.membershipCount)} 条记录
-        {topic?.curatedCount != null && <span>· 精选 {number(topic.curatedCount)} 篇</span>}
+    <section className="topic-intro" aria-label="主题范围与统计">
+      <div className="topic-rule">
+        <h2 className="font-medium text-foreground">{topic?.description || '主题目录'}</h2>
+        <p>
+          {topic?.rule ||
+            (loading ? '正在读取主题纳入规则…' : '纳入规则以独立后端的主题配置为准。')}
+        </p>
       </div>
-      <section className="topic-intro mb-6 hidden sm:block">
-        <div className="relative z-10 flex flex-wrap items-center gap-4">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/80 bg-white/70 shadow-sm">
-            <FlaskConical className="size-5 text-violet-600" />
+      <div className="topic-statistics">
+        <span>
+          主题共 <strong>{number(topic?.membershipCount)}</strong> 条记录
+        </span>
+        {topic?.curatedCount != null && (
+          <span>
+            精选 <strong>{number(topic.curatedCount)}</strong> 篇
           </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[13px] font-semibold text-slate-700">
-              {topic?.description || '你的研究，全景呈现'}
-            </h2>
-            <p className="mt-1.5 text-[11px] leading-5 text-slate-500">
-              {topic?.rule ||
-                (loading ? '正在读取主题纳入规则…' : '纳入规则以独立后端的主题配置为准。')}
-            </p>
-          </div>
-          <div className="border-l border-violet-200/70 pl-5 text-right">
-            <span className="text-[23px] font-semibold tracking-tight text-violet-900">
-              {number(topic?.membershipCount)}
-            </span>
-            <p className="mt-0.5 text-[10px] text-violet-700/60">主题目录条目</p>
-            {topic?.historicalCount != null && (
-              <p className="mt-1 text-[10px] text-slate-500">
-                历史 {number(topic.historicalCount)}
-                {topic.candidateCount != null && ` · 新发现待审 ${number(topic.candidateCount)}`}
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-    </>
+        )}
+        {topic?.historicalCount != null && <span>历史 {number(topic.historicalCount)}</span>}
+        {topic?.candidateCount != null && <span>新发现待审 {number(topic.candidateCount)}</span>}
+      </div>
+    </section>
   )
 }
 function NavButton({
@@ -1211,12 +1153,12 @@ function NavButton({
 }
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-violet-100 bg-violet-50 px-2.5 py-1 text-[11px] text-violet-700">
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded border border-primary/20 bg-accent px-2.5 py-1 text-xs text-accent-foreground">
       <span className="truncate">{label}</span>
       <button
         aria-label={`移除 ${label}`}
         onClick={onRemove}
-        className="rounded p-0.5 hover:bg-violet-100"
+        className="filter-chip-remove rounded p-0.5 hover:bg-primary/10"
       >
         <X className="size-3" />
       </button>

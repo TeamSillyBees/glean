@@ -44,10 +44,10 @@ export function PaperCard({
     <article
       data-testid="paper-card"
       data-paper-id={paper.id}
-      className="paper-card group relative min-w-0 [overflow-wrap:anywhere] rounded-xl border bg-white px-6 py-5 transition-all hover:border-violet-200 hover:shadow-[0_5px_24px_-15px_rgba(79,70,229,.45)]"
+      className="paper-card group relative min-w-0 border-b bg-card px-4 py-5 transition-colors last:border-b-0 hover:bg-accent/25 [overflow-wrap:anywhere] sm:px-6"
     >
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-semibold text-slate-700">{paper.venue || '来源待核验'}</span>
+      <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+        <span className="font-medium text-muted-foreground">{paper.venue || '来源待核验'}</span>
         {paper.year > 0 && <span className="text-muted-foreground">· {paper.year}</span>}
         {membership?.tier && <Badge tone="violet">{membership.tier}</Badge>}
         <span className="ml-auto flex items-center gap-2">
@@ -56,7 +56,7 @@ export function PaperCard({
           )}
           <span
             className={cn(
-              'flex items-center gap-1.5 text-[11px]',
+              'flex items-center gap-1.5 text-xs',
               paper.readStatus === 'read' ? 'text-emerald-700' : 'text-muted-foreground',
             )}
           >
@@ -66,7 +66,7 @@ export function PaperCard({
                 paper.readStatus === 'read'
                   ? 'bg-emerald-500'
                   : paper.readStatus === 'reading'
-                    ? 'bg-violet-500'
+                    ? 'bg-primary'
                     : 'bg-slate-300',
               )}
             />
@@ -76,35 +76,37 @@ export function PaperCard({
       </div>
       <button
         onClick={onOpen}
-        className="block w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="block min-h-11 w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <h3 className="pr-5 text-[17px] font-semibold leading-[1.7] tracking-tight text-slate-800 transition-colors group-hover:text-primary">
+        <h3 className="text-[17px] font-semibold leading-[1.6] text-foreground transition-colors group-hover:text-primary sm:text-lg">
           {paper.titleZh || paper.title}
         </h3>
         {paper.titleZh && paper.title !== paper.titleZh && (
-          <p className="mt-1 line-clamp-1 text-[13px] leading-6 text-slate-500">{paper.title}</p>
+          <p className="mt-1.5 line-clamp-2 text-[13px] leading-6 text-muted-foreground">
+            {paper.title}
+          </p>
         )}
       </button>
       {snippet.text && (
-        <p className="mt-3 line-clamp-2 text-[13px] leading-6 text-slate-500">
-          <span className="mr-2 text-[10px] font-medium text-slate-400">{snippet.label}</span>
+        <p className="mt-2.5 line-clamp-2 text-[13px] leading-6 text-muted-foreground">
+          <span className="mr-2 text-xs font-medium text-foreground">{snippet.label}</span>
           {snippet.text}
         </p>
       )}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
         {tags.map((tag) => (
           <Badge key={tag}>{tag}</Badge>
         ))}
         {reviewStatus && (
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {reviewLabels[reviewStatus] || reviewStatus}
           </span>
         )}
         {paper.publicationType &&
           !['其他', '待核', '其他/待核', '其他／待核', 'unknown', '未分类'].includes(
             paper.publicationType.trim(),
-          ) && <span className="text-[11px] text-muted-foreground">{paper.publicationType}</span>}
-        <span className="ml-auto flex items-center gap-3 text-[11px] text-muted-foreground">
+          ) && <span className="text-xs text-muted-foreground">{paper.publicationType}</span>}
+        <span className="ml-auto flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
           <Tooltip label="只展示正式在线发表 日期；不以接收或索引日期代替">
             <span className="inline-flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
@@ -114,7 +116,7 @@ export function PaperCard({
           <button
             onClick={onOpen}
             aria-label={`查看 ${paper.titleZh || paper.title} 的详情`}
-            className="flex items-center gap-1 rounded p-1 text-primary hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex min-h-11 items-center gap-1 rounded-sm px-2 py-1 text-primary hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             详情
             <ChevronRight className="size-3.5" />
@@ -242,14 +244,13 @@ export function PaperDetail({
       >
         <div
           data-testid="paper-detail-header"
-          className="sticky top-0 z-10 flex items-start gap-3 border-b bg-white/95 px-5 py-5 backdrop-blur sm:px-7"
+          className="sticky top-0 z-10 flex items-start gap-3 border-b bg-card px-5 py-4 sm:px-8"
         >
           <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-2 text-xs font-medium text-primary">
-              <BookOpen className="size-4" />
-              阅读空间
-            </div>
-            <DialogTitle className="text-lg font-semibold">论文详情</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+              <BookOpen className="size-4 text-primary" aria-hidden="true" />
+              论文详情
+            </DialogTitle>
             <DialogDescription className="mt-1 text-xs text-muted-foreground">
               原始证据与个人阅读状态分开保存。
             </DialogDescription>
@@ -259,7 +260,7 @@ export function PaperDetail({
             <Button
               variant="ghost"
               size="icon"
-              className="size-11 rounded-full text-muted-foreground"
+              className="size-11 rounded-sm text-muted-foreground"
               aria-label="关闭"
             >
               <X />
@@ -274,26 +275,53 @@ export function PaperDetail({
           </div>
         ) : (
           paper && (
-            <div className="px-5 py-6 sm:px-7">
-              <div className="mb-4 flex flex-wrap gap-2">
+            <div className="px-5 py-6 sm:px-8">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
                 <Badge>{paper.venue || '来源待核验'}</Badge>
                 {paper.year > 0 && <Badge>{paper.year}</Badge>}
                 {paper.review?.isMock && <Badge tone="violet">模型总结为模拟输出</Badge>}
                 {paper.hidden && <Badge tone="amber">已隐藏</Badge>}
               </div>
-              <h2 className="break-words text-xl font-semibold leading-relaxed tracking-tight sm:text-2xl">
+              <h2 className="break-words text-xl font-semibold leading-[1.6] text-foreground sm:text-2xl [overflow-wrap:anywhere]">
                 {paper.titleZh || paper.title}
               </h2>
               {paper.titleZh && (
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">{paper.title}</p>
+                <p className="mt-3 break-words text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere]">
+                  {paper.title}
+                </p>
               )}
-              <p className="mt-4 text-xs leading-6 text-muted-foreground">
+              <p className="mt-4 break-words text-xs leading-6 text-muted-foreground">
                 {paper.authors?.length ? paper.authors.join(' · ') : '作者信息待补充'}
               </p>
-              <div className="mt-6 flex flex-wrap items-center gap-2">
+              <div className="mt-5 flex flex-wrap items-center gap-4">
+                {safeLink(paper.url) && (
+                  <Button asChild>
+                    <a href={safeLink(paper.url)} target="_blank" rel="noreferrer noopener">
+                      打开论文原文
+                      <ArrowUpRight />
+                    </a>
+                  </Button>
+                )}
+                {paper.doi && (
+                  <ExternalLink href={`https://doi.org/${encodeURIComponent(paper.doi)}`}>
+                    DOI
+                  </ExternalLink>
+                )}
+                {paper.arxivId && (
+                  <ExternalLink href={`https://arxiv.org/abs/${encodeURIComponent(paper.arxivId)}`}>
+                    arXiv
+                  </ExternalLink>
+                )}
+              </div>
+              <div
+                role="group"
+                aria-label="个人阅读与隐藏"
+                className="mt-6 flex flex-wrap items-center gap-2 border-t pt-5"
+              >
                 {(['unread', 'reading', 'read'] as ReadStatus[]).map((status) => (
                   <Button
                     key={status}
+                    aria-pressed={paper.readStatus === status}
                     size="sm"
                     variant={paper.readStatus === status ? 'default' : 'outline'}
                     disabled={pending}
@@ -318,7 +346,7 @@ export function PaperDetail({
                   </Button>
                 </Tooltip>
               </div>
-              <p className="mt-3 text-[11px] text-muted-foreground">
+              <p className="mt-3 text-xs text-muted-foreground">
                 隐藏状态适用于所有主题；可在「已隐藏」中恢复。个人阅读状态不会改变原始审读记录。
               </p>
               {mutation.isError && mutation.variables?.paper.id === id && (
@@ -342,26 +370,6 @@ export function PaperDetail({
                   <PaperEvidence paper={paper} />
                 </TabsContent>
               </Tabs>
-              <div className="mt-8 flex flex-wrap items-center gap-4 border-t pt-6">
-                {safeLink(paper.url) && (
-                  <Button asChild>
-                    <a href={safeLink(paper.url)} target="_blank" rel="noreferrer noopener">
-                      打开论文原文
-                      <ArrowUpRight />
-                    </a>
-                  </Button>
-                )}
-                {paper.doi && (
-                  <ExternalLink href={`https://doi.org/${encodeURIComponent(paper.doi)}`}>
-                    DOI
-                  </ExternalLink>
-                )}
-                {paper.arxivId && (
-                  <ExternalLink href={`https://arxiv.org/abs/${encodeURIComponent(paper.arxivId)}`}>
-                    arXiv
-                  </ExternalLink>
-                )}
-              </div>
             </div>
           )
         )}
