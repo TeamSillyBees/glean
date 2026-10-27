@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PaperCard } from './papers'
 import { TooltipProvider } from './ui/tooltip'
@@ -192,7 +192,9 @@ describe('backend source state and exact searchable facets', () => {
     expect(screen.getByText('定时计划未启用')).toBeInTheDocument()
     expect(screen.queryByText('Mock 开发模式')).not.toBeInTheDocument()
   })
-  it('keeps completed acquisition with quarantined records amber rather than green success', () => {
+  it('keeps completed acquisition with quarantined records amber rather than green success and links to read-only evidence', async () => {
+    const user = userEvent.setup()
+    const open = vi.fn()
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     })
@@ -226,12 +228,16 @@ describe('backend source state and exact searchable facets', () => {
     client.setQueryData(['sources'], state)
     render(
       <QueryClientProvider client={client}>
-        <SourcesView topic="biomed-ai" />
+        <SourcesView topic="biomed-ai" onOpenQuarantine={open} />
       </QueryClientProvider>,
     )
     expect(screen.getByText('2 条隔离待处理')).toHaveClass('bg-amber-50')
     expect(screen.queryByText('已有完整窗口')).not.toBeInTheDocument()
     expect(screen.getByText('处理窗口（含隔离）')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '查看全部隔离记录' }))
+    expect(open).toHaveBeenLastCalledWith()
+    await user.click(screen.getByRole('button', { name: '查看 EuropePMC 隔离记录' }))
+    expect(open).toHaveBeenLastCalledWith('EuropePMC')
   })
   it('finds a rare exact backend label beyond the first 100 options', async () => {
     const user = userEvent.setup()

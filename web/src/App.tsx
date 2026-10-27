@@ -23,6 +23,7 @@ import {
   Save,
   Search,
   Settings2,
+  ShieldAlert,
   SlidersHorizontal,
   Sparkles,
   X,
@@ -45,6 +46,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from './compone
 import { Select } from './components/ui/select'
 import { FilterCombobox } from './components/ui/filter-combobox'
 import { Tooltip, TooltipProvider } from './components/ui/tooltip'
+import { QuarantineView } from './components/quarantine'
 import { PaperCard, PaperDetail } from './components/papers'
 import {
   FreshnessStrip,
@@ -54,9 +56,14 @@ import {
   VenuesView,
 } from './components/monitor'
 
-type View = 'papers' | 'sources' | 'runs' | 'templates' | 'venues'
+type View = 'papers' | 'sources' | 'runs' | 'templates' | 'venues' | 'quarantine'
 const topicIcons = { 'biomed-ai': Dna, 'llm-agent': Network, 'biomed-worldmodel': Layers3 }
 const viewMeta: Record<View, { title: string; description: string; eyebrow: string }> = {
+  quarantine: {
+    title: '隔离记录',
+    description: '追溯隔离原因，核验安全证据。',
+    eyebrow: 'READ-ONLY EVIDENCE',
+  },
   papers: {
     title: '论文工作台',
     description: '从海量研究中，找到值得认真阅读的下一篇。',
@@ -381,6 +388,7 @@ function WorkspaceReady({
   const client = useQueryClient()
   const [filters, setFilters] = useState<Filters>(initialFilters)
   const [view, setView] = useState<View>('papers')
+  const [quarantineSource, setQuarantineSource] = useState('')
   const [search, setSearch] = useState(initialFilters.q)
   const [venueSearch, setVenueSearch] = useState('')
   const [venueQuery, setVenueQuery] = useState('')
@@ -553,6 +561,16 @@ function WorkspaceReady({
       <div className="space-y-1">
         <NavButton icon={Radio} active={view === 'sources'} onClick={() => navigate('sources')}>
           来源健康
+        </NavButton>
+        <NavButton
+          icon={ShieldAlert}
+          active={view === 'quarantine'}
+          onClick={() => {
+            setQuarantineSource('')
+            navigate('quarantine')
+          }}
+        >
+          隔离记录
         </NavButton>
         <NavButton icon={Activity} active={view === 'runs'} onClick={() => navigate('runs')}>
           扫描记录
@@ -1010,7 +1028,15 @@ function WorkspaceReady({
               </section>
             </div>
           ) : view === 'sources' ? (
-            <SourcesView topic={filters.topic} />
+            <SourcesView
+              topic={filters.topic}
+              onOpenQuarantine={(source = '') => {
+                setQuarantineSource(source)
+                navigate('quarantine')
+              }}
+            />
+          ) : view === 'quarantine' ? (
+            <QuarantineView key={quarantineSource} initialSource={quarantineSource} />
           ) : view === 'runs' ? (
             <RunsView />
           ) : view === 'templates' ? (

@@ -75,3 +75,12 @@ The query UI starts with `collectionScope=curated`. Backend `all` remains the ex
 `catalog.ObservationRejectionKind` distinguishes only explicit `invalid_source_record` and `identity_conflict` failures. The boot publisher maps these to the monitor typed permanent rejection, so one bad source record can be retained in quarantine while valid records continue to publish. Missing/inactive audit actors, database outages and other transient failures are not classified as bad records and do not advance successful publication. Quarantine retains original source evidence; it is not a hard delete or a scientific rejection. Observation-aware search uses parameterized, fixed-field `EXISTS` matching, so duplicate source versions never duplicate result rows or totals.
 
 `SourceObservation.coreDiscovery` records whether that immutable observation was first obtained through a whole-core-journal scan. It does **not** assert topic relevance or formal inclusion: core journal articles are retained as candidates without local keyword rejection. Routing provenance (core/expanded, like topic/template) is excluded from the scientific-content hash, so finding the same official content through another query does not manufacture a source revision; monitor run/template history records the subsequent route.
+
+### 隔离记录只读检查
+
+- `GET /api/v1/monitor/quarantine?page=1&pageSize=20&source=crossref`：返回 `data.items/total/page/pageSize`。页码 1–1000000，每页 1–100（默认 20）；省略 source 表示全部，否则仅接受 crossref、pubmed、arxiv、biorxiv、medrxiv、europepmc。无效参数返回 4xx。按隔离时间倒序、ID 倒序稳定排序，超出末页返回空数组。
+- `GET /api/v1/monitor/quarantine/{id}`：仅查询隔离候选，未知 ID 或非隔离候选返回 404。ID 为既有稳定 Snowflake 十进制字符串，不使用来源 URL 或原文作为路径标识。
+- 两接口与其他 monitor GET 使用相同的认证访问边界：匿名、失效会话、禁用账号均不可访问；这是共享运行状态，而不是某用户的个人论文库。没有新增修改、释放隔离或触发采集的接口。
+- 列表字段：`id, source, sourceId, title, doi, arxivId, pmid, topics, reason, quarantinedAt, acquiredAt, sourceUpdatedAt, runIds`。空标题有中文占位；时间为 RFC3339（缺失可能是零时间）。`reason` 仅为受控拒绝类型，未知错误归为 `record_rejected`，不回显异常原文。`runIds` 只关联仍保留的运行历史（含失败恢复运行保留的候选关联，同一运行去重），不是完整历史溯源；空数组不表示记录从未属于一次运行。
+- 详情额外包含 `sourceUrl`（仅由安全 DOI 构建，其他情况为空）和 `evidence: {format, bytes, sha256, preview, redacted, truncated}`。format 为原证据 `json/text/empty`；bytes 与 SHA-256 对应服务端原始证据。**preview 是安全元数据的 JSON 文本投影，不是原始响应的截取**，只包含有界标题、来源、来源 ID 和受控原因；永不返回任意原始 JSON/XML、嵌套字段、请求头或错误页。redacted 恒为 true，表示原文字段已被排除；truncated 表示预览标题/标识超出上限。预览最大 4 KiB；标题上限 512 字节，来源标识上限 256 字节，疑似凭据文本保守隐藏。
+- 合法 JSON 原文及非法原文的 RawEvidence 继续完整保留于持久化快照，检查不会修改原证据、审核结论或科学分类。客户端必须按普通文本呈现 preview，不能解释为 HTML；服务端不会抓取任何来源地址。

@@ -157,4 +157,23 @@ func TestMonitorPostgresDurableMockRun(t *testing.T) {
 	require.Len(t, repeated.Runs, 2)
 	require.Equal(t, calls, retrySource.calls)
 
+	// 隔离原文通过 JSONB 重建后仍保留，HTTP 投影不能泄漏原文或写回状态。
+	quarantineCfg := DefaultConfig()
+	quarantineCfg.StateKey = "quarantine-view-postgres"
+	quarantineService, err := NewService(makeClient(), ids, quarantineCfg, DemoSources(scenarioTime, false), nil, nil)
+	require.NoError(t, err)
+	seedQuarantineView(t, actorCtx, quarantineService)
+	quarantineRestored, err := NewService(makeClient(), ids, quarantineCfg, DemoSources(scenarioTime, false), nil, nil)
+	require.NoError(t, err)
+	evidence, err := NewHandler(quarantineRestored).quarantineDetail(ctx, &quarantineDetailRequest{ID: 101})
+	require.NoError(t, err)
+	require.Equal(t, "json", evidence.Body.Data.Evidence.Format)
+	require.NotContains(t, evidence.Body.Data.Evidence.Preview, "raw-secret")
+	retained, err := quarantineRestored.Snapshot(ctx)
+	require.NoError(t, err)
+	require.Contains(t, string(retained.Records["bad"].Record.Raw), "raw-secret")
+	require.Contains(t, string(retained.Records["bad2"].Quarantine.RawEvidence), "invalid-raw-secret")
+	require.Nil(t, retained.Records["bad"].Review)
+	require.False(t, retained.Records["bad"].Published)
+
 }

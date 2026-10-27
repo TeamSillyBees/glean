@@ -108,7 +108,13 @@ export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: ()
     </div>
   )
 }
-export function SourcesView({ topic }: { topic: TopicSlug }) {
+export function SourcesView({
+  topic,
+  onOpenQuarantine,
+}: {
+  topic: TopicSlug
+  onOpenQuarantine?: (source?: string) => void
+}) {
   const query = useSources()
   if (query.isLoading) return <Loading />
   if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />
@@ -143,6 +149,11 @@ export function SourcesView({ topic }: { topic: TopicSlug }) {
         >
           {number(query.data.counts.quarantinedCandidates)}{' '}
           条来源记录已隔离待处理，其他有效记录会继续处理。隔离未解决前，目录写入窗口保持保守。
+          {onOpenQuarantine && (
+            <Button variant="ghost" size="sm" onClick={() => onOpenQuarantine()}>
+              查看全部隔离记录
+            </Button>
+          )}
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -213,6 +224,16 @@ export function SourcesView({ topic }: { topic: TopicSlug }) {
                     <Database className="size-4 text-slate-500" />
                   </span>
                   <h3 className="text-sm font-semibold">{source.source}</h3>
+                  {!!source.quarantined && onOpenQuarantine && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`查看 ${source.source} 隔离记录`}
+                      onClick={() => onOpenQuarantine(source.source)}
+                    >
+                      查看隔离记录
+                    </Button>
+                  )}
                   <Badge
                     className="ml-auto"
                     tone={

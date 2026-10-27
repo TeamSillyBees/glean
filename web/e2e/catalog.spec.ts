@@ -361,6 +361,49 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await noHorizontalOverflow(page)
   await screenshot(page, info, 'source-health')
 
+  // This historical-only database has no fabricated quarantined records. Exercise
+  // the real read-only endpoint, empty state, source filter and repeated navigation.
+  const quarantineResponse = apiResponse(page, '/api/v1/monitor/quarantine', {
+    page: '1',
+    pageSize: '20',
+  })
+  await navigate(page, '隔离记录')
+  expect(
+    await data<{ items: unknown[]; total: number; page: number; pageSize: number }>(
+      await quarantineResponse,
+    ),
+  ).toEqual({ items: [], total: 0, page: 1, pageSize: 20 })
+  await expect(page.getByText('没有匹配的隔离记录', { exact: true })).toBeVisible()
+  await expect(page.getByText('隔离不等于论文撤稿或科学结论有误。', { exact: false })).toBeVisible()
+  const quarantinePages = page.getByRole('navigation', { name: '隔离记录分页', exact: true })
+  await expect(quarantinePages.getByRole('button', { name: '上一页', exact: true })).toBeDisabled()
+  await expect(quarantinePages.getByRole('button', { name: '下一页', exact: true })).toBeDisabled()
+  await page.getByRole('combobox', { name: '隔离记录来源', exact: true }).click()
+  const arxivQuarantine = apiResponse(page, '/api/v1/monitor/quarantine', {
+    page: '1',
+    source: 'arxiv',
+  })
+  await page.getByRole('option', { name: 'arxiv', exact: true }).click()
+  expect((await data<{ items: unknown[]; total: number }>(await arxivQuarantine)).items).toEqual([])
+  await expect(page.getByRole('combobox', { name: '隔离记录来源', exact: true })).toHaveText(
+    'arxiv',
+  )
+  await navigate(page, '来源健康')
+  await expect(page.getByText('尚无完成记录', { exact: true })).toHaveCount(6)
+  await navigate(page, '隔离记录')
+  await expect(page.getByRole('combobox', { name: '隔离记录来源', exact: true })).toHaveText(
+    '全部来源',
+  )
+  // A recently cached view may not refetch on navigation; use its actual refresh control.
+  const refreshedQuarantine = apiResponse(page, '/api/v1/monitor/quarantine', { page: '1' })
+  await page.getByRole('button', { name: '刷新记录', exact: true }).click()
+  const refreshed = await refreshedQuarantine
+  expect(new URL(refreshed.url()).searchParams.has('source')).toBe(false)
+  expect((await data<{ items: unknown[]; total: number }>(refreshed)).total).toBe(0)
+  await expect(page.getByText('没有匹配的隔离记录', { exact: true })).toBeVisible()
+  await noHorizontalOverflow(page)
+  await screenshot(page, info, 'quarantine-empty')
+
   const runsResponse = apiResponse(page, '/api/v1/monitor/runs')
   await navigate(page, '扫描记录')
   expect((await data<{ items: unknown[] }>(await runsResponse)).items).toEqual([])
