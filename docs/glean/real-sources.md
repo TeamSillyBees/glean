@@ -60,3 +60,11 @@ Canary 使用固定的小时间窗，不是 30 日全网扫描。捕获的 arXiv
 - [arXiv OAI-PMH：2025 年新端点、datestamp、arXivRaw 和游标](https://info.arxiv.org/help/oa/index.html)
 - [bioRxiv / medRxiv 官方 API](https://api.biorxiv.org/)
 - [Europe PMC API](https://europepmc.org/RestfulWebService)；[官方开发者论坛对 FIRST_IDATE / UPDATE_DATE 的解释](https://groups.google.com/a/ebi.ac.uk/g/epmc-webservices/c/JShd-dbIIBE)
+
+## 持续采集恢复与健康诊断
+
+普通 CI 的 `TestDurableRecoveryAfterCancellationAndPartialFailure` 在无外部网络的确定性来源上验证：一个来源完成、另一个来源留下分页游标后取消；重建服务，503 耗尽预算；再次重建并只恢复失败来源。断点、固定窗口和冻结主题配置保持不变，成功来源不重复采集，失败来源不提前推进水位，重复恢复不增加候选或运行。相同矩阵也作为 `TestMonitorPostgresDurableMockRun/CancellationPartialFailureFrozenTemplates` 在真实 PostgreSQL 迁移表和 JSONB 上执行；每次重建新的 Ent client，不借用 Service 内存状态。另有 `TestMonitorPostgresProcessRestart` 使用两个独立测试二进制子进程：第一个以假 Europe PMC HTTP 响应提交分页检查点后退出；第二个重新连接 PostgreSQL，在当前主题配置不可用时按原始冻结查询和游标恢复，并验证重复执行不产生重复候选。该测试使用已提交的独立 schema，结束后清理；不声称进行了生产进程强制 kill 或持续运行 72 小时的现场验收。普通 CI 的 `TestEuropePMCHTTPResumeAfter503` 还用真实适配器和假 HTTP 503 响应验证重建服务后仍遵守持久化 Retry-After，不提前请求或推进水位。
+
+来源健康页面分别显示实际完整采集成功距今、窗口覆盖距今、失败来源名称、隔离记录总数与每来源计数。`lastAcquiredAt` 仅在一个来源所有模板分页完成时写入实际成功时间；它不是论文发表时间，也不是 `acquiredThrough` 固定窗口结束时间。旧状态没有成功时间时显示未知，不从窗口水位推造时间。最近成功的单一来源不代表全部来源成功，也不代表目录写入已完成。刷新失败保留上次诊断，并明确提示可能过期；页面只读刷新不启动采集。
+
+真实公开 API 验收仍只通过独立 `workflow_dispatch` 工作流执行，不进入普通 CI。Europe PMC 等上游临时 503 属于来源可用性/退避证据，不自动归因于代码失败；离线恢复回归和必跑 PostgreSQL 集成测试仍须通过。

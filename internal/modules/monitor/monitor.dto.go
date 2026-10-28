@@ -149,6 +149,7 @@ type Quarantine struct {
 
 // Checkpoint 分离采集、审核与目录投影水位。
 type Checkpoint struct {
+	LastAcquiredAt       time.Time            `json:"lastAcquiredAt"`
 	Quarantined          int                  `json:"quarantined"`
 	HandledThrough       time.Time            `json:"handledThrough"`
 	CoreBackfillPending  bool                 `json:"coreBackfillPending"`

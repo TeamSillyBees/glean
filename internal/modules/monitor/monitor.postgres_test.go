@@ -176,4 +176,15 @@ func TestMonitorPostgresDurableMockRun(t *testing.T) {
 	require.Nil(t, retained.Records["bad"].Review)
 	require.False(t, retained.Records["bad"].Published)
 
+	// 同一恢复矩阵必须经过真实 JSONB，重建 Ent client 后不能依赖进程内状态。
+	t.Run("CancellationPartialFailureFrozenTemplates", func(t *testing.T) {
+		exerciseDurableRecovery(t, actorCtx, func(sources []Source) *Service {
+			cfg := DefaultConfig()
+			cfg.StateKey = "durable-recovery-matrix"
+			service, err := NewService(makeClient(), ids, cfg, sources, nil, nil)
+			require.NoError(t, err)
+			return service
+		})
+	})
+
 }

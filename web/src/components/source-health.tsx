@@ -16,6 +16,7 @@ import { Badge, Empty, ErrorState, Loading } from './common'
 import { Button } from './ui/button'
 export interface Checkpoint {
   source: string
+  lastAcquiredAt?: string
   quarantined?: number
   handledThrough?: string
   acquiredThrough: string
@@ -47,7 +48,8 @@ export interface SourcesData {
   items: Checkpoint[]
   schedule: Schedule
 }
-const hasDate = (value?: string) => !!value && !value.startsWith('0001-')
+const hasDate = (value?: string) =>
+  !!value && !value.startsWith('0001-') && Number.isFinite(Date.parse(value))
 const checkpointDate = (value?: string) => (hasDate(value) ? date(value) : '尚未完成')
 function timestamp(value?: string) {
   if (!hasDate(value)) return '尚未完成'
@@ -75,6 +77,7 @@ function useSources() {
     queryKey: ['sources'],
     queryFn: ({ signal }) => request<SourcesData>('/api/v1/monitor/sources', { signal }),
     refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   })
 }
 export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: () => void }) {
@@ -117,8 +120,17 @@ export function SourcesView({
 }) {
   const query = useSources()
   if (query.isLoading) return <Loading />
-  if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />
+  if (query.isError && !query.data)
+    return <ErrorState error={query.error} retry={() => query.refetch()} />
   const { items, schedule } = query.data!
+  const failedSources = items.filter((source) => source.blocked || source.consecutiveFailures > 0)
+  const quarantined = query.data?.counts?.quarantinedCandidates
+  const lastSuccess = Math.max(
+    0,
+    ...items
+      .filter((source) => source.enabled !== false && hasDate(source.lastAcquiredAt))
+      .map((source) => Date.parse(source.lastAcquiredAt!)),
+  )
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -142,12 +154,45 @@ export function SourcesView({
           刷新状态
         </Button>
       </div>
-      {!!query.data?.counts?.quarantinedCandidates && (
+      {query.isError && (
+        <p
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900"
+        >
+          刷新失败，以下保留上次成功读取的来源状态，可能不是最新进度。
+        </p>
+      )}
+      <section
+        aria-label="采集健康概览"
+        className="rounded-xl border bg-white p-5 text-sm leading-7"
+      >
+        <p>
+          最近一次来源完整采集距今：
+          <strong>
+            {lastSuccess
+              ? lag((query.dataUpdatedAt - lastSuccess) / 1000)
+              : '未知（尚无成功时间记录）'}
+          </strong>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          按最近读取时间计算；仅代表最近成功的启用来源，不代表全部来源或目录写入已更新。
+        </p>
+        <p>
+          失败来源：
+          <strong>
+            {failedSources.length ? failedSources.map((source) => source.source).join('、') : '无'}
+          </strong>
+        </p>
+        <p>
+          隔离记录：<strong>{quarantined == null ? '未知' : `${number(quarantined)} 条`}</strong>
+        </p>
+      </section>
+      {!!quarantined && (
         <p
           role="status"
           className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
         >
-          {number(query.data.counts.quarantinedCandidates)}{' '}
+          {number(quarantined)}{' '}
           条来源记录已隔离待处理，其他有效记录会继续处理。隔离未解决前，目录写入窗口保持保守。
           {onOpenQuarantine && (
             <Button variant="ghost" size="sm" onClick={() => onOpenQuarantine()}>
@@ -255,6 +300,18 @@ export function SourcesView({
                 </div>
                 <dl className="mt-4 space-y-3 text-sm">
                   {[
+                    ['上次完整采集成功', timestamp(source.lastAcquiredAt)],
+                    [
+                      '距上次完整采集成功',
+                      hasDate(source.lastAcquiredAt)
+                        ? lag((query.dataUpdatedAt - Date.parse(source.lastAcquiredAt!)) / 1000)
+                        : '未知',
+                    ],
+                    [
+                      '隔离记录',
+                      source.quarantined == null ? '未知' : `${number(source.quarantined)} 条`,
+                    ],
+                    ['失败次数', number(source.consecutiveFailures)],
                     [
                       '本主题窗口距今',
                       hasDate(source.topicAcquiredThrough?.[topic]) &&

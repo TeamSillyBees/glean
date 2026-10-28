@@ -131,3 +131,7 @@ These predicates apply to both paper queries and facets. The immutable baseline 
 - 列表字段：`id, source, sourceId, title, doi, arxivId, pmid, topics, reason, quarantinedAt, acquiredAt, sourceUpdatedAt, runIds`。空标题有中文占位；时间为 RFC3339（缺失可能是零时间）。`reason` 仅为受控拒绝类型，未知错误归为 `record_rejected`，不回显异常原文。`runIds` 只关联仍保留的运行历史（含失败恢复运行保留的候选关联，同一运行去重），不是完整历史溯源；空数组不表示记录从未属于一次运行。
 - 详情额外包含 `sourceUrl`（仅由安全 DOI 构建，其他情况为空）和 `evidence: {format, bytes, sha256, preview, redacted, truncated}`。format 为原证据 `json/text/empty`；bytes 与 SHA-256 对应服务端原始证据。**preview 是安全元数据的 JSON 文本投影，不是原始响应的截取**，只包含有界标题、来源、来源 ID 和受控原因；永不返回任意原始 JSON/XML、嵌套字段、请求头或错误页。redacted 恒为 true，表示原文字段已被排除；truncated 表示预览标题/标识超出上限。预览最大 4 KiB；标题上限 512 字节，来源标识上限 256 字节，疑似凭据文本保守隐藏。
 - 合法 JSON 原文及非法原文的 RawEvidence 继续完整保留于持久化快照，检查不会修改原证据、审核结论或科学分类。客户端必须按普通文本呈现 preview，不能解释为 HTML；服务端不会抓取任何来源地址。
+
+### Monitor source success timing
+
+`GET /api/v1/monitor/sources` checkpoint `lastAcquiredAt` is the actual UTC time when all templates/pages for that source finished acquisition. It is persisted independently of the fixed `acquiredThrough` coverage watermark and is unchanged on partial failure, canceled requests, or idempotent replay. A missing/zero value in older persisted state means unknown; clients must not synthesize it from the coverage watermark. This does not assert publication, scientific review, or successful catalog projection. Source errors and quarantine counts remain separate diagnostics.

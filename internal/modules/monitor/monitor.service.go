@@ -414,6 +414,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				templateCount := len(selectedTemplates)
 				if progress.TemplateIndex == templateCount {
 					progress.Acquired = true
+					checkpoint.LastAcquiredAt = s.clock().UTC()
 					if progress.AdvanceCheckpoint || run.RequestKey == "" {
 						checkpoint.AcquiredThrough = later(checkpoint.AcquiredThrough, run.FixedEnd)
 					}
