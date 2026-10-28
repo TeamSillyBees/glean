@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from './compone
 import { Select } from './components/ui/select'
 import { FilterCombobox } from './components/ui/filter-combobox'
 import { Tooltip, TooltipProvider } from './components/ui/tooltip'
+import { PasswordChangeDialog } from './components/password-change'
 import { QuarantineView } from './components/quarantine'
 import { UsersView } from './components/users'
 import { TopicsView } from './components/topics-management'
@@ -105,7 +106,15 @@ function Logo({ compact = false }: { compact?: boolean }) {
     </div>
   )
 }
-function Login({ onLogin, expired }: { onLogin: (user: Identity) => void; expired: boolean }) {
+function Login({
+  onLogin,
+  expired,
+  passwordChanged,
+}: {
+  onLogin: (user: Identity) => void
+  expired: boolean
+  passwordChanged: boolean
+}) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const mutation = useMutation({
@@ -155,6 +164,11 @@ function Login({ onLogin, expired }: { onLogin: (user: Identity) => void; expire
               使用后端账户登录，继续检索与阅读。
             </p>
           </div>
+          {passwordChanged && (
+            <p role="status" className="mb-5 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+              密码已修改，旧会话已失效。请使用新密码重新登录。
+            </p>
+          )}
           {expired && (
             <p
               role="status"
@@ -342,7 +356,13 @@ function FilterPanel({
     </div>
   )
 }
-function Workspace({ user, onLogout }: { user: Identity; onLogout: () => void }) {
+function Workspace({
+  user,
+  onLogout,
+}: {
+  user: Identity
+  onLogout: (passwordChanged?: boolean) => void
+}) {
   const prefs = useQuery({
     queryKey: ['preferences'],
     queryFn: ({ signal }) => api.preferences(signal),
@@ -368,7 +388,7 @@ function WorkspaceReady({
   initialFilters,
 }: {
   user: Identity
-  onLogout: () => void
+  onLogout: (passwordChanged?: boolean) => void
   initialFilters: Filters
 }) {
   const client = useQueryClient()
@@ -382,6 +402,7 @@ function WorkspaceReady({
   const [mobileNav, setMobileNav] = useState(false)
   const [mobileFilters, setMobileFilters] = useState(false)
   const [settings, setSettings] = useState(false)
+  const [passwordChange, setPasswordChange] = useState(false)
   const [message, setMessage] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLElement>(null)
@@ -1105,6 +1126,16 @@ function WorkspaceReady({
             <Button
               className="w-full justify-start"
               variant="outline"
+              onClick={() => {
+                setSettings(false)
+                setPasswordChange(true)
+              }}
+            >
+              修改密码
+            </Button>
+            <Button
+              className="w-full justify-start"
+              variant="outline"
               onClick={() => savePrefs.mutate()}
               disabled={savePrefs.isPending}
             >
@@ -1135,6 +1166,18 @@ function WorkspaceReady({
           </div>
         </DialogContent>
       </Dialog>
+      {passwordChange && (
+        <PasswordChangeDialog
+          onClose={() => {
+            setPasswordChange(false)
+            setSettings(true)
+          }}
+          onChanged={() => {
+            client.clear()
+            onLogout(true)
+          }}
+        />
+      )}
       {message && (
         <div
           role="status"
@@ -1215,12 +1258,14 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 export default function App() {
   const [user, setUser] = useState<Identity | null>(null)
   const [expired, setExpired] = useState(false)
+  const [passwordChanged, setPasswordChanged] = useState(false)
   const client = useQueryClient()
   useEffect(
     () =>
       setSessionExpired(() => {
         setUser(null)
         setExpired(true)
+        setPasswordChanged(false)
         client.clear()
       }),
     [client],
@@ -1230,17 +1275,20 @@ export default function App() {
       {user ? (
         <Workspace
           user={user}
-          onLogout={() => {
+          onLogout={(changed = false) => {
             setUser(null)
             setExpired(false)
+            setPasswordChanged(changed)
           }}
         />
       ) : (
         <Login
           expired={expired}
+          passwordChanged={passwordChanged}
           onLogin={(identity) => {
             setUser(identity)
             setExpired(false)
+            setPasswordChanged(false)
           }}
         />
       )}

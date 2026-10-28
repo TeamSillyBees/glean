@@ -44,6 +44,7 @@ beforeEach(() => {
           refreshToken: 'test-refresh',
           user: { userId: '9', username: 'researcher', nickname: '测试研究员' },
         })
+      if (url.pathname === '/api/v1/auth/password') return ok({})
       if (url.pathname === '/api/v1/auth/logout') return logoutGate || ok({})
       if (url.pathname.endsWith('/catalog/access'))
         return failAccess
@@ -387,4 +388,40 @@ describe('Glean query workspace', () => {
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveFocus()
   })
+})
+
+it('opens password change from the account menu, cancels safely, and clears all cached data on success', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <App />
+    </QueryClientProvider>,
+  )
+  const user = userEvent.setup()
+  await signIn(user)
+  await user.click(screen.getByRole('button', { name: /个人研究空间/ }))
+  await user.click(screen.getByRole('button', { name: '修改密码' }))
+  await user.type(screen.getByLabelText('当前密码'), 'discard-me')
+  await user.click(screen.getByRole('button', { name: '取消' }))
+  expect(screen.getByRole('dialog', { name: '你的研究空间' })).toBeVisible()
+  await user.click(screen.getByRole('button', { name: '修改密码' }))
+  expect(screen.getByLabelText('当前密码')).toHaveValue('')
+  await user.type(screen.getByLabelText('当前密码'), 'test-password')
+  await user.type(screen.getByLabelText('新密码', { exact: true }), 'new-password')
+  await user.type(screen.getByLabelText('确认密码'), 'new-password')
+  await user.click(screen.getByRole('button', { name: '确认修改' }))
+  expect(await screen.findByRole('button', { name: '进入工作台' })).toBeVisible()
+  expect(screen.getByRole('status')).toHaveTextContent('密码已修改')
+  expect(client.getQueryCache().getAll()).toHaveLength(0)
+  // Login may mount a new idle mutation, but no credential-write variables are retained.
+  expect(
+    client
+      .getMutationCache()
+      .getAll()
+      .every((mutation) => mutation.state.variables === undefined),
+  ).toBe(true)
+  expect(localStorage.length).toBe(0)
+  expect(sessionStorage.length).toBe(0)
 })

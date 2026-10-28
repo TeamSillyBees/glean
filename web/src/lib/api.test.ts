@@ -144,3 +144,70 @@ describe('API transport and session isolation', () => {
     expect(await request('/api/test/current')).toEqual({ authorization: 'Bearer access-new' })
   })
 })
+
+describe('password change session isolation', () => {
+  it('uses the backend DTO, then discards both old credentials', async () => {
+    const fetcher = vi.fn(async (url: string) =>
+      url.endsWith('/login') ? ok(loginData()) : ok({}),
+    )
+    vi.stubGlobal('fetch', fetcher)
+    await api.login('one', 'password')
+    await api.changePassword('old-password', 'new-password')
+    expect(fetcher.mock.calls[1]).toEqual([
+      '/api/v1/auth/password',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword: 'old-password', newPassword: 'new-password' }),
+        headers: expect.objectContaining({ Authorization: 'Bearer access-one' }),
+      }),
+    ])
+    await api.topics()
+    expect(fetcher.mock.calls[2]).toEqual([
+      '/api/v1/catalog/topics',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({ Authorization: expect.anything() }),
+      }),
+    ])
+    await api.logout()
+    expect(fetcher).toHaveBeenCalledTimes(3)
+  })
+  it.each([200, 401, 400])(
+    'does not clear a newer login after stale password response %s',
+    async (status) => {
+      const gate = deferred<Response>()
+      const expired = vi.fn()
+      const unsubscribe = setSessionExpired(expired)
+      const fetcher = vi.fn(async (url: string) =>
+        url.endsWith('/login')
+          ? ok(loginData('new'))
+          : url.endsWith('/password')
+            ? gate.promise
+            : ok({}),
+      )
+      vi.stubGlobal('fetch', fetcher)
+      const pending = api.changePassword('old-password', 'new-password').catch((error) => error)
+      await api.login('new', 'password')
+      gate.resolve(new Response(JSON.stringify({ data: {}, message: 'failed' }), { status }))
+      expect(await pending).toMatchObject({ message: expect.stringContaining('会话已切换') })
+      await api.topics()
+      expect(fetcher.mock.calls.at(-1)).toEqual([
+        '/api/v1/catalog/topics',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer access-new' }),
+        }),
+      ])
+      expect(expired).not.toHaveBeenCalled()
+      unsubscribe()
+    },
+  )
+  it('expires the current session on 401 without replaying credential writes', async () => {
+    const expired = vi.fn()
+    const unsubscribe = setSessionExpired(expired)
+    const fetcher = vi.fn().mockResolvedValue(unauthorized())
+    vi.stubGlobal('fetch', fetcher)
+    await expect(api.changePassword('old', 'new-password')).rejects.toMatchObject({ status: 401 })
+    expect(fetcher).toHaveBeenCalledOnce()
+    expect(expired).toHaveBeenCalledOnce()
+    unsubscribe()
+  })
+})

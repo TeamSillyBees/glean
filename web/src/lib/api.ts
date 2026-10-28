@@ -173,6 +173,30 @@ export const api = {
     refreshToken = data.refreshToken
     return data.user
   },
+  async changePassword(currentPassword: string, newPassword: string) {
+    const epoch = sessionEpoch
+    try {
+      // Do not retry a credential write or retain its variables in a mutation cache.
+      await request(
+        '/api/v1/auth/password',
+        {
+          method: 'PUT',
+          body: JSON.stringify({ currentPassword, newPassword }),
+        },
+        false,
+      )
+    } catch (error) {
+      if (epoch !== sessionEpoch) throw new ApiError('会话已切换，已忽略旧请求。', 401)
+      if (error instanceof ApiError && error.status === 401) {
+        clearSession()
+        onExpired?.()
+      }
+      throw error
+    }
+    if (epoch !== sessionEpoch) throw new ApiError('会话已切换，已忽略旧请求。', 401)
+    // The backend revokes every session; discard this browser's credentials too.
+    clearSession()
+  },
   async logout() {
     const token = accessToken
     const refresh = refreshToken
