@@ -38,6 +38,9 @@ validate_release() {
   [[ "$3" =~ ^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$ ]] || fail 'Web image must be pinned by SHA256 digest.'
   export GLEAN_BACKEND_IMAGE="$2" GLEAN_WEB_IMAGE="$3"
 }
+pg_client() {
+  python3 "$ROOT/scripts/production/guard.py" libpq "$@"
+}
 compose() {
   python3 "$ROOT/scripts/production/guard.py" compose "$ROOT" "$@"
 }
@@ -48,8 +51,8 @@ backup_data() {
   [[ ! -e "$destination" ]] || fail 'Backup destination already exists.'
   mkdir -m 700 -- "$destination"
   # Full database, including audit overlays, source evidence and Atlas revisions.
-  PGDATABASE="$DATABASE_URL" pg_dump --format=custom --no-owner --no-privileges --file="$destination/database.dump" 2>"$destination/database.log"
-  pg_restore --list "$destination/database.dump" >"$destination/database.toc"
+  pg_client DATABASE_URL pg_dump --format=custom --no-owner --no-privileges --file="$destination/database.dump" 2>"$destination/database.log"
+  pg_client DATABASE_URL pg_restore --list "$destination/database.dump" >"$destination/database.toc"
   tar -C "$GLEAN_DATA_DIR" -czf "$destination/data.tar.gz" . 2>"$destination/archive.log"
   tar -C "$GLEAN_ORIGINAL_ARCHIVE_DIR" -czf "$destination/originals.tar.gz" . 2>>"$destination/archive.log"
   python3 "$ROOT/scripts/production/guard.py" validate-archive "$destination/data.tar.gz"

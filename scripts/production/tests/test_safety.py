@@ -81,6 +81,40 @@ class GuardTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         guard.ops_paths()
 
+    def test_libpq_clients_receive_discrete_environment_never_uri_or_inherited_target(self):
+        values = {'CHECK_URL': 'postgres://encoded%40user:p%24ss@db.example:5444/glean%20db?sslmode=verify-full&sslrootcert=%2Fprivate%2Fca.crt&connect_timeout=5&application_name=backup',
+                  'PGDATABASE': 'postgres://wrong:secret@wrong/other', 'PGHOSTADDR': '192.0.2.1',
+                  'PGSERVICE': 'wrong-service', 'PGOPTIONS': '-csearch_path=wrong',
+                  'PGSSLCERT': '/unrelated/client.crt'}
+        for tool in ('psql', 'pg_dump', 'pg_restore'):
+            with self.subTest(tool=tool), patch.dict(os.environ, values), patch('subprocess.run') as run:
+                run.return_value.returncode = 0
+                with self.assertRaises(SystemExit) as result:
+                    guard.libpq('CHECK_URL', tool, '--version')
+                self.assertEqual(result.exception.code, 0)
+                self.assertEqual(run.call_args.args[0], [tool, '--no-password', '--version'])
+                env = run.call_args.kwargs['env']
+                self.assertEqual(env['PGHOST'], 'db.example')
+                self.assertEqual(env['PGPORT'], '5444')
+                self.assertEqual(env['PGDATABASE'], 'glean db')
+                self.assertEqual(env['PGUSER'], 'encoded@user')
+                self.assertEqual(env['PGPASSWORD'], 'p$ss')
+                self.assertEqual(env['PGSSLMODE'], 'verify-full')
+                self.assertEqual(env['PGSSLROOTCERT'], '/private/ca.crt')
+                self.assertEqual(env['PGCONNECT_TIMEOUT'], '5')
+                self.assertEqual(env['PGAPPNAME'], 'backup')
+                self.assertEqual(env['PGPASSFILE'], '/dev/null')
+                for key in ('PGHOSTADDR', 'PGSERVICE', 'PGOPTIONS', 'PGSSLCERT'):
+                    self.assertNotIn(key, env)
+
+    def test_shell_database_calls_all_use_the_validated_libpq_wrapper(self):
+        for name in ('common.sh', 'restore.sh', 'tests/recovery-drill.sh'):
+            content = (ROOT/'scripts/production'/name).read_text()
+            self.assertNotIn('PGDATABASE=', content)
+            for line in content.splitlines():
+                if 'psql -X' in line or 'pg_dump --format' in line or 'pg_restore --' in line:
+                    self.assertIn('pg_client ', line)
+
     def test_compose_derives_one_canonical_database_identity(self):
         values = {'DATABASE_URL': 'postgres://encoded%40user:p%24ss@db.example:5444/glean%20db?sslmode=verify-full'}
         with patch.dict(os.environ, values), patch('subprocess.run') as run:

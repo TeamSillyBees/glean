@@ -68,6 +68,30 @@ def extract(archive, target):
                 output.chmod(member.mode & 0o700)
 
 
+def libpq(name, tool, *args):
+    """Run a PostgreSQL client with parsed libpq defaults, never a URI in argv."""
+    import subprocess
+    if tool not in ("psql", "pg_dump", "pg_restore"):
+        raise ValueError("Unsupported PostgreSQL client.")
+    database(name)
+    url = urlsplit(os.environ[name])
+    params = parse_qs(url.query, keep_blank_values=True)
+    # PGDATABASE is a database NAME, not a connection URI. Remove inherited
+    # libpq defaults/services/options that could redirect this canonical target.
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
+    environment.update({"PGHOST": url.hostname, "PGPORT": str(url.port or 5432),
+                        "PGDATABASE": unquote(url.path[1:]),
+                        "PGUSER": unquote(url.username), "PGPASSWORD": unquote(url.password),
+                        "PGSSLMODE": params["sslmode"][0], "PGPASSFILE": "/dev/null"})
+    for query, setting in (("sslrootcert", "PGSSLROOTCERT"),
+                           ("connect_timeout", "PGCONNECT_TIMEOUT"),
+                           ("application_name", "PGAPPNAME")):
+        if query in params:
+            environment[setting] = params[query][0]
+    result = subprocess.run([tool, "--no-password", *args], env=environment)
+    sys.exit(result.returncode)
+
+
 def compose(root, *args):
     import subprocess
     database("DATABASE_URL")
@@ -138,7 +162,7 @@ def record_release(path):
 
 if __name__ == "__main__":
     try:
-        {"private-file": private_file, "database": database, "extract": extract,
+        {"libpq": libpq, "private-file": private_file, "database": database, "extract": extract,
          "distinct-restore-database": distinct_restore_database, "ops-paths": ops_paths, "restore-target": restore_target, "check-current": check_current, "compose": compose, "validate-archive": validate_archive, "record-release": record_release}[sys.argv[1]](*sys.argv[2:])
     except (ValueError, OSError, KeyError, tarfile.TarError) as error:
         # Library errors can contain filenames, but connection contents never enter them.
