@@ -79,6 +79,8 @@ jobs:
               (module + "/internal/modules/catalog", "TestCatalogManagementPostgres"),
               (module + "/internal/modules/user", "TestUserAdministrationPostgres"),
               (module + "/internal/modules/monitor", "TestMonitorPostgresDurableMockRun"),
+              (module + "/internal/modules/monitor", "TestMonitorPostgresDurableMockRun/CancellationPartialFailureFrozenTemplates"),
+              (module + "/internal/modules/monitor", "TestMonitorPostgresProcessRestart"),
               (module + "/internal/modules/monitor", "TestMonitorRealPipelinePostgres"),
               (module + "/test/integration", "TestMigrationsAndSeedOnPostgres"),
               (module + "/internal/baseline", "TestCommittedHistoricalManifest"),
@@ -108,6 +110,42 @@ jobs:
           go build -o "$RUNNER_TEMP/glean-monitor" ./cmd/glean-monitor
           go build -o "$RUNNER_TEMP/glean-importbaseline" ./tools/importbaseline
           go build -o "$RUNNER_TEMP/glean-enrichabstract" ./tools/enrichabstract
+
+  recovery:
+    name: Isolated backup and empty-database recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # Disposable CI PostgreSQL only; never load production credentials.
+      GLEAN_RECOVERY_CI_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/glean_recovery_ci?sslmode=disable
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: glean_recovery_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install matching PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          echo '/usr/lib/postgresql/16/bin' >> "$GITHUB_PATH"
+      - name: Verify production script safety contracts
+        run: python3 -m unittest discover -s scripts/production/tests -v
+      - name: Back up and restore real records and private archive fixtures
+        run: bash scripts/production/tests/recovery-drill.sh
 
   frontend:
     name: Frontend tests and production build
@@ -375,9 +413,11 @@ jobs:
           cp configs/config.yaml configs/rbac_model.conf "$runtime/configs/"
           jwt_secret="$(openssl rand -hex 32)"
           password="$(openssl rand -hex 24)"
+          new_password="$(openssl rand -hex 24)"
           echo "::add-mask::$jwt_secret"
           echo "::add-mask::$password"
-          printf 'INITRA_AUTH_JWT_SECRET=%s\nGLEAN_E2E_PASSWORD=%s\n' "$jwt_secret" "$password" >> "$GITHUB_ENV"
+          echo "::add-mask::$new_password"
+          printf 'INITRA_AUTH_JWT_SECRET=%s\nGLEAN_E2E_PASSWORD=%s\nGLEAN_E2E_NEW_PASSWORD=%s\n' "$jwt_secret" "$password" "$new_password" >> "$GITHUB_ENV"
           cat db/migrations/*.sql | psql --set ON_ERROR_STOP=1 --single-transaction > "$runtime/migrations.log"
           go build -o "$runtime/server" ./cmd/server
           go build -o "$runtime/importbaseline" ./tools/importbaseline

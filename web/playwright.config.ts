@@ -43,6 +43,12 @@ export default defineConfig({
             dependencies: ['desktop', 'mobile'],
             use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1080 } },
           },
+          {
+            name: 'password',
+            testMatch: 'password.spec.ts',
+            dependencies: ['management'],
+            use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1080 } },
+          },
         ]
       : []),
   ],

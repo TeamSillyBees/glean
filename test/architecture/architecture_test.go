@@ -54,7 +54,8 @@ func TestTemplateUsesAPIFoundationLayout(t *testing.T) {
 	require.FileExists(t, filepath.Join(root, "db", "seeds", "001_seed_admin.sql"))
 	require.NoDirExists(t, filepath.Join(root, "internal", "gen", "jet"))
 	require.NoDirExists(t, filepath.Join(root, "tools", "jetgen"))
-	require.NoDirExists(t, filepath.Join(root, "scripts"))
+	// Production operational scripts are separate from the Go application layers.
+	require.DirExists(t, filepath.Join(root, "scripts", "production"))
 	require.DirExists(t, filepath.Join(root, "internal", "data", "schema"))
 	require.FileExists(t, filepath.Join(root, "internal", "data", "ent", "client.go"))
 	require.FileExists(t, filepath.Join(root, "internal", "data", "tx.go"))

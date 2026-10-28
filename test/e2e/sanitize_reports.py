@@ -61,7 +61,7 @@ def sanitize_file(data, secrets):
 def main():
     secrets = [
         value.encode()
-        for name in ["GLEAN_E2E_PASSWORD", "INITRA_AUTH_JWT_SECRET"]
+        for name in ["GLEAN_E2E_PASSWORD", "GLEAN_E2E_NEW_PASSWORD", "INITRA_AUTH_JWT_SECRET"]
         if (value := os.environ.get(name))
     ]
     root = Path(sys.argv[1])

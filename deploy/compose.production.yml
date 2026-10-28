@@ -1,0 +1,54 @@
+# Standalone production definition: external PostgreSQL and Redis, never dev defaults.
+name: glean-production
+services:
+  backend:
+    image: ${GLEAN_BACKEND_IMAGE:?digest-pinned backend image required}
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 60s
+    env_file:
+      - ${GLEAN_BACKEND_ENV:?server-local backend environment required}
+    environment:
+      APP_ENV: prod
+      INITRA_SERVER_ADDR: "0.0.0.0:8080"
+      # Canonical identity parsed from the SAME server-local URL used for backups/migrations.
+      INITRA_DATABASE_HOST: ${GLEAN_DATABASE_HOST:?}
+      INITRA_DATABASE_PORT: ${GLEAN_DATABASE_PORT:?}
+      INITRA_DATABASE_DBNAME: ${GLEAN_DATABASE_NAME:?}
+      INITRA_DATABASE_USER: ${GLEAN_DATABASE_USER:?}
+      INITRA_DATABASE_PASSWORD: ${GLEAN_DATABASE_PASSWORD:?}
+      INITRA_DATABASE_SSL_MODE: verify-full
+      INITRA_DATABASE_SSL_ROOT_CERT: /app/configs/db-ca.crt
+      INITRA_AUTH_ALLOW_MEMORY_TOKEN_STORE: "false"
+      INITRA_SERVER_DOCS_ENABLED: "false"
+    volumes:
+      - ${GLEAN_CONFIG_DIR:?server-local configs required}:/app/configs:ro
+      - ${GLEAN_DATA_DIR:?persistent data directory required}:/app/var
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    ports:
+      - "127.0.0.1:8080:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  web:
+    image: ${GLEAN_WEB_IMAGE:?digest-pinned web image required}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    ports:
+      - "127.0.0.1:3000:8080"
+    depends_on: [backend]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
