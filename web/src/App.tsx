@@ -535,6 +535,10 @@ function WorkspaceReady({
     else change('q', search.trim())
   }
   const refresh = () => {
+    client.invalidateQueries(
+      { queryKey: ['catalog-access', user.userId] },
+      { cancelRefetch: false },
+    )
     client.invalidateQueries({ queryKey: [view === 'papers' ? 'papers' : view] })
     if (view === 'papers') {
       client.invalidateQueries({ queryKey: ['facets'] })
@@ -687,12 +691,37 @@ function WorkspaceReady({
           <Tooltip label="刷新当前视图">
             <Button variant="ghost" size="icon" onClick={refresh} aria-label="刷新当前视图">
               <RotateCcw
-                className={cn((paperQuery.isFetching || topics.isFetching) && 'animate-spin')}
+                className={cn(
+                  (paperQuery.isFetching || topics.isFetching || access.isFetching) &&
+                    'animate-spin',
+                )}
               />
             </Button>
           </Tooltip>
         </header>
         <main id="main-content" tabIndex={-1} className="main-content outline-none">
+          {(access.isError || access.isFetching) && (
+            <div
+              role="status"
+              className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground"
+            >
+              <span>
+                {access.isFetching
+                  ? '正在确认管理权限…'
+                  : '管理权限暂时读取失败，阅读功能仍可使用。'}
+              </span>
+              {access.isError && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={access.isFetching}
+                  onClick={() => access.refetch({ cancelRefetch: false })}
+                >
+                  重试管理权限
+                </Button>
+              )}
+            </div>
+          )}
           <div className="workspace-heading">
             <div>
               <h1>
@@ -1087,13 +1116,25 @@ function WorkspaceReady({
             canManage ? (
               <UsersView currentUserId={user.userId} notify={setMessage} />
             ) : (
-              <p>没有管理权限。</p>
+              <p>
+                {access.isFetching
+                  ? '正在确认管理权限…'
+                  : access.isError
+                    ? '管理权限尚未确认，请重试。'
+                    : '没有管理权限。'}
+              </p>
             )
           ) : view === 'topics' ? (
             canManage ? (
               <TopicsView currentUserId={user.userId} notify={setMessage} />
             ) : (
-              <p>没有管理权限。</p>
+              <p>
+                {access.isFetching
+                  ? '正在确认管理权限…'
+                  : access.isError
+                    ? '管理权限尚未确认，请重试。'
+                    : '没有管理权限。'}
+              </p>
             )
           ) : view === 'sources' ? (
             <SourcesView

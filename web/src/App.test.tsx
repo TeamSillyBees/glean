@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,6 +8,7 @@ import { paper, topics, facets } from './test/fixtures'
 import type { Paper } from './lib/types'
 let canManage: boolean
 let failAccess: boolean
+let accessGate: Promise<Response> | null
 let currentTopics: typeof topics
 let currentPaper: Paper
 let saved: Record<string, unknown>
@@ -28,6 +29,7 @@ beforeEach(() => {
   clearSession()
   canManage = false
   failAccess = false
+  accessGate = null
   currentTopics = structuredClone(topics)
   currentPaper = structuredClone(paper)
   saved = {}
@@ -53,9 +55,12 @@ beforeEach(() => {
       if (url.pathname === '/api/v1/auth/password') return ok({})
       if (url.pathname === '/api/v1/auth/logout') return logoutGate || ok({})
       if (url.pathname.endsWith('/catalog/access'))
-        return failAccess
-          ? new Response(JSON.stringify({ message: 'unavailable' }), { status: 503 })
-          : ok({ canManage })
+        return (
+          accessGate ||
+          (failAccess
+            ? new Response(JSON.stringify({ message: 'unavailable' }), { status: 503 })
+            : ok({ canManage }))
+        )
       if (url.pathname.endsWith('/topics') && init?.method === 'POST') {
         const input = JSON.parse(String(init.body))
         const topic = { ...input, slug: 'custom-topic', membershipCount: 0, version: 1 }
@@ -219,6 +224,147 @@ describe('Glean query workspace', () => {
     await screen.findByRole('heading', { name: paper.titleZh })
     expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '研究主题' })).not.toBeInTheDocument()
+  })
+  it('recovers administrator capability after a failed lookup through current-view refresh', async () => {
+    canManage = true
+    failAccess = true
+    const user = mount()
+    await signIn(user)
+    await screen.findByRole('heading', { name: paper.titleZh })
+    await waitFor(() =>
+      expect(paths.filter((path) => path.endsWith('/catalog/access'))).toHaveLength(1),
+    )
+    expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
+    failAccess = false
+    await user.click(screen.getByRole('button', { name: '刷新当前视图' }))
+    expect(await screen.findByRole('button', { name: '用户管理' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '研究主题' })).toBeInTheDocument()
+    expect(paths.filter((path) => path.endsWith('/catalog/access'))).toHaveLength(2)
+  })
+  it.each([false, true])(
+    'retries capability without granting controls before proof (canManage: %s)',
+    async (allowed) => {
+      failAccess = true
+      const user = mount()
+      await signIn(user)
+      await screen.findByText('管理权限暂时读取失败，阅读功能仍可使用。')
+      expect(screen.queryByText('没有管理权限。')).not.toBeInTheDocument()
+      let finish!: (response: Response) => void
+      accessGate = new Promise<Response>((resolve) => {
+        finish = resolve
+      })
+      await user.click(screen.getByRole('button', { name: '重试管理权限' }))
+      await screen.findByText('正在确认管理权限…')
+      await user.click(screen.getByRole('button', { name: '刷新当前视图' }))
+      await user.click(screen.getByRole('button', { name: '刷新当前视图' }))
+      expect(paths.filter((path) => path.endsWith('/catalog/access'))).toHaveLength(2)
+      expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '研究主题' })).not.toBeInTheDocument()
+      await act(async () => {
+        finish(ok({ canManage: allowed }))
+        await accessGate
+      })
+      await waitFor(() => expect(screen.queryByText('正在确认管理权限…')).not.toBeInTheDocument())
+      expect(screen.queryByText('管理权限暂时读取失败，阅读功能仍可使用。')).not.toBeInTheDocument()
+      if (allowed) {
+        expect(screen.getByRole('button', { name: '用户管理' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '研究主题' })).toBeInTheDocument()
+      } else {
+        expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: '研究主题' })).not.toBeInTheDocument()
+      }
+    },
+  )
+  it('revokes cached management UI on revalidation failure until a successful retry', async () => {
+    canManage = true
+    const user = mount()
+    await signIn(user)
+    await user.click(await screen.findByRole('button', { name: '研究主题' }))
+    await screen.findByRole('button', { name: '新增研究主题' })
+    let finish!: (response: Response) => void
+    accessGate = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    await user.click(screen.getByRole('button', { name: '刷新当前视图' }))
+    expect(screen.getByRole('button', { name: '新增研究主题' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '用户管理' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '刷新当前视图' }))
+    expect(paths.filter((path) => path.endsWith('/catalog/access'))).toHaveLength(2)
+    await act(async () => {
+      finish(new Response('{}', { status: 503 }))
+      await accessGate
+    })
+    await screen.findByText('管理权限暂时读取失败，阅读功能仍可使用。')
+    expect(screen.getByText('管理权限尚未确认，请重试。')).toBeInTheDocument()
+    expect(screen.queryByText('没有管理权限。')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新增研究主题' })).not.toBeInTheDocument()
+    accessGate = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    await user.click(screen.getByRole('button', { name: '重试管理权限' }))
+    expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '新增研究主题' })).not.toBeInTheDocument()
+    await act(async () => {
+      finish(ok({ canManage: true }))
+      await accessGate
+    })
+    expect(await screen.findByRole('button', { name: '新增研究主题' })).toBeInTheDocument()
+  })
+  it('preserves an open management draft through successful capability revalidation', async () => {
+    canManage = true
+    const user = mount()
+    await signIn(user)
+    await user.click(await screen.findByRole('button', { name: '研究主题' }))
+    await user.click(await screen.findByRole('button', { name: '新增研究主题' }))
+    fireEvent.change(screen.getByLabelText('主题名称'), { target: { value: '尚未保存的方向' } })
+    let finish!: (response: Response) => void
+    accessGate = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    act(() => {
+      onlineManager.setOnline(false)
+      onlineManager.setOnline(true)
+    })
+    await waitFor(() =>
+      expect(paths.filter((path) => path.endsWith('/catalog/access'))).toHaveLength(2),
+    )
+    expect(screen.getByLabelText('主题名称')).toHaveValue('尚未保存的方向')
+    await act(async () => {
+      finish(ok({ canManage: true }))
+      await accessGate
+    })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText('主题名称')).toHaveValue('尚未保存的方向')
+  })
+  it('ignores a delayed administrator retry after logout and reader login in the same account', async () => {
+    failAccess = true
+    const user = mount()
+    await signIn(user)
+    await screen.findByText('管理权限暂时读取失败，阅读功能仍可使用。')
+    let finish!: (response: Response) => void
+    const previousAccess = new Promise<Response>((resolve) => {
+      finish = resolve
+    })
+    accessGate = previousAccess
+    await user.click(screen.getByRole('button', { name: '重试管理权限' }))
+    await user.click(screen.getByRole('button', { name: /测试研究员/ }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: '退出登录' }),
+    )
+    await screen.findByRole('heading', { name: '回到你的研究工作台' })
+    accessGate = null
+    failAccess = false
+    await signIn(user)
+    await screen.findByRole('heading', { name: paper.titleZh })
+    await act(async () => {
+      finish(ok({ canManage: true }))
+      await previousAccess
+    })
+    await waitFor(() => expect(screen.queryByText('正在确认管理权限…')).not.toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: '用户管理' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '研究主题' })).not.toBeInTheDocument()
+    expect(screen.queryByText('管理权限暂时读取失败，阅读功能仍可使用。')).not.toBeInTheDocument()
   })
   it('uses server capability and exposes a newly created topic in navigation with generic filters', async () => {
     canManage = true
