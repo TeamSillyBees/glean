@@ -51,7 +51,12 @@ GLEAN_LIVE_SOURCE_CANARY=1 go test -tags=live ./internal/modules/monitor -run '^
 GLEAN_LIVE_SOURCE_CANARY=1 GLEAN_LIVE_SOURCE=pubmed go test -tags=live ./internal/modules/monitor -run '^TestLiveSourceCanary$' -v -count=1
 ```
 
-完整的真实来源 → PostgreSQL → 桌面/手机页面验收单独放在 `.github/workflows/live-source-acceptance.yml`，仅支持 Actions 手动 `workflow_dispatch`，不由 push、PR 或定时触发。它不导入历史库，不替代常规 CI 的完整历史导入和浏览器验证。供应商 503、限流、超时或零条结果会使该手动验收明确失败；不使用 `continue-on-error` 或模拟数据掩盖问题。
+`.github/workflows/live-source-acceptance.yml` 仅支持 Actions 手动 `workflow_dispatch`，不由 push、PR 或定时触发。两个独立 job 互不依赖，一个来源失败不会阻止另一个 job：
+
+- `six-source-canary`：六来源兼容性探针，直接运行上述 `TestLiveSourceCanary`。固定 `[2026-10-23, 2026-10-24)` UTC 一日窗口；每来源一次 Fetch，PubMed 最多额外一次 EFetch，总计 **最多 7 次 Fetch / HTTP 请求**，间隔至少 3 秒，禁止重试及重定向，不使用 API key、联系人、LLM 或数据库。请求 page size 1，bio/medRxiv 与 OAI 仍为供应商页大小；不追完分页。合法空页可通过兼容性检查（PubMed 已执行 EFetch 时要求至少一条记录），不代表六源均有论文命中。
+- `live-source`：**仅 Europe PMC 一来源**，一页、请求一条记录，通过真实监控管线写入临时 PostgreSQL，再在桌面/手机浏览器验证。这里只模拟 LLM 审核；必须真实提交恰好一条观察，零结果也失败。不是六源全链路持久化验收，不导入历史库，不替代常规 CI 的完整历史导入和浏览器验证。
+
+六源 job 从 Go JSON 事件生成来源 pass/fail/skip（未完成为 not-run）及耗时表，写入 job summary 和 7 日保留的安全 Markdown artifact；不发布原始测试 Output、请求头、响应正文、凭据或 stderr。失败时另从受控标记中提取 `SourceError` 的固定 kind、HTTP 状态、retryable 与 Retry-After 秒数（无错误文本）；可区分 503 / 429、响应格式和传输失败，不由诊断元数据推断通过。非法或重复诊断被丢弃，缺少诊断表示原因未知，而非成功。缺失/跳过测试、损坏报告或非零测试退出均失败关闭。上游 503、限流、超时会使相应手动检查诚实失败，但**不自动等于代码回归**；不使用 `continue-on-error`、即时重试或 fixture 替代真实响应，也不影响普通 CI 的离线正确性判定。
 
 Canary 使用固定的小时间窗，不是 30 日全网扫描。捕获的 arXiv 363 条 cs.AI 子集只是该子集的解析证据，不能宣称全 arXiv 覆盖。来源查询、同义词和数据库本身都有覆盖边界；完整分页也不是“全部相关文献”的保证。
 

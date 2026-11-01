@@ -16,6 +16,59 @@ defaults:
     shell: bash
 
 jobs:
+  six-source-canary:
+    name: Manual bounded six-source compatibility probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Probe six official sources without persistence
+        env:
+          GLEAN_LIVE_SOURCE_CANARY: '1'
+          GLEAN_LIVE_SOURCE: ''
+        run: |
+          set -uo pipefail
+          umask 077
+          runtime="$RUNNER_TEMP/glean-canary"
+          mkdir -p "$runtime"
+          # Capture locally only: raw Go Output/errors are never printed or uploaded.
+          set +e
+          go test -json -tags=live ./internal/modules/monitor -run '^TestLiveSourceCanary$' -count=1 -timeout=10m > "$runtime/events.jsonl" 2> "$runtime/stderr.log"
+          status=$?
+          printf '%s\n' "$status" > "$runtime/exit-code"
+          exit "$status"
+
+      - name: Publish allowlisted source outcomes
+        if: always()
+        run: |
+          python3 scripts/ci/live_canary_report.py \
+            "$RUNNER_TEMP/glean-canary/events.jsonl" "$RUNNER_TEMP/glean-canary/exit-code" \
+            "$RUNNER_TEMP/glean-canary-safe/summary.md" "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload safe six-source summary only
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: glean-six-source-canary-${{ github.sha }}
+          path: ${{ runner.temp }}/glean-canary-safe/summary.md
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+      - name: Delete local canary events and diagnostics
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/glean-canary" "$RUNNER_TEMP/glean-canary-safe"
+
   live-source:
     name: Manual official source, PostgreSQL and browser acceptance
     runs-on: ubuntu-latest

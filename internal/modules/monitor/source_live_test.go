@@ -45,7 +45,8 @@ func TestLiveSourceCanary(t *testing.T) {
 			defer cancel()
 			page, e := source.Fetch(ctx, req)
 			if e != nil {
-				t.Fatalf("official source %s: %v (no retries or bypass)", source.Name(), e)
+				t.Log(canaryDiagnostic(source.Name(), e))
+				t.Fatal("official source failed (no retries or bypass); see typed diagnostic")
 			}
 			requests := 1
 			if source.Name() == "pubmed" && !page.Complete {
@@ -60,7 +61,8 @@ func TestLiveSourceCanary(t *testing.T) {
 				page, e = source.Fetch(ctx, req)
 				requests++
 				if e != nil {
-					t.Fatalf("official PubMed history fetch: %v (no retries or bypass)", e)
+					t.Log(canaryDiagnostic(source.Name(), e))
+					t.Fatal("official PubMed history fetch failed (no retries or bypass); see typed diagnostic")
 				}
 				if !page.Complete {
 					cursor, e := decodePubmedCursor(page.NextCursor)

@@ -12,11 +12,16 @@ import (
 )
 
 type workflowBoundary struct {
-	On   map[string]any `yaml:"on"`
-	Jobs map[string]struct {
-		If    string            `yaml:"if"`
-		Env   map[string]string `yaml:"env"`
-		Steps []struct {
+	On          map[string]any    `yaml:"on"`
+	Permissions map[string]string `yaml:"permissions"`
+	Jobs        map[string]struct {
+		If              string            `yaml:"if"`
+		Needs           any               `yaml:"needs"`
+		Permissions     any               `yaml:"permissions"`
+		ContinueOnError any               `yaml:"continue-on-error"`
+		Services        any               `yaml:"services"`
+		Env             map[string]string `yaml:"env"`
+		Steps           []struct {
 			Name            string            `yaml:"name"`
 			ID              string            `yaml:"id"`
 			If              string            `yaml:"if"`
@@ -156,4 +161,68 @@ func TestHistoricalQueryDiagnosticsAreRequired(t *testing.T) {
 			require.NotContains(t, step.If, "catalog_diagnostics")
 		}
 	}
+}
+
+// TestSixSourceManualProbeBoundary 固定手动探针预算和安全报告，不能扩展为自动采集或隐藏失败。
+func TestSixSourceManualProbeBoundary(t *testing.T) {
+	workflow := readWorkflowBoundary(t, "live-source-acceptance.yml")
+	require.Equal(t, map[string]string{"contents": "read"}, workflow.Permissions)
+	require.Len(t, workflow.Jobs, 2)
+	for _, job := range workflow.Jobs {
+		require.Nil(t, job.Needs, "live jobs must remain independent")
+		require.Empty(t, job.If)
+		require.Nil(t, job.Permissions)
+		require.Nil(t, job.ContinueOnError)
+	}
+	job, ok := workflow.Jobs["six-source-canary"]
+	require.True(t, ok)
+	require.Empty(t, job.Env)
+	require.Nil(t, job.Services)
+	commands := ""
+	for _, step := range job.Steps {
+		commands += step.Run + "\n"
+		require.Nil(t, step.ContinueOnError)
+		if strings.Contains(step.Run, "go test") {
+			require.Empty(t, step.If)
+			require.Equal(t, map[string]string{"GLEAN_LIVE_SOURCE_CANARY": "1", "GLEAN_LIVE_SOURCE": ""}, step.Env)
+			require.Contains(t, step.Run, "go test -json -tags=live ./internal/modules/monitor -run '^TestLiveSourceCanary$' -count=1 -timeout=10m")
+			require.Contains(t, step.Run, `status=$?`)
+			require.Contains(t, step.Run, `exit "$status"`)
+		}
+		if strings.Contains(step.Run, "live_canary_report.py") {
+			require.Equal(t, "always()", step.If)
+			require.Contains(t, step.Run, `"$GITHUB_STEP_SUMMARY"`)
+		}
+		if step.With["path"] != "" {
+			require.Equal(t, "${{ runner.temp }}/glean-canary-safe/summary.md", step.With["path"])
+			require.Equal(t, "always()", step.If)
+			require.Equal(t, "false", step.With["include-hidden-files"])
+		}
+	}
+	for _, forbidden := range []string{"secrets.", "--retry", "-failfast", "tee ", "cat ", "--demo", "psql", "curl", "npm", "CONTACT", "API_KEY"} {
+		require.NotContains(t, commands, forbidden)
+	}
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), ".github/workflows/live-source-acceptance.yml"))
+	require.NoError(t, err)
+	require.NotContains(t, string(body), "secrets.")
+	source, err := os.ReadFile(filepath.Join(repoRoot(t), "internal/modules/monitor/source_live_test.go"))
+	require.NoError(t, err)
+	code := string(source)
+	require.Equal(t, 2, strings.Count(code, "source.Fetch(ctx, req)"))
+	require.Contains(t, code, `if source.Name() == "pubmed" && !page.Complete {`)
+	require.Contains(t, code, "names := DefaultSourceNames()")
+	require.Contains(t, code, "PageSize: 1")
+	require.Contains(t, code, "Start: time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC), End: time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)")
+	require.Contains(t, code, "time.NewTimer(3 * time.Second)")
+	require.Contains(t, code, "time.Sleep(3 * time.Second)")
+	require.NotContains(t, code, "t.Parallel()")
+	require.Equal(t, 2, strings.Count(code, "for "), "only sources and normalized records loops, no request retries")
+	require.Contains(t, code, `Services: SourceHTTPServices("")`)
+	require.Contains(t, code, "SourceHTTPFactoryOptions()...")
+	transport, err := os.ReadFile(filepath.Join(repoRoot(t), "internal/modules/monitor/source_http.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(transport), `return []string{"crossref", "pubmed", "arxiv", "biorxiv", "europepmc", "medrxiv"}`)
+	require.Contains(t, string(transport), "Retry: httpclient.RetryConfig{Enabled: false, Count: 0}")
+	require.Contains(t, string(transport), "request.Response != nil")
+
 }
