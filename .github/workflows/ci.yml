@@ -63,6 +63,8 @@ jobs:
           fi
 
       - name: Test all Go packages, real PostgreSQL and complete historical data
+        env:
+          GLEAN_CATALOG_QUERY_DIAGNOSTICS: '1'
         run: |
           set -euo pipefail
           go test -json ./... -count=1 | tee "$RUNNER_TEMP/glean-go-test.jsonl"
@@ -74,6 +76,7 @@ jobs:
           module = sys.argv[2]
           required = {
               (module + "/internal/modules/catalog", "TestCatalogPostgresEndToEnd"),
+              (module + "/internal/modules/catalog", "TestCatalogHistoricalQueryDiagnostics"),
               (module + "/internal/modules/catalog", "TestCatalogLiveObservationPostgres"),
               (module + "/internal/modules/catalog", "TestHistoricalAbstractEnrichmentPostgres"),
               (module + "/internal/modules/catalog", "TestCatalogManagementPostgres"),
@@ -97,6 +100,34 @@ jobs:
               raise SystemExit("Required database/baseline tests did not pass: " + repr(sorted(missing)))
           print("Verified real PostgreSQL catalog, immutable source observations, durable monitor projection, migrations and every committed baseline shard. External live API canaries are separate.")
           PY
+
+      - name: Collect historical query diagnostics
+        if: always()
+        run: |
+          python3 - "$RUNNER_TEMP/glean-go-test.jsonl" "$RUNNER_TEMP/catalog-query-diagnostics.txt" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          source, destination = map(pathlib.Path, sys.argv[1:])
+          lines = []
+          if source.exists():
+              for line in source.read_text(encoding="utf-8").splitlines():
+                  event = json.loads(line)
+                  output = event.get("Output", "")
+                  if "CATALOG_DIAGNOSTIC " in output:
+                      lines.append(output[output.index("CATALOG_DIAGNOSTIC "):].rstrip())
+          destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("\n".join(lines) if lines else "No query samples collected; inspect the required test result.")
+          PY
+
+      - name: Preserve diagnostic samples (not a latency gate)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-query-diagnostics
+          path: ${{ runner.temp }}/catalog-query-diagnostics.txt
+          retention-days: 14
 
       - name: Recompute journal discovery coverage from every pinned historical shard
         run: python3 tools/journalregistry/compile.py --check

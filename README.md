@@ -138,6 +138,8 @@ npm run build
 npm run format:check
 ```
 
+完整历史查询的有界诊断、运行命令与测量边界见 [查询性能诊断](docs/glean/query-performance.md)。CI 保留查询耗时/SQL 次数样本，不设置硬件相关的毫秒通过门槛。
+
 CI 启动隔离 PostgreSQL 16，强制检查真实迁移、文献导入/查询、监控持久化和完整历史快照测试，不能用跳过数据库测试冒充通过。本地未设置 `INITRA_TEST_DATABASE_URL` 时，相关测试会明确跳过。常规 CI 的浏览器任务仅使用真实本地 Go API、PostgreSQL 和已提交的完整历史数据，分别验证桌面/手机，不请求外部文献服务。真实 Europe PMC 采集→入库→页面验收已移到 Actions 的 **Manual live source acceptance**，只有手动触发才运行，不参与 push/PR 构建测试；外部源不可用时该手动验收明确失败，不回退到模拟记录或吞掉失败。Go 外部来源 canary 同样受 `live` build tag 与显式环境变量保护，默认测试不编译它。报告在上传前清理临时认证信息；截图用于实际布局检查。真实 LLM 接入仍待后续配置。
 
 ## 来源与覆盖

@@ -60,39 +60,11 @@ func (s *catalogTestSavepoint) Rollback() error {
 
 // TestCatalogPostgresEndToEnd 在真实 PostgreSQL 验证迁移、幂等导入、去重、筛选及个人状态隔离。
 func TestCatalogPostgresEndToEnd(t *testing.T) {
-	dsn := os.Getenv("INITRA_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("INITRA_TEST_DATABASE_URL required for real PostgreSQL test")
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	db, err := sql.Open("postgres", dsn)
-	require.NoError(t, err)
-	defer db.Close()
-	tx, err := db.BeginTx(ctx, nil)
-	require.NoError(t, err)
-	defer tx.Rollback()
-	schema := "glean_catalog_test_" + strings.ReplaceAll(time.Now().Format("20060102150405.000000000"), ".", "_")
-	_, err = tx.ExecContext(ctx, `CREATE SCHEMA "`+schema+`"`)
-	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, `SET LOCAL search_path TO "`+schema+`"`)
-	require.NoError(t, err)
-	dir, err := atlas.NewLocalDir(filepath.Join("..", "..", "..", "db", "migrations"))
-	require.NoError(t, err)
-	files, err := dir.Files()
-	require.NoError(t, err)
-	for _, file := range files {
-		_, err = tx.ExecContext(ctx, string(file.Bytes()))
-		require.NoError(t, err, file.Name())
-	}
-	generator, err := idgen.ConfigureDefault(31)
-	require.NoError(t, err)
-	_ = generator
-	driver := &catalogTestDriver{Driver: entsql.NewDriver(dialect.Postgres, entsql.Conn{ExecQuerier: tx}), tx: tx}
-	client := ent.NewClient(ent.Driver(driver))
-	client.Use(entx.RejectDeleteHook())
+	client, _, _ := newCatalogPostgresTest(t, ctx)
 	for _, id := range []idgen.ID{7, 8} {
-		_, err = client.SysUser.Create().SetID(id).SetUsername("catalog-user-" + id.String()).SetPasswordHash("test-only-not-a-login-credential").Save(ctx)
+		_, err := client.SysUser.Create().SetID(id).SetUsername("catalog-user-" + id.String()).SetPasswordHash("test-only-not-a-login-credential").Save(ctx)
 		require.NoError(t, err)
 	}
 	service := NewService(client)
@@ -200,4 +172,39 @@ func TestCatalogPostgresEndToEnd(t *testing.T) {
 		}
 	}
 	require.Error(t, client.GleanPaper.DeleteOneID(first.PaperID).Exec(ctx), "historical records must reject physical deletion")
+}
+
+// newCatalogPostgresTest 复用真实迁移与外层事务，清理时回滚整个隔离 schema。
+func newCatalogPostgresTest(t *testing.T, ctx context.Context) (*ent.Client, *sql.Tx, *catalogTestDriver) {
+	t.Helper()
+	dsn := os.Getenv("INITRA_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("INITRA_TEST_DATABASE_URL required for real PostgreSQL test")
+	}
+	db, err := sql.Open("postgres", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	tx, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback() })
+	schema := "glean_catalog_test_" + strings.ReplaceAll(time.Now().Format("20060102150405.000000000"), ".", "_")
+	_, err = tx.ExecContext(ctx, `CREATE SCHEMA "`+schema+`"`)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, `SET LOCAL search_path TO "`+schema+`"`)
+	require.NoError(t, err)
+	dir, err := atlas.NewLocalDir(filepath.Join("..", "..", "..", "db", "migrations"))
+	require.NoError(t, err)
+	files, err := dir.Files()
+	require.NoError(t, err)
+	for _, file := range files {
+		_, err = tx.ExecContext(ctx, string(file.Bytes()))
+		require.NoError(t, err, file.Name())
+	}
+	generator, err := idgen.ConfigureDefault(31)
+	require.NoError(t, err)
+	_ = generator
+	driver := &catalogTestDriver{Driver: entsql.NewDriver(dialect.Postgres, entsql.Conn{ExecQuerier: tx}), tx: tx}
+	client := ent.NewClient(ent.Driver(driver))
+	client.Use(entx.RejectDeleteHook())
+	return client, tx, driver
 }

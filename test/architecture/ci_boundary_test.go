@@ -95,3 +95,18 @@ func TestExternalGoCanaryIsExcludedFromDefaultSuite(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, included)
 }
+
+// TestHistoricalQueryDiagnosticsAreRequired 保留真实全快照测量，不允许静默跳过或忽略失败。
+func TestHistoricalQueryDiagnosticsAreRequired(t *testing.T) {
+	workflow := readWorkflowBoundary(t, "ci.yml")
+	found := false
+	for _, step := range workflow.Jobs["verify"].Steps {
+		if strings.Contains(step.Run, "go test -json ./... -count=1") {
+			found = true
+			require.Equal(t, "1", step.Env["GLEAN_CATALOG_QUERY_DIAGNOSTICS"])
+			require.Contains(t, step.Run, "TestCatalogHistoricalQueryDiagnostics")
+			require.Nil(t, step.ContinueOnError)
+		}
+	}
+	require.True(t, found)
+}
