@@ -371,6 +371,17 @@ func (s *Service) Venues(ctx context.Context, q, topic string) ([]VenueVO, error
 
 // Facets 在数据库过滤后的集合上聚合，每个值按全局论文标识去重。
 func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
+	return s.facetsWithBatchSize(ctx, q, facetAssociationBatchSize)
+}
+
+// 五类关联查询按论文 ID 有界加载；5000 为 PostgreSQL 参数上限留足固定筛选参数空间。
+const facetAssociationBatchSize = 5000
+
+// 内部参数仅用于同库对照测试，不暴露配置或改变过滤/聚合语义。
+func (s *Service) facetsWithBatchSize(ctx context.Context, q PaperQuery, batchSize int) (FacetsVO, error) {
+	if batchSize < 1 || batchSize > facetAssociationBatchSize {
+		batchSize = facetAssociationBatchSize
+	}
 	if err := s.topicExists(ctx, q.Topic); err != nil {
 		return FacetsVO{}, err
 	}
@@ -385,7 +396,7 @@ func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
 	if err != nil {
 		return FacetsVO{}, bizerrors.WrapDBContext(ctx, err, "load facet papers failed")
 	}
-	if err := s.applyFacetCorrections(ctx, papers); err != nil {
+	if err := s.applyFacetCorrections(ctx, papers, batchSize); err != nil {
 		return FacetsVO{}, err
 	}
 	counts := map[string]map[string]map[idgen.ID]bool{}
@@ -412,8 +423,8 @@ func (s *Service) Facets(ctx context.Context, q PaperQuery) (FacetsVO, error) {
 	}
 	dimensionKeys := map[string]bool{}
 	// 限制 IN 参数批次，避免大型目录超出 PostgreSQL 参数数量限制。
-	for start := 0; start < len(ids); start += 1000 {
-		end := min(start+1000, len(ids))
+	for start := 0; start < len(ids); start += batchSize {
+		end := min(start+batchSize, len(ids))
 		batch := ids[start:end]
 		query := s.client.GleanMembership.Query().Where(gleanmembership.PaperIDIn(batch...))
 		if q.Topic != "" {

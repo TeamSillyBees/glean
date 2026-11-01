@@ -111,9 +111,9 @@ func (s *Service) attachManagement(ctx context.Context, items []PaperVO) error {
 	}
 	return nil
 }
-func (s *Service) applyFacetCorrections(ctx context.Context, papers []*ent.GleanPaper) error {
-	for start := 0; start < len(papers); start += 1000 {
-		end := min(start+1000, len(papers))
+func (s *Service) applyFacetCorrections(ctx context.Context, papers []*ent.GleanPaper, batchSize int) error {
+	for start := 0; start < len(papers); start += batchSize {
+		end := min(start+batchSize, len(papers))
 		ids := []idgen.ID{}
 		index := map[idgen.ID]*ent.GleanPaper{}
 		for _, p := range papers[start:end] {

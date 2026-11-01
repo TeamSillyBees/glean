@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -155,19 +156,25 @@ func TestCatalogHistoricalQueryDiagnostics(t *testing.T) {
 		{"facets/topic", PaperQuery{Topic: "biomed-ai", CollectionScope: "all"}},
 		{"facets/combined", combined},
 	} {
-		cases = append(cases, scenario{item.name, func(t *testing.T) int {
-			facets, err := measured.Facets(ctx, item.query)
-			require.NoError(t, err)
-			require.NotEmpty(t, facets.ReadStatuses)
-			total := 0
-			for _, facet := range facets.ReadStatuses {
-				total += facet.Count
-			}
-			if item.name == "facets/all" {
-				require.Equal(t, papers, total)
-			}
-			return total
-		}})
+		// Both candidates share the same imported snapshot and compare every field and slice order.
+		expected, err := measured.facetsWithBatchSize(ctx, item.query, 1000)
+		require.NoError(t, err)
+		for _, batchSize := range []int{1000, facetAssociationBatchSize} {
+			cases = append(cases, scenario{fmt.Sprintf("%s/batch-%d", item.name, batchSize), func(t *testing.T) int {
+				facets, err := measured.facetsWithBatchSize(ctx, item.query, batchSize)
+				require.NoError(t, err)
+				require.Equal(t, expected, facets, "complete facets, including ordering, must be identical")
+				require.NotEmpty(t, facets.ReadStatuses)
+				total := 0
+				for _, facet := range facets.ReadStatuses {
+					total += facet.Count
+				}
+				if item.name == "facets/all" {
+					require.Equal(t, papers, total)
+				}
+				return total
+			}})
+		}
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
