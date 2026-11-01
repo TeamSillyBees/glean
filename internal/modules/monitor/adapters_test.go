@@ -208,7 +208,7 @@ func TestBioRxivPagingUsesRawCountAndNoInventedFormalDate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Complete || page.NextCursor != "2" || len(page.Records) != 1 {
+	if page.Complete || rxivOffset(t, page.NextCursor) != 2 || len(page.Records) != 1 {
 		t.Fatalf("filtered records must not affect source cursor: %+v", page)
 	}
 	r := page.Records[0]
@@ -383,7 +383,7 @@ func TestBioRxivRequiresEachContextGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Records) != 1 || page.NextCursor != "2" {
+	if len(page.Records) != 1 || rxivOffset(t, page.NextCursor) != 2 {
 		t.Fatal("a discovery hit must match at least one term in each group, without changing upstream page offsets")
 	}
 	req.Template.TermGroups[1] = []string{"digital twin", "world model"}
@@ -391,7 +391,7 @@ func TestBioRxivRequiresEachContextGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Records) != 0 || page.NextCursor != "2" {
+	if len(page.Records) != 0 || rxivOffset(t, page.NextCursor) != 2 {
 		t.Fatal("a language-agent-only hit must not bypass required context group")
 	}
 }

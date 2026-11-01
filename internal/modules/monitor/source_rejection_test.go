@@ -45,7 +45,7 @@ func TestJSONSourcesQuarantineOneItemAndKeepTwoGoodRecords(t *testing.T) {
 					t.Fatalf("raw count lost: %+v %v", c, e)
 				}
 			default:
-				if page.NextCursor != "3" {
+				if rxivOffset(t, page.NextCursor) != 3 {
 					t.Fatal("preprint cursor must count rejected items")
 				}
 			}

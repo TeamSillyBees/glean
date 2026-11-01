@@ -136,7 +136,7 @@ func TestCapturedBioAndMedRxivUseActualThirtyItemPages(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			if len(page.Records) != 30 || page.NextCursor != "30" || page.Complete {
+			if len(page.Records) != 30 || rxivOffset(t, page.NextCursor) != 30 || page.Complete {
 				t.Fatalf("provider returns 30 not hard-coded 100: %+v", page)
 			}
 			for _, r := range page.Records {
@@ -187,10 +187,10 @@ func TestCapturedBioRxivExplicitEmptyInterval(t *testing.T) {
 	if e != nil || !page.Complete || len(page.Records) != 0 {
 		t.Fatalf("official no posts found response should complete empty interval: %+v %v", page, e)
 	}
-	req.Cursor = "30"
+	req.Cursor = (rxivCursor{Offset: 30, Total: 40}).encode()
 	page, e = NewBioRxivSource(&adapterExecutor{responses: []*httpclient.Response{capturedResponse(t, "biorxiv-empty-live.json")}}).Fetch(context.Background(), req)
-	if e == nil || page.Complete {
-		t.Fatal("empty continuation cannot erase prior pagination evidence")
+	if e != nil || page.Complete || page.NextCursor == "" {
+		t.Fatal("empty continuation must replay prior pagination evidence")
 	}
 }
 

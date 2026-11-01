@@ -424,24 +424,68 @@ func xmlText(value string) string {
 	return strings.Join(strings.Fields(out.String()), " ")
 }
 
-func parseOffset(cursor string) (int, error) {
-	if cursor == "" {
-		return 0, nil
+// rxivCursor 只保存在内部；上游路径仍使用数值 offset。
+type rxivCursor struct {
+	Offset   int `json:"offset"`
+	Total    int `json:"total"`
+	Restarts int `json:"restarts"`
+}
+
+func (c rxivCursor) encode() string {
+	b, _ := json.Marshal(c)
+	return "rx1:" + base64.RawURLEncoding.EncodeToString(b)
+}
+
+func decodeRxivCursor(value string) (rxivCursor, error) {
+	var wire struct {
+		Offset   *int `json:"offset"`
+		Total    *int `json:"total"`
+		Restarts *int `json:"restarts"`
 	}
-	offset, err := strconv.Atoi(cursor)
-	if err != nil || offset < 0 {
-		return 0, malformed("invalid numeric source cursor")
+	invalid := malformed("invalid preprint pagination cursor")
+	if len(value) > 1024 || !strings.HasPrefix(value, "rx1:") {
+		return rxivCursor{}, invalid
 	}
-	return offset, nil
+	b, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(value, "rx1:"))
+	if err != nil || json.Unmarshal(b, &wire) != nil || wire.Offset == nil || wire.Total == nil || wire.Restarts == nil {
+		return rxivCursor{}, invalid
+	}
+	c := rxivCursor{Offset: *wire.Offset, Total: *wire.Total, Restarts: *wire.Restarts}
+	if c.Offset < 0 || c.Restarts < 0 || c.Restarts > 3 || (c.Total == -1 && c.Offset != 0) || c.Total < -1 || (c.Total >= 0 && (c.Offset == 0 || c.Offset >= c.Total)) {
+		return rxivCursor{}, invalid
+	}
+	return c, nil
+}
+
+func (c rxivCursor) restart() (Page, error) {
+	if c.Restarts >= 3 {
+		return Page{}, malformed("preprint index changed during three restarts; incomplete fixed window retained")
+	}
+	return Page{NextCursor: (rxivCursor{Total: -1, Restarts: c.Restarts + 1}).encode()}, nil
 }
 
 // bioRxiv 日期窗口返回新帖和版本；published 字段仅为关联 DOI，不含可证明正式发表的日期。
 // 官方接口：https://api.biorxiv.org/
 func (s *remoteSource) biorxiv(ctx context.Context, req FetchRequest) (Page, error) {
-	offset, err := parseOffset(req.Cursor)
-	if err != nil {
-		return Page{}, err
+	cursor := rxivCursor{Total: -1}
+	if req.Cursor != "" {
+		// 旧 offset 没有原始总数，不能证明已读前缀仍有效；先持久化有界重放。
+		if !strings.HasPrefix(req.Cursor, "rx1:") {
+			if len(req.Cursor) > 20 || strings.Trim(req.Cursor, "0123456789") != "" {
+				return Page{}, malformed("invalid preprint pagination cursor")
+			}
+			if _, err := strconv.Atoi(req.Cursor); err != nil {
+				return Page{}, malformed("invalid preprint pagination cursor")
+			}
+			return cursor.restart()
+		}
+		var err error
+		cursor, err = decodeRxivCursor(req.Cursor)
+		if err != nil {
+			return Page{}, err
+		}
 	}
+	offset := cursor.Offset
 	body, err := s.get(ctx, "/details/"+s.name+"/"+dateOnly(req.Window.Start)+"/"+dateOnly(req.Window.End.Add(-time.Nanosecond))+"/"+strconv.Itoa(offset)+"/json", nil)
 	if err != nil {
 		return Page{}, err
@@ -458,9 +502,14 @@ func (s *remoteSource) biorxiv(ctx context.Context, req FetchRequest) (Page, err
 	if json.Unmarshal(body, &r) != nil || len(r.Messages) != 1 || r.Collection == nil {
 		return Page{}, malformed("invalid preprint API envelope")
 	}
-	// 官方空区间响应无 count/total/cursor，只有明确的 no posts found；非初始页仍失败关闭。
-	if r.Messages[0].Status == "no posts found" && offset == 0 && len(r.Collection) == 0 {
-		return Page{Complete: true}, nil
+	// 官方空区间响应无 count/total/cursor，只有明确的 no posts found；续页出现时按总数漂移有界重放。
+	if r.Messages[0].Status == "no posts found" && len(r.Collection) == 0 {
+		if cursor.Total >= 0 {
+			return cursor.restart()
+		}
+		if offset == 0 {
+			return Page{Complete: true}, nil
+		}
 	}
 	if r.Messages[0].Status != "ok" {
 		return Page{}, malformed("preprint API returned non-success status")
@@ -473,7 +522,11 @@ func (s *remoteSource) biorxiv(ctx context.Context, req FetchRequest) (Page, err
 	if err != nil || responseOffset != offset {
 		return Page{}, malformed("invalid bioRxiv result cursor")
 	}
-	if offset+len(r.Collection) > total {
+	// 必须先检测总数漂移；缩至 offset 以下也需重放，而非误报完成。
+	if cursor.Total >= 0 && cursor.Total != total {
+		return cursor.restart()
+	}
+	if offset > total || len(r.Collection) > total-offset {
 		return Page{}, malformed("bioRxiv page exceeds declared total")
 	}
 	if len(r.Collection) == 0 && offset < total {
@@ -521,7 +574,8 @@ func (s *remoteSource) biorxiv(ctx context.Context, req FetchRequest) (Page, err
 	next := offset + len(r.Collection)
 	page.Complete = next >= total
 	if !page.Complete {
-		page.NextCursor = strconv.Itoa(next)
+		cursor.Offset, cursor.Total = next, total
+		page.NextCursor = cursor.encode()
 	}
 	return page, nil
 }
