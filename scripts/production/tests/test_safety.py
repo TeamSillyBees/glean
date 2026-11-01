@@ -34,6 +34,34 @@ class GuardTests(unittest.TestCase):
         with patch.dict(os.environ, {'CHECK_URL': 'postgres://u:p@127.0.0.1/db?sslmode=disable', 'GLEAN_ALLOW_LOCAL_TEST_DB': '1'}):
             guard.database('CHECK_URL')
 
+    def test_database_ports_reject_invalid_values_before_client_actions(self):
+        for authority in ('db.example:0', 'db.example:65536', 'db.example:not-a-port',
+                          'db.example:5432:5433', '[::1'):
+            url = f'postgres://u:never-log-this-secret@{authority}/glean?sslmode=verify-full'
+            with self.subTest(authority=authority), patch.dict(os.environ, {'DATABASE_URL': url}), patch('subprocess.run') as run:
+                for action in (lambda: guard.database('DATABASE_URL'),
+                               lambda: guard.libpq('DATABASE_URL', 'pg_dump'),
+                               lambda: guard.compose('/release', 'config', '--quiet')):
+                    with self.assertRaises(ValueError) as result:
+                        action()
+                    self.assertNotIn('never-log-this-secret', str(result.exception))
+                run.assert_not_called()
+
+    def test_database_ports_preserve_defaults_and_valid_explicit_values(self):
+        for suffix, port in (('', 5432), (':1', 1), (':5432', 5432), (':5444', 5444), (':65535', 65535)):
+            values = {'DATABASE_URL': f'postgres://u:p@db.example{suffix}/glean?sslmode=verify-full',
+                      'GLEAN_DATA_DIR': '/test/data', 'GLEAN_ORIGINAL_ARCHIVE_DIR': '/test/originals'}
+            with self.subTest(suffix=suffix), patch.dict(os.environ, values), patch('subprocess.run') as run:
+                guard.database('DATABASE_URL')
+                self.assertEqual(guard.deployment_identity()['database']['port'], port)
+                run.return_value.returncode = 0
+                for action, setting in ((lambda: guard.libpq('DATABASE_URL', 'pg_dump'), 'PGPORT'),
+                                        (lambda: guard.compose('/release', 'config', '--quiet'), 'GLEAN_DATABASE_PORT')):
+                    with self.assertRaises(SystemExit) as result:
+                        action()
+                    self.assertEqual(result.exception.code, 0)
+                    self.assertEqual(run.call_args.kwargs['env'][setting], str(port))
+
     def test_archive_rejects_traversal_absolute_paths_links_and_special_files(self):
         for name, kind in (('../escape', tarfile.REGTYPE), ('/absolute', tarfile.REGTYPE),
                            ('link', tarfile.SYMTYPE), ('hard', tarfile.LNKTYPE), ('device', tarfile.CHRTYPE)):
@@ -205,6 +233,26 @@ if name == os.environ.get('TEST_FAIL'): sys.exit(1)
         self.assertNotIn('--clean', log)
         self.assertNotIn('--dbname', log)
         self.assertFalse((self.work/'state/current.json').exists())
+
+    def test_invalid_database_ports_fail_before_deployment_or_backup_actions(self):
+        ops = self.work/'ops.env'
+        original = ops.read_text()
+        for authority in ('db.example:0', 'db.example:65536', 'db.example:not-a-port',
+                          'db.example:5432:5433', '[::1'):
+            url = f'postgres://operator:never-log-this-secret@{authority}/glean?sslmode=verify-full'
+            ops.write_text(original + 'DATABASE_URL=' + shlex.quote(url) + '\n')
+            for script, args in (('deploy.sh', [self.sha, *self.images]),
+                                 ('backup.sh', ['--writers-stopped'])):
+                with self.subTest(authority=authority, script=script):
+                    log = self.work/'commands.log'
+                    before_log = log.read_bytes() if log.exists() else None
+                    before_backups = list((self.work/'backups').iterdir()) if (self.work/'backups').exists() else []
+                    result = subprocess.run(['bash', str(self.release/'scripts/production'/script), *args],
+                                            env=self.env, capture_output=True, text=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn('never-log-this-secret', result.stdout + result.stderr)
+                    self.assertEqual(log.read_bytes() if log.exists() else None, before_log)
+                    self.assertEqual(list((self.work/'backups').iterdir()), before_backups)
 
     def test_revision_mismatch_fails_before_any_server_command(self):
         (self.release/'deploy/REVISION').write_text('d'*40)

@@ -22,7 +22,7 @@ def database(name):
         if url.scheme not in ("postgres", "postgresql") or not url.hostname or not url.path.strip("/") or not url.username:
             raise ValueError
         if (url.fragment or '%' in url.hostname or not url.password or
-                not (1 <= (url.port or 5432) <= 65535) or
+                not (1 <= (5432 if url.port is None else url.port) <= 65535) or
                 any(len(values) != 1 for values in params.values())):
             raise ValueError
         if any('\x00' in unquote(value or '') for value in (url.username, url.password, url.path)):
@@ -79,7 +79,7 @@ def libpq(name, tool, *args):
     # PGDATABASE is a database NAME, not a connection URI. Remove inherited
     # libpq defaults/services/options that could redirect this canonical target.
     environment = {key: value for key, value in os.environ.items() if not key.startswith("PG")}
-    environment.update({"PGHOST": url.hostname, "PGPORT": str(url.port or 5432),
+    environment.update({"PGHOST": url.hostname, "PGPORT": str(5432 if url.port is None else url.port),
                         "PGDATABASE": unquote(url.path[1:]),
                         "PGUSER": unquote(url.username), "PGPASSWORD": unquote(url.password),
                         "PGSSLMODE": params["sslmode"][0], "PGPASSFILE": "/dev/null"})
@@ -100,7 +100,7 @@ def compose(root, *args):
     # These explicit service.environment values override env_file and YAML settings.
     # The connection used by dump/migration is also the backend's only DB identity.
     environment.update({"GLEAN_DATABASE_HOST": url.hostname,
-                        "GLEAN_DATABASE_PORT": str(url.port or 5432),
+                        "GLEAN_DATABASE_PORT": str(5432 if url.port is None else url.port),
                         "GLEAN_DATABASE_NAME": unquote(url.path[1:]),
                         "GLEAN_DATABASE_USER": unquote(url.username),
                         "GLEAN_DATABASE_PASSWORD": unquote(url.password or "")})
@@ -124,7 +124,7 @@ def distinct_restore_database():
     database("GLEAN_RESTORE_DATABASE_URL")
     def identity(name):
         url = urlsplit(os.environ[name])
-        return (url.hostname.lower().rstrip('.'), url.port or 5432, unquote(url.path[1:]))
+        return (url.hostname.lower().rstrip('.'), 5432 if url.port is None else url.port, unquote(url.path[1:]))
     if identity("DATABASE_URL") == identity("GLEAN_RESTORE_DATABASE_URL"):
         raise ValueError("Restore database must differ from the configured source host/port/database, not merely credentials or options.")
 
@@ -139,7 +139,7 @@ def restore_target(path):
 
 def deployment_identity():
     url = urlsplit(os.environ["DATABASE_URL"])
-    return {"database": {"host": url.hostname, "port": url.port or 5432,
+    return {"database": {"host": url.hostname, "port": 5432 if url.port is None else url.port,
                          "user": unquote(url.username), "name": unquote(url.path[1:])},
             "data": str(Path(os.environ["GLEAN_DATA_DIR"]).resolve()),
             "originals": str(Path(os.environ["GLEAN_ORIGINAL_ARCHIVE_DIR"]).resolve())}
