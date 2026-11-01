@@ -7,7 +7,8 @@ import { Badge, Empty, ErrorState, Loading } from './common'
 import { Button } from './ui/button'
 import type { Run } from './run-types'
 import { RunRecovery } from './run-recovery'
-export { SourcesView, FreshnessStrip } from './source-health'
+export { SourcesView } from './source-health'
+export { FreshnessStrip } from './freshness-strip'
 interface SearchTemplate {
   id: string
   version: string

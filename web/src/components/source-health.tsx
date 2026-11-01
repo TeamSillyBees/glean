@@ -1,55 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
-import {
-  ArrowUpRight,
-  Clock3,
-  Database,
-  Radio,
-  RefreshCw,
-  ShieldCheck,
-  Timer,
-  TriangleAlert,
-} from 'lucide-react'
-import { request } from '../lib/api'
+import { Clock3, Database, Radio, RefreshCw, ShieldCheck, Timer, TriangleAlert } from 'lucide-react'
+import { hasDate, useSources } from '../lib/source-query'
+export type { SourcesData, Checkpoint } from '../lib/source-query'
 import { date, number, topicLabels } from '../lib/utils'
 import type { TopicSlug } from '../lib/types'
 import { Badge, Empty, ErrorState, Loading } from './common'
 import { Button } from './ui/button'
-export interface Checkpoint {
-  source: string
-  lastAcquiredAt?: string
-  quarantined?: number
-  handledThrough?: string
-  acquiredThrough: string
-  reviewedThrough: string
-  publishedThrough: string
-  nextRetryAt: string
-  lastError?: string
-  consecutiveFailures: number
-  enabled?: boolean
-  acquisitionMode?: string
-  topicAcquiredThrough?: Record<string, string> | null
-  lagSeconds?: number
-  blocked?: boolean
-  lastStatusCode?: number
-  coreBackfillPending?: boolean
-}
-interface Schedule {
-  anchorUtc: string
-  nextRunUtc: string
-  everyHours: number
-  completedRuns: number
-  realFetchEnabled: boolean
-  schedulerEnabled?: boolean
-  acquisitionMode?: string
-  reviewMode?: string
-}
-export interface SourcesData {
-  counts?: { quarantinedCandidates?: number }
-  items: Checkpoint[]
-  schedule: Schedule
-}
-const hasDate = (value?: string) =>
-  !!value && !value.startsWith('0001-') && Number.isFinite(Date.parse(value))
 const checkpointDate = (value?: string) => (hasDate(value) ? date(value) : '尚未完成')
 function timestamp(value?: string) {
   if (!hasDate(value)) return '尚未完成'
@@ -71,45 +26,6 @@ function lag(seconds?: number) {
   if (seconds < 3600) return `${Math.max(0, Math.floor(seconds / 60))} 分钟`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时`
   return `${Math.floor(seconds / 86400)} 天 ${Math.floor((seconds % 86400) / 3600)} 小时`
-}
-function useSources() {
-  return useQuery({
-    queryKey: ['sources'],
-    queryFn: ({ signal }) => request<SourcesData>('/api/v1/monitor/sources', { signal }),
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
-  })
-}
-export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: () => void }) {
-  const query = useSources()
-  const items = query.data?.items || []
-  const enabled = items.filter((item) => item.enabled !== false)
-  const completed = enabled.filter((item) => hasDate(item.topicAcquiredThrough?.[topic]))
-  const failures = enabled.filter(
-    (item) => item.blocked || item.consecutiveFailures > 0 || (item.quarantined || 0) > 0,
-  ).length
-  return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b py-3 text-xs text-muted-foreground">
-      <span className="flex items-center gap-1.5">
-        <Radio className="size-3.5 text-primary" />
-        {query.isLoading
-          ? '正在读取来源进度…'
-          : query.isError
-            ? '来源进度暂不可用'
-            : completed.length
-              ? `${completed.length} / ${enabled.length} 个启用来源已完成本主题采集窗口`
-              : '本主题尚无完整采集窗口'}
-      </span>
-      {failures > 0 && <span className="text-amber-700">{failures} 个来源待处理</span>}
-      <button
-        onClick={onOpen}
-        className="ml-auto inline-flex min-h-8 items-center gap-1 rounded px-1 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        查看来源进度
-        <ArrowUpRight className="size-3" />
-      </button>
-    </div>
-  )
 }
 export function SourcesView({
   topic,

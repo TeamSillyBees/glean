@@ -45,17 +45,31 @@ import { Select } from './components/ui/select'
 import { FilterCombobox } from './components/ui/filter-combobox'
 import { Tooltip, TooltipProvider } from './components/ui/tooltip'
 import { PasswordChangeDialog } from './components/password-change'
-import { QuarantineView } from './components/quarantine'
-import { UsersView } from './components/users'
-import { TopicsView } from './components/topics-management'
 import { PaperCard, PaperDetail } from './components/papers'
-import {
-  FreshnessStrip,
-  RunsView,
-  SourcesView,
-  TemplatesView,
-  VenuesView,
-} from './components/monitor'
+import { FreshnessStrip } from './components/freshness-strip'
+import { deferredView } from './components/deferred-view'
+
+const QuarantineView = deferredView(async () => ({
+  default: (await import('./components/quarantine')).QuarantineView,
+}))
+const UsersView = deferredView(async () => ({
+  default: (await import('./components/users')).UsersView,
+}))
+const TopicsView = deferredView(async () => ({
+  default: (await import('./components/topics-management')).TopicsView,
+}))
+const SourcesView = deferredView(async () => ({
+  default: (await import('./components/source-health')).SourcesView,
+}))
+const RunsView = deferredView(async () => ({
+  default: (await import('./components/monitor')).RunsView,
+}))
+const TemplatesView = deferredView(async () => ({
+  default: (await import('./components/monitor')).TemplatesView,
+}))
+const VenuesView = deferredView(async () => ({
+  default: (await import('./components/monitor')).VenuesView,
+}))
 
 type View =
   'papers' | 'sources' | 'runs' | 'templates' | 'venues' | 'quarantine' | 'users' | 'topics'
@@ -488,6 +502,15 @@ function WorkspaceReady({
       filters.inclusionStatus,
       filters.reviewStatus,
     ].filter(Boolean).length
+  const hasTopicCounts =
+    topics.isSuccess && paperQuery.isSuccess && activeCount === 0 && filters.hidden !== 'only'
+  const emptyTopic = hasTopicCounts && activeTopic?.membershipCount === 0
+  const emptyCurated =
+    hasTopicCounts &&
+    filters.collectionScope === 'curated' &&
+    (activeTopic?.membershipCount ?? 0) > 0 &&
+    activeTopic?.curatedCount === 0
+  const hasCandidates = (activeTopic?.candidateCount ?? 0) > 0
   const reset = () => {
     setFilters({ ...defaultFilters, topic: filters.topic, hidden: filters.hidden })
     setSearch('')
@@ -545,7 +568,7 @@ function WorkspaceReady({
           已隐藏
         </NavButton>
       </div>
-      <div className="sidebar-section-label">我的研究主题</div>
+      <div className="sidebar-section-label">共享研究主题</div>
       <div className="space-y-1">
         {(topics.data?.items || []).map((topic) => {
           const { slug, name: label } = topic
@@ -943,21 +966,45 @@ function WorkspaceReady({
                 ) : !paperQuery.data?.items?.length ? (
                   <Empty
                     title={
-                      filters.collectionScope === 'pending' && activeCount === 0
-                        ? '暂无待审核记录'
-                        : undefined
+                      emptyTopic
+                        ? '这个主题还没有论文'
+                        : emptyCurated
+                          ? '这个主题暂无精选论文'
+                          : filters.collectionScope === 'pending' && activeCount === 0
+                            ? '暂无待审核记录'
+                            : undefined
                     }
                     description={
-                      filters.collectionScope === 'pending' && activeCount === 0
-                        ? '新发现及手动转回待审核的记录会显示在这里。原始历史待核资料仍可在「全部记录」中查看。'
-                        : filters.hidden === 'only' && activeCount === 0
-                          ? '当前主题暂无隐藏记录。你可以在论文详情里管理可见性。'
-                          : '试试减少筛选条件，或换一个关键词。'
+                      emptyTopic
+                        ? `保存主题不会启动扫描。论文将在后端采集并写入目录后显示；可查看来源进度了解采集情况。${activeTopic?.searchEnabled === false ? '此主题已暂停后续检索，请联系管理员确认是否恢复。' : ''}`
+                        : emptyCurated
+                          ? hasCandidates
+                            ? '已有待审核记录，审核纳入后会出现在精选目录。'
+                            : '主题中已有其他记录，可在全部记录中查看；不代表已纳入精选目录。'
+                          : filters.collectionScope === 'pending' && activeCount === 0
+                            ? '新发现及手动转回待审核的记录会显示在这里。原始历史待核资料仍可在「全部记录」中查看。'
+                            : filters.hidden === 'only' && activeCount === 0
+                              ? '当前主题暂无隐藏记录。你可以在论文详情里管理可见性。'
+                              : '试试减少筛选条件，或换一个关键词。'
                     }
                   >
-                    <Button variant="outline" size="sm" onClick={reset}>
-                      {activeCount > 0 ? '清除筛选' : '返回精选目录'}
-                    </Button>
+                    {emptyTopic ? (
+                      <Button variant="outline" size="sm" onClick={() => navigate('sources')}>
+                        查看采集进度
+                      </Button>
+                    ) : emptyCurated ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => change('collectionScope', hasCandidates ? 'pending' : 'all')}
+                      >
+                        {hasCandidates ? '查看待审核记录' : '查看全部记录'}
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={reset}>
+                        {activeCount > 0 ? '清除筛选' : '返回精选目录'}
+                      </Button>
+                    )}
                   </Empty>
                 ) : (
                   <>

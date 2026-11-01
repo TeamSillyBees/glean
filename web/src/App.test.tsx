@@ -12,6 +12,9 @@ let currentTopics: typeof topics
 let currentPaper: Paper
 let saved: Record<string, unknown>
 let paths: string[]
+let emptyPapers: boolean
+let failTopics: boolean
+let topicsGate: Promise<Response> | null
 let failPapers: boolean
 let failFacets: boolean
 let facetsGate: Promise<Response> | null
@@ -29,6 +32,9 @@ beforeEach(() => {
   currentPaper = structuredClone(paper)
   saved = {}
   paths = []
+  emptyPapers = false
+  failTopics = false
+  topicsGate = null
   failPapers = false
   failFacets = false
   facetsGate = null
@@ -56,7 +62,11 @@ beforeEach(() => {
         currentTopics.push(topic)
         return ok(topic)
       }
-      if (url.pathname.endsWith('/topics')) return ok({ items: currentTopics })
+      if (url.pathname.endsWith('/topics')) {
+        if (failTopics)
+          return new Response(JSON.stringify({ message: '主题服务不可用' }), { status: 503 })
+        return topicsGate || ok({ items: currentTopics })
+      }
       if (url.pathname.endsWith('/preferences')) {
         if (init?.method === 'PUT') saved = JSON.parse(String(init.body)).filters
         return ok({ filters: saved })
@@ -76,7 +86,10 @@ beforeEach(() => {
           return new Response(JSON.stringify({ message: '测试后端不可用' }), { status: 503 })
         const hiddenMatches =
           url.searchParams.get('hidden') === 'only' ? currentPaper.hidden : !currentPaper.hidden
-        const items = url.searchParams.get('q') === '不存在' || !hiddenMatches ? [] : [currentPaper]
+        const items =
+          emptyPapers || url.searchParams.get('q') === '不存在' || !hiddenMatches
+            ? []
+            : [currentPaper]
         return ok({
           items,
           total: items.length,
@@ -120,9 +133,85 @@ async function signIn(user: ReturnType<typeof userEvent.setup>) {
   fireEvent.change(screen.getByLabelText('用户名'), { target: { value: 'researcher' } })
   fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'test-password' } })
   await user.click(screen.getByRole('button', { name: '进入工作台' }))
-  await screen.findByRole('heading', { name: '论文工作台', level: 1 })
+  await screen.findByRole('heading', { name: /^(论文工作台|已隐藏的论文)$/, level: 1 })
 }
 describe('Glean query workspace', () => {
+  it.each([true, false])(
+    'explains a confirmed empty topic without inferring scan history (enabled: %s)',
+    async (enabled) => {
+      emptyPapers = true
+      currentTopics[0] = { ...currentTopics[0], membershipCount: 0, searchEnabled: enabled }
+      const user = mount()
+      await signIn(user)
+      await screen.findByText('这个主题还没有论文')
+      expect(screen.getByText(/保存主题不会启动扫描/)).toBeInTheDocument()
+      expect(screen.queryByText(/从未扫描/)).not.toBeInTheDocument()
+      expect(!!screen.queryByText(/此主题已暂停后续检索/)).toBe(!enabled)
+      await user.click(screen.getByRole('button', { name: '查看采集进度' }))
+      await screen.findByRole('heading', { name: '来源健康', level: 1 })
+      await screen.findByText('定时计划未启用')
+    },
+  )
+  it.each(['unknown', 'loading', 'error'])(
+    'does not claim an empty topic with %s topic data',
+    async (state) => {
+      emptyPapers = true
+      currentTopics[0].membershipCount = 0
+      if (state === 'unknown') currentTopics = []
+      if (state === 'loading') topicsGate = new Promise(() => {})
+      if (state === 'error') failTopics = true
+      const user = mount()
+      await signIn(user)
+      await screen.findByText('暂时没有匹配的论文')
+      expect(screen.queryByText('这个主题还没有论文')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '查看采集进度' })).not.toBeInTheDocument()
+    },
+  )
+  it.each([{ hidden: 'only' }, { q: '不存在' }, { readStatus: 'read' }])(
+    'retains filtered/hidden empty state with %j',
+    async (filters) => {
+      emptyPapers = true
+      currentTopics[0].membershipCount = 0
+      saved = filters
+      const user = mount()
+      await signIn(user)
+      await screen.findByText('暂时没有匹配的论文')
+      expect(screen.queryByText('这个主题还没有论文')).not.toBeInTheDocument()
+      if ('hidden' in filters) expect(screen.getByText(/当前主题暂无隐藏记录/)).toBeInTheDocument()
+    },
+  )
+  it.each([0, 2])(
+    'offers the relevant collection for a nonempty topic with zero curated papers (%s candidates)',
+    async (candidateCount) => {
+      emptyPapers = true
+      currentTopics[0] = { ...currentTopics[0], curatedCount: 0, candidateCount }
+      const user = mount()
+      await signIn(user)
+      await screen.findByText('这个主题暂无精选论文')
+      expect(screen.queryByText('这个主题还没有论文')).not.toBeInTheDocument()
+      await user.click(
+        screen.getByRole('button', { name: candidateCount ? '查看待审核记录' : '查看全部记录' }),
+      )
+      await waitFor(() =>
+        expect(
+          paths.some(
+            (path) =>
+              path.includes('/papers?') &&
+              path.includes(`collectionScope=${candidateCount ? 'pending' : 'all'}`),
+          ),
+        ).toBe(true),
+      )
+    },
+  )
+  it('keeps a paper request failure distinct from a confirmed empty topic', async () => {
+    failPapers = true
+    currentTopics[0].membershipCount = 0
+    const user = mount()
+    await signIn(user)
+    await screen.findByText('暂时没能读取数据')
+    expect(screen.queryByText('这个主题还没有论文')).not.toBeInTheDocument()
+  })
+
   it('keeps management hidden for readers and still renders papers if capability lookup fails', async () => {
     failAccess = true
     const user = mount()
@@ -137,7 +226,7 @@ describe('Glean query workspace', () => {
     await signIn(user)
     expect(await screen.findByRole('button', { name: '用户管理' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '研究主题' }))
-    await user.click(screen.getByRole('button', { name: '新增研究主题' }))
+    await user.click(await screen.findByRole('button', { name: '新增研究主题' }))
     fireEvent.change(screen.getByLabelText('主题名称'), { target: { value: '测试新方向' } })
     fireEvent.change(screen.getByLabelText('检索词组'), {
       target: { value: 'genomics | genetics' },
@@ -311,6 +400,9 @@ describe('Glean query workspace', () => {
     await signIn(user)
     expect(await screen.findByText('测试后端不可用')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: paper.titleZh })).not.toBeInTheDocument()
+    emptyPapers = false
+    failTopics = false
+    topicsGate = null
     failPapers = false
     await user.click(screen.getByRole('button', { name: '重新连接' }))
     expect(await screen.findByRole('heading', { name: paper.titleZh })).toBeInTheDocument()

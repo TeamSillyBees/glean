@@ -5,7 +5,7 @@ import type { CorrectionFields, ManualReview, Membership, Paper, Topic } from '.
 import { date, topicLabels } from '../lib/utils'
 import { Button } from './ui/button'
 import { ErrorState, Loading } from './common'
-import { managementField } from './topics-management'
+import { managementField } from './management-field'
 
 function useCatalogWrite(paperId: string, notify: (message: string) => void) {
   const client = useQueryClient()
