@@ -14,9 +14,13 @@ import (
 type workflowBoundary struct {
 	On   map[string]any `yaml:"on"`
 	Jobs map[string]struct {
+		If    string            `yaml:"if"`
 		Env   map[string]string `yaml:"env"`
 		Steps []struct {
 			Name            string            `yaml:"name"`
+			ID              string            `yaml:"id"`
+			If              string            `yaml:"if"`
+			With            map[string]string `yaml:"with"`
 			Run             string            `yaml:"run"`
 			Env             map[string]string `yaml:"env"`
 			ContinueOnError any               `yaml:"continue-on-error"`
@@ -96,17 +100,60 @@ func TestExternalGoCanaryIsExcludedFromDefaultSuite(t *testing.T) {
 	require.True(t, included)
 }
 
-// TestHistoricalQueryDiagnosticsAreRequired 保留真实全快照测量，不允许静默跳过或忽略失败。
+// TestHistoricalQueryDiagnosticsAreRequired 仅允许保守选择器关闭性能诊断，语义验证始终运行。
 func TestHistoricalQueryDiagnosticsAreRequired(t *testing.T) {
 	workflow := readWorkflowBoundary(t, "ci.yml")
-	found := false
-	for _, step := range workflow.Jobs["verify"].Steps {
+	require.Contains(t, workflow.On, "workflow_dispatch")
+	verify := workflow.Jobs["verify"]
+	require.Empty(t, verify.If)
+	found, selected, tested := false, false, false
+	for _, step := range verify.Steps {
+		require.Nil(t, step.ContinueOnError)
+		switch step.Name {
+		case "Checkout repository":
+			require.Equal(t, "0", step.With["fetch-depth"])
+			require.Equal(t, "false", step.With["persist-credentials"])
+		case "Test conservative query diagnostic selection":
+			require.Empty(t, step.If)
+			require.Contains(t, step.Run, "python3 -m unittest discover -s scripts/ci/tests -v")
+			tested = true
+		case "Select historical query diagnostics":
+			require.True(t, tested)
+			require.Empty(t, step.If)
+			require.Equal(t, "catalog_diagnostics", step.ID)
+			require.Equal(t, "python3 scripts/ci/catalog_diagnostics.py", strings.TrimSpace(step.Run))
+			selected = true
+		case "Collect historical query diagnostics", "Preserve diagnostic samples (not a latency gate)":
+			require.Equal(t, "always() && steps.catalog_diagnostics.outputs.enabled != '0'", step.If)
+		default:
+			require.Empty(t, step.If, "only the diagnostic artifact may be conditional")
+		}
 		if strings.Contains(step.Run, "go test -json ./... -count=1") {
 			found = true
-			require.Equal(t, "1", step.Env["GLEAN_CATALOG_QUERY_DIAGNOSTICS"])
+			require.True(t, selected)
+			require.Equal(t, "${{ steps.catalog_diagnostics.outputs.enabled == '0' && '0' || '1' }}", step.Env["GLEAN_CATALOG_QUERY_DIAGNOSTICS"])
+			require.Contains(t, step.Run, `enabled = os.environ.get("GLEAN_CATALOG_QUERY_DIAGNOSTICS") != "0"`)
+			require.Contains(t, step.Run, "if enabled:\n    required.add(diagnostic)")
+			require.Contains(t, step.Run, "if not enabled and diagnostic not in skipped:")
 			require.Contains(t, step.Run, "TestCatalogHistoricalQueryDiagnostics")
-			require.Nil(t, step.ContinueOnError)
+			require.Contains(t, step.Run, "missing = required - passed")
+			for _, name := range []string{
+				"TestCatalogPostgresEndToEnd", "TestCatalogFacetBatchEquivalence", "TestCatalogTopicCountsPostgres",
+				"TestCatalogLiveObservationPostgres", "TestHistoricalAbstractEnrichmentPostgres", "TestCatalogManagementPostgres",
+				"TestUserAdministrationPostgres", "TestMonitorPostgresDurableMockRun",
+				"TestMonitorPostgresDurableMockRun/CancellationPartialFailureFrozenTemplates", "TestMonitorPostgresProcessRestart",
+				"TestMonitorRealPipelinePostgres", "TestMigrationsAndSeedOnPostgres", "TestCommittedHistoricalManifest",
+				"TestHistoricalJournalRegistryPreservesEvidence",
+			} {
+				require.Contains(t, strings.Split(step.Run, "diagnostic =")[0], name)
+			}
 		}
 	}
 	require.True(t, found)
+	for _, name := range []string{"browser", "recovery"} {
+		require.Empty(t, workflow.Jobs[name].If)
+		for _, step := range workflow.Jobs[name].Steps {
+			require.NotContains(t, step.If, "catalog_diagnostics")
+		}
+	}
 }

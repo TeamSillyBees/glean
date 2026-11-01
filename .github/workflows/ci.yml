@@ -44,6 +44,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -62,21 +63,28 @@ jobs:
             exit 1
           fi
 
+      - name: Test conservative query diagnostic selection
+        run: python3 -m unittest discover -s scripts/ci/tests -v
+
+      - name: Select historical query diagnostics
+        id: catalog_diagnostics
+        run: python3 scripts/ci/catalog_diagnostics.py
+
       - name: Test all Go packages, real PostgreSQL and complete historical data
         env:
-          GLEAN_CATALOG_QUERY_DIAGNOSTICS: '1'
+          GLEAN_CATALOG_QUERY_DIAGNOSTICS: ${{ steps.catalog_diagnostics.outputs.enabled == '0' && '0' || '1' }}
         run: |
           set -euo pipefail
           go test -json ./... -count=1 | tee "$RUNNER_TEMP/glean-go-test.jsonl"
           # Fail if a required database or full-snapshot test silently becomes skipped.
           python3 - "$RUNNER_TEMP/glean-go-test.jsonl" "$(go list -m)" <<'PY'
           import json
+          import os
           import sys
 
           module = sys.argv[2]
           required = {
               (module + "/internal/modules/catalog", "TestCatalogPostgresEndToEnd"),
-              (module + "/internal/modules/catalog", "TestCatalogHistoricalQueryDiagnostics"),
               (module + "/internal/modules/catalog", "TestCatalogFacetBatchEquivalence"),
               (module + "/internal/modules/catalog", "TestCatalogTopicCountsPostgres"),
               (module + "/internal/modules/catalog", "TestCatalogLiveObservationPostgres"),
@@ -91,12 +99,21 @@ jobs:
               (module + "/internal/baseline", "TestCommittedHistoricalManifest"),
               (module + "/internal/baseline", "TestHistoricalJournalRegistryPreservesEvidence"),
           }
+          diagnostic = (module + "/internal/modules/catalog", "TestCatalogHistoricalQueryDiagnostics")
+          enabled = os.environ.get("GLEAN_CATALOG_QUERY_DIAGNOSTICS") != "0"
+          if enabled:
+              required.add(diagnostic)
+          skipped = set()
           passed = set()
           with open(sys.argv[1], encoding="utf-8") as results:
               for line in results:
                   event = json.loads(line)
+                  if event.get("Action") == "skip" and event.get("Test"):
+                      skipped.add((event["Package"], event["Test"]))
                   if event.get("Action") == "pass" and event.get("Test"):
                       passed.add((event["Package"], event["Test"]))
+          if not enabled and diagnostic not in skipped:
+              raise SystemExit("Disabled query diagnostic must explicitly skip")
           missing = required - passed
           if missing:
               raise SystemExit("Required database/baseline tests did not pass: " + repr(sorted(missing)))
@@ -104,7 +121,7 @@ jobs:
           PY
 
       - name: Collect historical query diagnostics
-        if: always()
+        if: always() && steps.catalog_diagnostics.outputs.enabled != '0'
         run: |
           python3 - "$RUNNER_TEMP/glean-go-test.jsonl" "$RUNNER_TEMP/catalog-query-diagnostics.txt" <<'PY'
           import json
@@ -124,7 +141,7 @@ jobs:
           PY
 
       - name: Preserve diagnostic samples (not a latency gate)
-        if: always()
+        if: always() && steps.catalog_diagnostics.outputs.enabled != '0'
         uses: actions/upload-artifact@v4
         with:
           name: catalog-query-diagnostics
