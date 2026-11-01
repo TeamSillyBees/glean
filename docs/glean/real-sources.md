@@ -63,6 +63,12 @@ Canary 使用固定的小时间窗，不是 30 日全网扫描。捕获的 arXiv
 - [bioRxiv / medRxiv 官方 API](https://api.biorxiv.org/)
 - [Europe PMC API](https://europepmc.org/RestfulWebService)；[官方开发者论坛对 FIRST_IDATE / UPDATE_DATE 的解释](https://groups.google.com/a/ebi.ac.uk/g/epmc-webservices/c/JShd-dbIIBE)
 
+## 来源数字证据与候选散列
+
+监控候选与目录观察均以 `json.Number` 规范原始 JSON：忽略空白与对象键顺序，但保留大整数、精细小数和指数数字的完整写法，不经 `float64` 舍入。`1`、`1.0`、`1e0` 因来源写法不同可形成不同证据版本；这不是论文身份变化或科学审核结论。缺少 raw 的 nil / 空字节切片具有相同散列语义；非空非法 JSON 仍先进入隔离，不接受有效前缀。
+
+本修复不重写已持久化的候选键、运行引用、分页游标或水位，不需要清库、迁移或重置。待审核/待发布的旧候选按原键继续恢复；使用新规则再次采集相同原文保持幂等。旧版已舍入的大数字或曾改写的数字格式（例如 `1.0` → `1`）再次出现时，可能新增一个候选并重新投影；目录已有独立的精确数字散列，会去重相同的来源观察。普通整数及原本规范的常见数字键不变。此前被旧碰撞丢弃且不再被来源返回的证据不能凭此修复自动恢复；不据此宣称历史采集完整。
+
 ## 持续采集恢复与健康诊断
 
 普通 CI 的 `TestDurableRecoveryAfterCancellationAndPartialFailure` 在无外部网络的确定性来源上验证：一个来源完成、另一个来源留下分页游标后取消；重建服务，503 耗尽预算；再次重建并只恢复失败来源。断点、固定窗口和冻结主题配置保持不变，成功来源不重复采集，失败来源不提前推进水位，重复恢复不增加候选或运行。相同矩阵也作为 `TestMonitorPostgresDurableMockRun/CancellationPartialFailureFrozenTemplates` 在真实 PostgreSQL 迁移表和 JSONB 上执行；每次重建新的 Ent client，不借用 Service 内存状态。另有 `TestMonitorPostgresProcessRestart` 使用两个独立测试二进制子进程：第一个以假 Europe PMC HTTP 响应提交分页检查点后退出；第二个重新连接 PostgreSQL，在当前主题配置不可用时按原始冻结查询和游标恢复，并验证重复执行不产生重复候选。该测试使用已提交的独立 schema，结束后清理；不声称进行了生产进程强制 kill 或持续运行 72 小时的现场验收。普通 CI 的 `TestEuropePMCHTTPResumeAfter503` 还用真实适配器和假 HTTP 503 响应验证重建服务后仍遵守持久化 Retry-After，不提前请求或推进水位。

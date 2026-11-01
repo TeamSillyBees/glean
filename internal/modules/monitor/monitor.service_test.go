@@ -2,6 +2,9 @@ package monitor
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -348,29 +351,148 @@ func TestFailedBootstrapKeepsOriginalLowerBound(t *testing.T) {
 
 // TestRawEvidenceAndTopicChangesAreNotLost 验证非映射原始证据变化保留新版本，新增主题重新审核投影。
 func TestRawEvidenceAndTopicChangesAreNotLost(t *testing.T) {
-	source := DemoSources(scenarioTime, false)[0].(*FixtureSource)
-	source.Records[0].SourceUpdatedAt = scenarioTime.Add(-time.Hour)
-	reviewer := &flakyReviewer{}
-	publisher := &flakyPublisher{}
-	service := offline(t, []Source{source}, reviewer, publisher)
-	first, err := service.RunOnce(context.Background(), scenarioTime)
+	for _, test := range []struct {
+		name, before, after, reordered string
+	}{
+		{"source link", `{"mock":true}`, `{"mock":true,"new_source_link":"10.0000/new-formal-link"}`, `{ "new_source_link": "10.0000/new-formal-link", "mock": true }`},
+		{"large integer", `{"mock":true,"sourceCounter":9007199254740992}`, `{"mock":true,"sourceCounter":9007199254740993}`, `{ "sourceCounter": 9007199254740993, "mock": true }`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := DemoSources(scenarioTime, false)[0].(*FixtureSource)
+			source.Records[0].SourceUpdatedAt = scenarioTime.Add(-time.Hour)
+			source.Records[0].Raw = []byte(test.before)
+			reviewer := &flakyReviewer{}
+			publisher := &flakyPublisher{}
+			service := offline(t, []Source{source}, reviewer, publisher)
+			first, err := service.RunOnce(context.Background(), scenarioTime)
+			require.NoError(t, err)
+			require.Len(t, first.Records, 1)
+			source.Records[0].Topics = append(source.Records[0].Topics, "llm-agent")
+			second, err := service.RunOnce(context.Background(), scenarioTime.Add(72*time.Hour))
+			require.NoError(t, err)
+			require.Len(t, second.Records, 1)
+			require.Equal(t, 2, reviewer.calls)
+			require.Equal(t, 2, publisher.calls)
+			source.Records[0].Raw = []byte(test.after)
+			third, err := service.RunOnce(context.Background(), scenarioTime.Add(6*24*time.Hour))
+			require.NoError(t, err)
+			require.Len(t, third.Records, 2)
+			require.Equal(t, 3, reviewer.calls)
+			require.Equal(t, 3, publisher.calls)
+			require.Len(t, publisher.keys, 2, "both source versions must reach publication")
+			evidence := []string{}
+			for _, candidate := range third.Records {
+				require.True(t, candidate.Published)
+				require.True(t, publisher.keys[candidate.Key])
+				evidence = append(evidence, string(candidate.Record.Raw))
+			}
+			require.ElementsMatch(t, []string{test.before, test.after}, evidence)
+			source.Records[0].Raw = []byte(test.reordered)
+			fourth, err := service.RunOnce(context.Background(), scenarioTime.Add(9*24*time.Hour))
+			require.NoError(t, err)
+			require.Len(t, fourth.Records, 2, "JSON property order and whitespace must not invent revisions")
+			require.Equal(t, 3, publisher.calls)
+		})
+	}
+}
+
+// TestRecordIdentityRawNumberCanonicalization 验证精确数字、原始数字写法及非法原文回退边界。
+func TestRecordIdentityRawNumberCanonicalization(t *testing.T) {
+	key := func(raw string) string {
+		result, _ := recordIdentity(Record{Source: "crossref", SourceID: "synthetic-number", Raw: []byte(raw)})
+		return result
+	}
+	for _, pair := range [][2]string{
+		{`{"n":9007199254740992}`, `{"n":9007199254740993}`},
+		{`{"n":0.12345678901234567890}`, `{"n":0.12345678901234567891}`},
+		{`{"n":1e400}`, `{"n":2e400}`},
+		{`{"n":1}`, `{"n":1.0}`},
+		{`{"n":1000}`, `{"n":1e3}`},
+	} {
+		require.NotEqual(t, key(pair[0]), key(pair[1]), "source number tokens must remain distinct: %v", pair)
+	}
+	require.Equal(t, key(`{"nested":[9007199254740993,1e400],"n":1.0}`), key(`{ "n": 1.0, "nested": [9007199254740993, 1e400] }`))
+	for _, malformed := range []string{`{"n":1} garbage`, `{"n":1} {"n":2}`, `{"n":`} {
+		require.NotEqual(t, key(`{"n":1}`), key(malformed), "do not accept a valid prefix of malformed evidence")
+		// 原有非法 Raw 会令外层序列化失败；采集入口已先将其隔离，不改变此回退。
+		empty := sha256.Sum256(nil)
+		require.Equal(t, hex.EncodeToString(empty[:]), key(malformed))
+	}
+	for _, raw := range []string{`{"n":42,"nested":[true,null,"text"]}`, `{"n":9007199254740992}`, `{"n":1.25}`} {
+		// 旧版已规范化且无需浮点舍入的常见原文保持原散列，不重置持久键。
+		record := Record{Source: "crossref", SourceID: "synthetic-number", Raw: []byte(raw)}
+		var oldRaw any
+		require.NoError(t, json.Unmarshal(record.Raw, &oldRaw))
+		record.Raw, _ = json.Marshal(oldRaw)
+		encoded, err := json.Marshal(record)
+		require.NoError(t, err)
+		digest := sha256.Sum256(encoded)
+		require.Equal(t, hex.EncodeToString(digest[:]), key(raw))
+	}
+}
+
+// TestRecordIdentityAbsentRaw 验证空原文和 nil 均表示缺少证据，不令不同来源记录碰撞。
+func TestRecordIdentityAbsentRaw(t *testing.T) {
+	first := Record{Source: "crossref", SourceID: "synthetic-first", Raw: []byte{}}
+	second := first
+	second.SourceID = "synthetic-second"
+	firstKey, _ := recordIdentity(first)
+	secondKey, _ := recordIdentity(second)
+	require.NotEqual(t, firstKey, secondKey)
+	first.Raw = nil
+	nilKey, _ := recordIdentity(first)
+	require.Equal(t, nilKey, firstKey)
+}
+
+// TestLegacyNumericCandidateResumesWithoutRekey 验证旧数字键按原断点发布，后续精确重采集不回写旧候选。
+func TestLegacyNumericCandidateResumesWithoutRekey(t *testing.T) {
+	source := &countSource{fixture: DemoSources(scenarioTime, false)[0].(*FixtureSource)}
+	source.fixture.Records[0].Raw = []byte(`{"sourceCounter":1e3}`)
+	source.fixture.Records[0].SourceUpdatedAt = scenarioTime.Add(-time.Hour)
+	publisher := &flakyPublisher{failures: 1}
+	service := offline(t, []Source{source}, nil, publisher)
+	_, err := service.RunOnce(context.Background(), scenarioTime)
 	require.NoError(t, err)
-	require.Len(t, first.Records, 1)
-	source.Records[0].Topics = append(source.Records[0].Topics, "llm-agent")
-	second, err := service.RunOnce(context.Background(), scenarioTime.Add(72*time.Hour))
+	state, err := service.load(context.Background())
 	require.NoError(t, err)
-	require.Len(t, second.Records, 1)
-	require.Equal(t, 2, reviewer.calls)
-	require.Equal(t, 2, publisher.calls)
-	source.Records[0].Raw = []byte(`{"mock":true,"new_source_link":"10.0000/new-formal-link"}`)
-	third, err := service.RunOnce(context.Background(), scenarioTime.Add(6*24*time.Hour))
+	require.Len(t, state.Records, 1)
+	var legacyKey string
+	for key, candidate := range state.Records {
+		// 旧版将 1e3 写成 1000 后散列，但仍持久化原始 1e3 证据。
+		legacyRecord := candidate.Record
+		legacyRecord.Raw = []byte(`{"sourceCounter":1000}`)
+		legacyKey, _ = recordIdentity(legacyRecord)
+		require.NotEqual(t, legacyKey, key)
+		delete(state.Records, key)
+		candidate.Key = legacyKey
+		state.Records[legacyKey] = candidate
+		for _, run := range state.Runs {
+			for _, progress := range run.Sources {
+				for i, candidateKey := range progress.CandidateKeys {
+					if candidateKey == key {
+						progress.CandidateKeys[i] = legacyKey
+					}
+				}
+			}
+		}
+		break
+	}
+	require.NoError(t, service.save(context.Background(), state))
+	calls := source.calls
+	restarted := offline(t, []Source{source}, nil, publisher)
+	restarted.memory = service.memory
+	recovered, err := restarted.RunOnce(context.Background(), scenarioTime.Add(time.Minute))
 	require.NoError(t, err)
-	require.Len(t, third.Records, 2)
-	record := source.Records[0]
-	a, _ := recordIdentity(record)
-	record.Raw = []byte(`{ "new_source_link": "10.0000/new-formal-link", "mock": true }`)
-	b, _ := recordIdentity(record)
-	require.Equal(t, a, b, "JSON property order must not invent revisions")
+	require.Equal(t, calls, source.calls, "pending publication resumes without refetch")
+	require.Len(t, recovered.Records, 1)
+	require.True(t, recovered.Records[legacyKey].Published)
+	require.True(t, publisher.keys[legacyKey])
+	require.Equal(t, scenarioTime, recovered.Sources[source.Name()].PublishedThrough)
+	replayed, err := restarted.RunOnce(context.Background(), scenarioTime.Add(72*time.Hour))
+	require.NoError(t, err)
+	require.Len(t, replayed.Records, 2, "changed legacy numeric normalization may conservatively reprocess")
+	require.Len(t, publisher.keys, 2)
+	require.Equal(t, `{"sourceCounter":1e3}`, string(replayed.Records[legacyKey].Record.Raw))
 }
 
 // TestNextWakeHonorsBackoff 验证 task 调用方获得持久化最早重试时刻，而非立即自旋。

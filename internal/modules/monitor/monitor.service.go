@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -736,8 +737,14 @@ func recordIdentity(record Record) (string, string) {
 	copy.AcquiredAt = time.Time{}
 	copy.Topics = nil
 	copy.CoreDiscovery = false
+	if len(copy.Raw) == 0 {
+		copy.Raw = nil
+	}
 	var rawEvidence any
-	if json.Unmarshal(record.Raw, &rawEvidence) == nil {
+	// 与目录观察散列一致，保留原始数字精度和写法；只规范完整有效的 JSON。
+	decoder := json.NewDecoder(bytes.NewReader(record.Raw))
+	decoder.UseNumber()
+	if json.Valid(record.Raw) && decoder.Decode(&rawEvidence) == nil {
 		copy.Raw, _ = json.Marshal(rawEvidence)
 	}
 	data, _ := json.Marshal(copy)
