@@ -9,8 +9,10 @@ import type {
   Topic,
 } from '../src/lib/types'
 
-// Real Go/PostgreSQL only: this project runs after historical acceptance, without
-// route interception, synthetic runtime papers, token injection, HAR or traces.
+// This project runs after historical acceptance against real Go/PostgreSQL.
+// Only the first access GET below is intentionally replaced with a 503; every
+// subsequent request reaches the backend. No synthetic papers, token injection,
+// HAR or traces. This is fault injection, not an external live-source check.
 function response(page: Page, path: string, method = 'GET', query: Record<string, string> = {}) {
   return page.waitForResponse((res) => {
     const url = new URL(res.url())
@@ -85,9 +87,49 @@ function sourceSnapshot(paper: Paper) {
 
 test('真实管理流程：用户、窄屏主题、共享审核、纠错与审计历史', async ({ page, browser }, info) => {
   test.setTimeout(180_000)
+  // One precise, one-shot failure, scoped to this page. Playwright removes the
+  // route after its first match, so Retry must recover from the real Go API.
+  let injectedFailures = 0
+  await page.route(
+    (url) => url.pathname === '/api/v1/catalog/access',
+    async (route) => {
+      expect(route.request().method()).toBe('GET')
+      injectedFailures += 1
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'UNAVAILABLE', message: 'Intentional acceptance fault' }),
+      })
+    },
+    { times: 1 },
+  )
   const initialFacetsResponse = response(page, '/api/v1/catalog/facets')
   const initial = await login(page, 'glean-browser-admin')
   const initialFacets = await data<Facets>(await initialFacetsResponse)
+  const accessError = page.getByRole('status').filter({
+    hasText: '管理权限暂时读取失败，阅读功能仍可使用。',
+  })
+  await expect(accessError).toBeVisible()
+  await expect(page.getByRole('button', { name: '用户管理', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '研究主题', exact: true })).toHaveCount(0)
+  await expect(page.getByTestId('paper-card').first()).toBeVisible()
+  await page.screenshot({ path: info.outputPath('access-injected-503.png') })
+  const recoveredAccess = response(page, '/api/v1/catalog/access')
+  await accessError.getByRole('button', { name: '重试管理权限', exact: true }).click()
+  expect(await data<{ canManage: boolean }>(await recoveredAccess)).toEqual({ canManage: true })
+  expect(injectedFailures).toBe(1)
+  await expect(accessError).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '重试管理权限', exact: true })).toHaveCount(0)
+  await expect(
+    page.locator('.desktop-sidebar').getByRole('button', { name: '用户管理', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.locator('.desktop-sidebar').getByRole('button', { name: '研究主题', exact: true }),
+  ).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  )
+  await page.screenshot({ path: info.outputPath('access-recovered-real-backend.png') })
   const selected = initial.items[0]
   expect(selected).toBeDefined()
   const userList = response(page, '/api/v1/users')
@@ -133,7 +175,13 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   })
   try {
     const ordinary = await ordinaryContext.newPage()
+    const ordinaryAccess = response(ordinary, '/api/v1/catalog/access')
     const papers = await login(ordinary, username)
+    expect(await data<{ canManage: boolean }>(await ordinaryAccess)).toEqual({ canManage: false })
+    // Refresh rechecks capabilities against Go; it must not grant reader access.
+    const refreshedAccess = response(ordinary, '/api/v1/catalog/access')
+    await ordinary.getByRole('button', { name: '刷新当前视图', exact: true }).click()
+    expect(await data<{ canManage: boolean }>(await refreshedAccess)).toEqual({ canManage: false })
     await expect(ordinary.getByRole('button', { name: '用户管理', exact: true })).toHaveCount(0)
     await expect(ordinary.getByRole('button', { name: '研究主题', exact: true })).toHaveCount(0)
     await card(ordinary, papers.items[0].id)
