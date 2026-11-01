@@ -89,12 +89,11 @@ func TestGleanFrontendAuthContract(t *testing.T) {
 	// 同一个 refresh token 必须只可轮转一次，不得让重放建立新会话。
 	require.Equal(t, http.StatusUnauthorized, request(http.MethodPost, "/api/v1/auth/refresh", string(payload), "").Code)
 	mock.ExpectQuery(`SELECT .* FROM "glean_topic"`).WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	for _, topic := range []string{"biomed-ai", "llm-agent", "biomed-worldmodel"} {
-		mock.ExpectQuery(`SELECT COUNT\("glean_membership"\."id"\).*`).WithArgs(topic).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-		mock.ExpectQuery(`SELECT COUNT\("glean_membership"\."id"\).*`).WithArgs(topic, "historical").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-		mock.ExpectQuery(`SELECT COUNT\("glean_membership"\."id"\).*`).WithArgs(topic, "pending", "pending-review").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-		mock.ExpectQuery(`SELECT COUNT\("glean_membership"\."id"\).*`).WithArgs(topic, "included", "historical", "biomed-ai", sqlmock.AnyArg(), "llm-agent", sqlmock.AnyArg(), "biomed-worldmodel", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-	}
+	grouped := `SELECT "glean_membership"\."topic", COUNT\(\*\) FROM "glean_membership".*GROUP BY`
+	mock.ExpectQuery(grouped).WillReturnRows(sqlmock.NewRows([]string{"topic", "count"}))
+	mock.ExpectQuery(grouped).WithArgs("historical").WillReturnRows(sqlmock.NewRows([]string{"topic", "count"}))
+	mock.ExpectQuery(grouped).WithArgs("pending", "pending-review").WillReturnRows(sqlmock.NewRows([]string{"topic", "count"}))
+	mock.ExpectQuery(grouped).WithArgs("included", "historical", "biomed-ai", sqlmock.AnyArg(), "llm-agent", sqlmock.AnyArg(), "biomed-worldmodel", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"topic", "count"}))
 	listed := request(http.MethodGet, "/api/v1/catalog/topics", "", rotated.Data.AccessToken)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
 	var topics struct {

@@ -39,7 +39,9 @@ CI 保存 `catalog-query-diagnostics` artifact（14 天），仅含版本、数�
 
 ## 已确认的代码结构（非实测结论）
 
-`Topics` 读取主题配置后，对每个主题执行四次 Count；三个主题预计为配置查询加 12 次 Count。
+`Topics` 读取主题配置后，对全体成员按主题执行四次分组 Count，共五次 SQL，不随主题数增加。
+统计成员行而非去重论文；历史数仍按原始 historical 状态统计，精选/待审沿用原有逐主题人工审核及精确 JSONB 谓词。
+此前三个主题的诊断为 13 次 SQL、约 194–198 ms；新版本耗时须等待同口径 CI，不据查询数推算加速。
 `Facets` 首先读取所有匹配论文；每批有一次 correction 查询，主循环再查询
 membership、review、observation 分组、个人 state，共**五次关联查询/批**，另有主题检查等固定开销。
 因此 facets 不受列表的 pageSize 限制。这说明值得测量，但不能仅凭查询次数断言哪一段耗时最大。

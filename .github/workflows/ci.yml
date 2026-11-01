@@ -78,6 +78,7 @@ jobs:
               (module + "/internal/modules/catalog", "TestCatalogPostgresEndToEnd"),
               (module + "/internal/modules/catalog", "TestCatalogHistoricalQueryDiagnostics"),
               (module + "/internal/modules/catalog", "TestCatalogFacetBatchEquivalence"),
+              (module + "/internal/modules/catalog", "TestCatalogTopicCountsPostgres"),
               (module + "/internal/modules/catalog", "TestCatalogLiveObservationPostgres"),
               (module + "/internal/modules/catalog", "TestHistoricalAbstractEnrichmentPostgres"),
               (module + "/internal/modules/catalog", "TestCatalogManagementPostgres"),

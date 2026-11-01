@@ -162,33 +162,51 @@ func (s *Service) Topics(ctx context.Context) ([]TopicVO, error) {
 	if err != nil {
 		return nil, err
 	}
+	counts, err := s.topicMembershipCounts(ctx)
+	if err != nil {
+		return nil, bizerrors.WrapDBContext(ctx, err, "count topic papers failed")
+	}
+	historical, err := s.topicMembershipCounts(ctx, gleanmembership.InclusionStatus("historical"))
+	if err != nil {
+		return nil, bizerrors.WrapDBContext(ctx, err, "count historical members failed")
+	}
+	collection := func(scope string) predicate.GleanMembership {
+		return func(sel *sql.Selector) {
+			sel.Where(collectionPredicate(sel.C("paper_id"), sel.C("topic"), sel.C("inclusion_status"), sel.C("dimensions"), scope))
+		}
+	}
+	pending, err := s.topicMembershipCounts(ctx, collection("pending"))
+	if err != nil {
+		return nil, err
+	}
+	curated, err := s.topicMembershipCounts(ctx, collection("curated"))
+	if err != nil {
+		return nil, bizerrors.WrapDBContext(ctx, err, "count curated historical members failed")
+	}
 	for i := range result {
-		count, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug)).Count(ctx)
-		if err != nil {
-			return nil, bizerrors.WrapDBContext(ctx, err, "count topic papers failed")
-		}
-		result[i].MembershipCount = count
-		historical, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), gleanmembership.InclusionStatus("historical")).Count(ctx)
-		if err != nil {
-			return nil, bizerrors.WrapDBContext(ctx, err, "count historical members failed")
-		}
-		result[i].HistoricalCount = historical
-		pending, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), func(sel *sql.Selector) {
-			sel.Where(collectionPredicate(sel.C("paper_id"), sel.C("topic"), sel.C("inclusion_status"), sel.C("dimensions"), "pending"))
-		}).Count(ctx)
-		if err != nil {
-			return nil, err
-		}
-		result[i].CandidateCount = pending
-		curated, err := s.client.GleanMembership.Query().Where(gleanmembership.Topic(result[i].Slug), func(sel *sql.Selector) {
-			sel.Where(collectionPredicate(sel.C("paper_id"), sel.C("topic"), sel.C("inclusion_status"), sel.C("dimensions"), "curated"))
-		}).Count(ctx)
-		if err != nil {
-			return nil, bizerrors.WrapDBContext(ctx, err, "count curated historical members failed")
-		}
-		result[i].CuratedCount = curated
+		slug := result[i].Slug
+		result[i].MembershipCount = counts[slug]
+		result[i].HistoricalCount = historical[slug]
+		result[i].CandidateCount = pending[slug]
+		result[i].CuratedCount = curated[slug]
 	}
 	return result, nil
+}
+
+// topicMembershipCounts 按主题统计成员行，不将同一论文的不同原始编号去重。
+func (s *Service) topicMembershipCounts(ctx context.Context, filters ...predicate.GleanMembership) (map[string]int, error) {
+	var rows []struct {
+		Topic string `json:"topic"`
+		Count int    `json:"count"`
+	}
+	if err := s.client.GleanMembership.Query().Where(filters...).GroupBy(gleanmembership.FieldTopic).Aggregate(ent.Count()).Scan(ctx, &rows); err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(rows))
+	for _, row := range rows {
+		counts[row.Topic] = row.Count
+	}
+	return counts, nil
 }
 
 // Papers 返回过滤后的全局去重分页目录。
