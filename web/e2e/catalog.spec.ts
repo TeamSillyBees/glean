@@ -154,6 +154,11 @@ test('real historical catalog: login, filters, detail, durable personal state an
   const username = info.project.name === 'mobile' ? secondary : primary
   const otherUsername = username === primary ? secondary : primary
   const errors: string[] = []
+  const detailChunks: string[] = []
+  page.on('request', (request) => {
+    if (/\/assets\/paper-detail-body-[^/]+\.js$/.test(new URL(request.url()).pathname))
+      detailChunks.push(request.url())
+  })
   page.on('pageerror', (error) => errors.push(error.message))
   await page.goto('/')
   await screenshot(page, info, 'login')
@@ -248,7 +253,10 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await expect(page.getByTestId('paper-card')).toHaveCount(0)
   const found = await search(page, query)
   expect(found.items.some((paper) => paper.id === target.id)).toBe(true)
+  // Observe real production chunk requests without intercepting any API or asset.
+  expect(detailChunks).toHaveLength(0)
   const original = await detail(page, target)
+  expect(detailChunks).toHaveLength(1)
   expect(original.isMock).toBe(false)
   expect(original.memberships.length).toBeGreaterThan(0)
   const drawer = page.getByRole('dialog', { name: '论文详情', exact: true })

@@ -487,7 +487,7 @@ describe('Glean query workspace', () => {
     const header = within(dialog).getByTestId('paper-detail-header')
     expect(within(header).getByRole('button', { name: '关闭' })).toBeInTheDocument()
     expect(within(dialog).getAllByRole('button', { name: '关闭' })).toHaveLength(1)
-    expect(within(dialog).getByText('正式在线发表')).toBeInTheDocument()
+    expect(await within(dialog).findByText('正式在线发表')).toBeInTheDocument()
     expect(within(dialog).getByText('卷期发表')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('tab', { name: '来源与证据' }))
     expect(await screen.findByText('Mock source')).toBeInTheDocument()

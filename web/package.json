@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:size": "node scripts/bundle-size.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b && tsc -p tsconfig.e2e.json",
-    "format": "prettier --write src vite.config.ts playwright.config.ts tsconfig.e2e.json \"e2e/**/*.ts\" --no-error-on-unmatched-pattern",
-    "format:check": "prettier --check src vite.config.ts playwright.config.ts tsconfig.e2e.json \"e2e/**/*.ts\" --no-error-on-unmatched-pattern",
+    "format": "prettier --write src scripts vite.config.ts playwright.config.ts tsconfig.e2e.json \"e2e/**/*.ts\" --no-error-on-unmatched-pattern",
+    "format:check": "prettier --check src scripts vite.config.ts playwright.config.ts tsconfig.e2e.json \"e2e/**/*.ts\" --no-error-on-unmatched-pattern",
     "test:e2e": "playwright test",
     "test:e2e:list": "playwright test --list"
   },
