@@ -105,6 +105,10 @@ func (s *remoteSource) arxiv(ctx context.Context, req FetchRequest) (Page, error
 		c.Token = ""
 		return Page{NextCursor: c.encode()}, nil
 	}
+	// 初始日查询可为空；未完成续页的空集错误不足以证明该日完整，保留持久断点等待诊断。
+	if r.Error.Code == "noRecordsMatch" && c.Token != "" {
+		return Page{}, malformed("arXiv OAI noRecordsMatch during continuation")
+	}
 	if r.Error.Code != "" && r.Error.Code != "noRecordsMatch" {
 		return Page{}, malformed("arXiv OAI error: " + r.Error.Code)
 	}

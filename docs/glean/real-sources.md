@@ -14,6 +14,8 @@ Glean 的文献发现使用真实公开 API；不需要用户邮箱、来源 API
 
 Crossref / Europe PMC 的可变索引数量在分页过程中变化时，最多重放当前 feed 三次，绝不在不完整时推进水位；PubMed 过期 history 同样只重放当前分区。仍无法完成会明确失败并保留未完成进度，不声称采集成功。
 
+arXiv OAI 的 `noRecordsMatch` 只在不含续页 token 的日查询中视为空日；持有未完成 token 时返回该错误，适配器以 `invalid_response` 失败关闭，保留原日游标、固定窗口与采集/主题水位，不静默跳日或宣称窗口完成。`badResumptionToken` 仍只重放未完成日，正常成功分页终止仍按 `ListRecords` 的空 resumptionToken 处理。这是保守工程选择：该 `invalid_response` 沿用非重试错误分类，不进入自动重试或 `retry-failed` 恢复路径，需要先诊断异常，而非自动认定成功；并非断言协议绝对禁止此响应，也不是生产 arXiv 曾漏采的证据。依据 [OAI-PMH §3.5 分页](https://www.openarchives.org/OAI/openarchivesprotocol.html#FlowControl) 与 [arXiv OAI 说明](https://info.arxiv.org/help/oa/index.html)，用假 HTTP 回归验证中间日、最后日和服务重建后的断点保留；真实 JSONB 持久化由普通 CI 验证，不发起上游请求。
+
 bioRxiv / medRxiv 的内部 `rx1` 游标保存原始条目 offset、该轮首次响应 total 和重放次数，上游 URL 仍仅传数字 offset。分页总数增加或减少（包括续页变为空区间）时丢弃该页并从原固定窗口 offset 0 重放，最多三次；持续漂移则失败关闭，保留游标和重试上下文，不推进采集水位。旧数字游标没有 total 证据，迁移时先保存一次有界重放，不沿用旧前缀。重放可能重复返回记录，由已有幂等键去重。**total 不变不代表上游提供快照一致性**：等量替换、重排仍可能无法被数量检查发现；固定查询窗口和重叠补漏不能升级为绝对不漏的保证。
 
 核心期刊补查使用登记的 ISSN 全刊范围：Crossref、PubMed、Europe PMC 均不再将主题关键词 AND 到核心期刊查询；普通扩展检索仍使用主题词。核心全刊记录全部保留为候选，不作本地关键词硬过滤；其主题关联仍待审核，不能据此进入精选集合。PubMed / Europe PMC 对排序去重后的 ISSN 按每批最多 40 项查询，游标保存批次索引和登记快照摘要；只在全部批次的分页完成后完成核心补查。单批的 history 过期或索引数量变化只重放当前批次。旧版带关键词、未分批或登记快照不同的核心游标会从原固定窗口重放，不能沿用不兼容的查询后声称全刊完成。

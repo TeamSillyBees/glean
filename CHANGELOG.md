@@ -4,6 +4,8 @@
 
 ## 未发布
 
+- 修复 arXiv OAI 续页收到 `noRecordsMatch` 时错误跳日/完成窗口：保守返回 `invalid_response` 并保留断点与水位；初始空日和过期 token 重放保持不变，新增离线及持久化重建回归。
+
 - 改为单一 Go module 的源码服务模板：根目录直接提供服务和测试，基础能力内置到 internal/platform。
 - 移除独立脚手架 CLI、模板镜像、同步工具及旧开发技能分发和使用说明。
 - 增加项目本地 setup，支持改名、随机本地 JWT 密钥与管理员 seed，重复执行保留已有凭据。

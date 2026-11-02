@@ -187,4 +187,14 @@ func TestMonitorPostgresDurableMockRun(t *testing.T) {
 		})
 	})
 
+	t.Run("ArXivContinuationNoRecordsMatch", func(t *testing.T) {
+		exerciseArXivContinuationFailure(t, actorCtx, func(sources []Source) *Service {
+			cfg := RuntimeConfig()
+			cfg.StateKey = "arxiv-continuation-failure"
+			service, err := NewService(makeClient(), ids, cfg, sources, nil, &flakyPublisher{})
+			require.NoError(t, err)
+			return service
+		})
+	})
+
 }

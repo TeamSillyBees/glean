@@ -218,6 +218,41 @@ func TestArXivNoRecordsMatchAdvancesOneDayNotWholeWindow(t *testing.T) {
 	}
 }
 
+// TestArXivContinuationNoRecordsMatchFailsClosed 验证续页空集错误不能跳过未完成日或结束窗口。
+func TestArXivContinuationNoRecordsMatchFailsClosed(t *testing.T) {
+	for _, day := range []string{"2026-10-23", "2026-10-25"} {
+		t.Run(day, func(t *testing.T) {
+			const token = "unfinished-page-2"
+			const message = "private-upstream-error-body"
+			f := &adapterExecutor{responses: []*httpclient.Response{jsonResponse(`<OAI-PMH><error code="noRecordsMatch">` + message + `</error></OAI-PMH>`)}}
+			req := adapterWindow()
+			req.Cursor = (arxivCursor{Day: day, Token: token}).encode()
+			page, err := NewArXivSource(f).Fetch(context.Background(), req)
+			var se *SourceError
+			if !errors.As(err, &se) || se.Kind != "invalid_response" || page.Complete || page.NextCursor != "" || len(page.Records) != 0 {
+				t.Fatalf("unfinished continuation must fail without advancing: %+v %v", page, err)
+			}
+			if strings.Contains(err.Error(), token) || strings.Contains(err.Error(), message) {
+				t.Fatal("error must not expose continuation token or upstream body")
+			}
+			if len(f.requests) != 1 || f.requests[0].options.QueryParams.Get("resumptionToken") != token {
+				t.Fatal("must issue exactly the requested continuation")
+			}
+		})
+	}
+}
+
+// TestArXivInitialNoRecordsMatchCompletesLastDay 保留无续页 token 的合法空日结束语义。
+func TestArXivInitialNoRecordsMatchCompletesLastDay(t *testing.T) {
+	f := &adapterExecutor{responses: []*httpclient.Response{jsonResponse(`<OAI-PMH><error code="noRecordsMatch">none</error></OAI-PMH>`)}}
+	req := adapterWindow()
+	req.Cursor = (arxivCursor{Day: "2026-10-25"}).encode()
+	page, err := NewArXivSource(f).Fetch(context.Background(), req)
+	if err != nil || !page.Complete || page.NextCursor != "" {
+		t.Fatalf("initial empty final day must complete: %+v %v", page, err)
+	}
+}
+
 func TestMutableIndexesRestartSameScopeWithoutAdvancing(t *testing.T) {
 	req := adapterWindow()
 	total := 2
