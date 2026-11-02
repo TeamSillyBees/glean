@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/teamsillybees/glean/internal/data/ent"
 	"github.com/teamsillybees/glean/internal/modules/monitor"
 	"strings"
 	"testing"
@@ -164,4 +165,41 @@ func TestLiveBudgetAllowsMaximumModelStage(t *testing.T) {
 	parentDeadline, _ := parent.Deadline()
 	childDeadline, _ := child.Deadline()
 	require.Equal(t, parentDeadline, childDeadline)
+}
+
+// TestLiveReportDoesNotAdvertiseMockSuccess 验证真实运行模式来自DTO，待配置不伪装成mock或模型完成。
+func TestLiveReportDoesNotAdvertiseMockSuccess(t *testing.T) {
+	snapshot := monitor.Snapshot{}
+	snapshot.Schedule.ReviewMode = "staged_pipeline"
+	report := liveReport(snapshot, snapshot, []observationReport{{PipelineStatus: "awaiting_configuration"}}, 1, 1)
+	require.Equal(t, "staged_pipeline", report["llmReview"])
+	encoded, err := json.Marshal(report)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "mock;")
+	require.Contains(t, string(encoded), "awaiting_configuration")
+}
+
+// TestObservationReportUsesCurrentPipelineReview 验证报告读取review列而非metadata中旧mock快照。
+func TestObservationReportUsesCurrentPipelineReview(t *testing.T) {
+	row := &ent.GleanObservation{ID: 12, PaperID: 11, RunID: 10, Source: "europepmc", SourceID: "MED:1",
+		Metadata: json.RawMessage(`{"title":"Real observation","sourceUrl":"https://www.ebi.ac.uk/europepmc/webservices/rest/search","review":{"isMock":true,"scientificReviewed":true,"pipeline":{"status":"ready_for_display"}}}`),
+		Review:   map[string]any{"isMock": false, "scientificReviewed": false, "pipeline": map[string]any{"status": "awaiting_configuration", "stages": []any{map[string]any{"name": "material", "status": "awaiting_configuration", "attempts": 0}, map[string]any{"name": "summary", "status": "pending", "attempts": 0}}}},
+	}
+	got, err := reportObservation(row, "Canonical title")
+	require.NoError(t, err)
+	require.False(t, got.LLMIsMock)
+	require.False(t, got.ScientificReviewed)
+	require.Equal(t, "awaiting_configuration", got.PipelineStatus)
+	require.Equal(t, "Real observation", got.ObservationTitle)
+	require.Equal(t, "Canonical title", got.Title)
+	require.Len(t, got.PipelineStages, 2)
+	for _, stage := range got.PipelineStages {
+		require.Zero(t, stage.Attempts)
+	}
+	// 没有当前档案时也不能回退到metadata旧mock标记。
+	row.Review = map[string]any{}
+	got, err = reportObservation(row, "Canonical title")
+	require.NoError(t, err)
+	require.False(t, got.LLMIsMock)
+	require.Empty(t, got.PipelineStatus)
 }

@@ -60,7 +60,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		nodeDefault = value
 	}
 	node := flags.Int64("node", nodeDefault, "required unique Snowflake node for this instance (0-1023)")
-	full := flags.Bool("full", false, "include synthetic raw records and mock review results")
+	full := flags.Bool("full", false, "include full state snapshot and raw source records (demo uses explicit fixtures)")
 	persist := flags.Bool("persist-mock", false, "explicitly write mock monitor state to INITRA_MONITOR_DATABASE_URL; never writes catalog")
 	operator := flags.String("operator", os.Getenv("INITRA_MONITOR_OPERATOR_ID"), "existing enabled user ID for persistent-write audit")
 	allowLocal := flags.Bool("allow-local-insecure", false, "allow sslmode=disable only for loopback development database")
@@ -362,7 +362,7 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 		return fmt.Errorf("scan persisted but observation report could not be read")
 	}
 	status := realRunStatus(reportSnapshot)
-	result := map[string]any{"mode": "real", "status": status, "selectedRunId": selectedRunID(reportSnapshot), "llmReview": "mock; scientific inclusion remains pending", "schedule": snapshot.Schedule, "runs": snapshot.Runs, "sources": snapshot.Sources, "requestBudget": maxPages, "pageSize": pageSize, "observations": observations}
+	result := liveReport(snapshot, reportSnapshot, observations, maxPages, pageSize)
 	if full {
 		result["snapshot"] = snapshot
 	}
@@ -383,17 +383,29 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 	return nil
 }
 
+// liveReport 报告实际运行模式，不把等待配置误称为mock或已完成模型审核。
+func liveReport(snapshot, selected monitor.Snapshot, observations []observationReport, maxPages, pageSize int) map[string]any {
+	return map[string]any{"mode": "real", "status": realRunStatus(selected), "selectedRunId": selectedRunID(selected), "llmReview": snapshot.Schedule.ReviewMode, "schedule": snapshot.Schedule, "runs": snapshot.Runs, "sources": snapshot.Sources, "requestBudget": maxPages, "pageSize": pageSize, "observations": observations}
+}
+
+type pipelineStageReport struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Attempts int    `json:"attempts"`
+}
 type observationReport struct {
-	PaperID            idgen.ID `json:"paperId"`
-	ObservationID      idgen.ID `json:"observationId"`
-	RunID              idgen.ID `json:"runId"`
-	Source             string   `json:"source"`
-	SourceID           string   `json:"sourceId"`
-	Title              string   `json:"title"`
-	ObservationTitle   string   `json:"observationTitle"`
-	SourceURL          string   `json:"sourceUrl"`
-	LLMIsMock          bool     `json:"llmIsMock"`
-	ScientificReviewed bool     `json:"scientificReviewed"`
+	PipelineStatus     string                `json:"pipelineStatus"`
+	PipelineStages     []pipelineStageReport `json:"pipelineStages"`
+	PaperID            idgen.ID              `json:"paperId"`
+	ObservationID      idgen.ID              `json:"observationId"`
+	RunID              idgen.ID              `json:"runId"`
+	Source             string                `json:"source"`
+	SourceID           string                `json:"sourceId"`
+	Title              string                `json:"title"`
+	ObservationTitle   string                `json:"observationTitle"`
+	SourceURL          string                `json:"sourceUrl"`
+	LLMIsMock          bool                  `json:"llmIsMock"`
+	ScientificReviewed bool                  `json:"scientificReviewed"`
 }
 
 func readRunObservations(ctx context.Context, client *ent.Client, snapshot monitor.Snapshot) ([]observationReport, error) {
@@ -421,13 +433,41 @@ func readRunObservations(ctx context.Context, client *ent.Client, snapshot monit
 		}
 	}
 	for _, row := range rows {
-		var input catalog.ObservationInput
-		if err := json.Unmarshal(row.Metadata, &input); err != nil {
+		item, err := reportObservation(row, titles[row.PaperID])
+		if err != nil {
 			return nil, err
 		}
-		result = append(result, observationReport{PaperID: row.PaperID, ObservationID: row.ID, RunID: row.RunID, Source: row.Source, SourceID: row.SourceID, Title: titles[row.PaperID], ObservationTitle: input.Title, SourceURL: input.SourceURL, LLMIsMock: input.Review.IsMock, ScientificReviewed: input.Review.ScientificReviewed})
+		result = append(result, item)
 	}
 	return result, nil
+}
+
+// reportObservation 使用独立review列的最新阶段状态；metadata中的首次pending快照不是当前审核状态。
+func reportObservation(row *ent.GleanObservation, title string) (observationReport, error) {
+	var input catalog.ObservationInput
+	if err := json.Unmarshal(row.Metadata, &input); err != nil {
+		return observationReport{}, err
+	}
+	encoded, err := json.Marshal(row.Review)
+	if err != nil {
+		return observationReport{}, err
+	}
+	var review catalog.ReviewVO
+	if err := json.Unmarshal(encoded, &review); err != nil {
+		return observationReport{}, err
+	}
+	item := observationReport{PaperID: row.PaperID, ObservationID: row.ID, RunID: row.RunID, Source: row.Source, SourceID: row.SourceID, Title: title, ObservationTitle: input.Title, SourceURL: input.SourceURL, LLMIsMock: review.IsMock, ScientificReviewed: review.ScientificReviewed, PipelineStages: []pipelineStageReport{}}
+	if len(review.Pipeline) > 0 {
+		var pipeline monitor.PaperPipeline
+		if err := json.Unmarshal(review.Pipeline, &pipeline); err != nil {
+			return item, err
+		}
+		item.PipelineStatus = pipeline.Status
+		for _, stage := range pipeline.Stages {
+			item.PipelineStages = append(item.PipelineStages, pipelineStageReport{Name: stage.Name, Status: stage.Status, Attempts: stage.Attempts})
+		}
+	}
+	return item, nil
 }
 
 func realRunStatus(snapshot monitor.Snapshot) string {

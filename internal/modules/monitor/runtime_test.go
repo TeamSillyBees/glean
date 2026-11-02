@@ -439,3 +439,40 @@ func TestExplicitEmptyDiscoveryScopeIsNotBroadened(t *testing.T) {
 		require.Empty(t, issns)
 	}
 }
+
+// TestDisabledPipelineRuntimeReportsWaitingNotMock 验证真实来源路径在模型disabled时仍是staged_pipeline，且没有正文/模型请求。
+func TestDisabledPipelineRuntimeReportsWaitingNotMock(t *testing.T) {
+	source := &pacedSource{countSource: countSource{fixture: DemoSources(scenarioTime, false)[0].(*FixtureSource)}}
+	ids, err := idgen.NewGenerator(43)
+	require.NoError(t, err)
+	cfg := RuntimeConfig()
+	cfg.CompactPublished = false
+	service, err := NewOfflineService(ids, cfg, []Source{source}, pipelineOnlyReviewer{}, &flakyPublisher{})
+	require.NoError(t, err)
+	processor, err := NewModelPipelineProcessor(nil, ModelPipelineConfig{Enabled: false})
+	require.NoError(t, err)
+	material := &materialCounter{}
+	service.SetPipelineProcessor(processor)
+	service.SetMaterialProvider(material)
+	service.clock = func() time.Time { return scenarioTime }
+	snapshot, err := service.RunOnce(context.Background(), scenarioTime)
+	require.NoError(t, err)
+	require.Equal(t, "live", snapshot.Schedule.AcquisitionMode)
+	require.Equal(t, "staged_pipeline", snapshot.Schedule.ReviewMode)
+	require.Zero(t, material.calls)
+	require.NotEmpty(t, snapshot.Records)
+	for _, candidate := range snapshot.Records {
+		require.False(t, candidate.Record.IsMock)
+		require.False(t, candidate.Review.IsMock)
+		require.False(t, candidate.Review.ScientificReviewed)
+		require.Equal(t, "awaiting_configuration", candidate.Pipeline.Status)
+		for _, stage := range candidate.Pipeline.Stages {
+			require.Zero(t, stage.Attempts)
+		}
+	}
+	diagnostics, err := service.Doctor(context.Background())
+	require.NoError(t, err)
+	for _, diagnostic := range diagnostics {
+		require.NotEqual(t, "LLM_MOCK", diagnostic.Code)
+	}
+}

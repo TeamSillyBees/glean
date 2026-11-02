@@ -444,7 +444,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   }>(await sourcesResponse)
   expect(sources.schedule).toMatchObject({
     acquisitionMode: 'live',
-    reviewMode: 'mock',
+    reviewMode: 'staged_pipeline',
     schedulerEnabled: false,
     completedRuns: 0,
   })

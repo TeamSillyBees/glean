@@ -148,11 +148,35 @@ func TestPaperPipelinePostgresRestartAndCatalogProjection(t *testing.T) {
 		require.False(t, c.Record.IsMock)
 		require.Equal(t, "awaiting_configuration", c.Pipeline.Status)
 	}
-	// 真实源按持久化间隔每次只推进一个模板；只排空既有固定窗口，不绕过节流。
-	for i := 1; pending.Runs[0].Status != "completed" && i <= len(pending.Runs[0].SearchTemplates)+1; i++ {
-		pending, err = first.RunOnce(actorCtx, at.Add(time.Duration(i)*time.Second))
-		require.NoError(t, err)
+	// executionTemplates先执行全部regular，再按CoreBackfill追加Core模板；不能只按冻结模板数估算。
+	executionCount := len(pending.Runs[0].SearchTemplates)
+	if pending.Runs[0].Sources["crossref"].CoreBackfill {
+		for _, template := range pending.Runs[0].SearchTemplates {
+			if template.Core {
+				executionCount++
+			}
+		}
 	}
+	fixedRunID := pending.Runs[0].ID
+	remaining := executionCount - pending.Runs[0].Sources["crossref"].TemplateIndex
+	require.GreaterOrEqual(t, remaining, 0)
+	// 此fixture每次返回Complete，真实源每调用最多推进一个模板；严格限制到剩余模板数。
+	// 来源退避使用RunOnce的now，因此直接推进到已持久化截止时间；模型退避仍按下面的wallclock等待。
+	for i := 0; i < remaining; i++ {
+		previousIndex := pending.Runs[0].Sources["crossref"].TemplateIndex
+		nextAt := pending.Sources["crossref"].NextRetryAt
+		require.False(t, nextAt.IsZero(), "incomplete real-source template must retain its pacing deadline")
+		require.False(t, nextAt.Before(at))
+		pending, err = first.RunOnce(actorCtx, nextAt)
+		require.NoError(t, err)
+		require.Len(t, pending.Runs, 1, "draining must resume the original fixed window")
+		require.Equal(t, fixedRunID, pending.Runs[0].ID)
+		require.Equal(t, at, pending.Runs[0].FixedEnd)
+		require.Equal(t, previousIndex+1, pending.Runs[0].Sources["crossref"].TemplateIndex, "complete fixture page must advance exactly one template")
+	}
+	require.Equal(t, executionCount, pending.Runs[0].Sources["crossref"].TemplateIndex)
+	require.Equal(t, executionCount, source.calls, "all regular and core templates execute exactly once")
+	require.True(t, pending.Runs[0].Sources["crossref"].Acquired)
 	require.Equal(t, "completed", pending.Runs[0].Status)
 	acquired := pending.Sources["crossref"].AcquiredThrough
 	require.Equal(t, at, acquired)

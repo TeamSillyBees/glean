@@ -13,6 +13,8 @@ interface CommittedObservation {
   runId: string
   llmIsMock: boolean
   scientificReviewed: boolean
+  pipelineStatus: string
+  pipelineStages: { name: string; status: string; attempts: number }[]
 }
 
 function response(page: Page, path: string, query: Record<string, string> = {}) {
@@ -33,7 +35,7 @@ async function data<T>(item: Response): Promise<T> {
   return body.data as T
 }
 
-test('one official EuropePMC observation reaches real PostgreSQL, API and browser with only LLM mocked', async ({
+test('one official EuropePMC observation reaches real PostgreSQL, API and browser with model processing explicitly disabled', async ({
   page,
 }, info) => {
   const reportPath = process.env.GLEAN_E2E_LIVE_REPORT
@@ -50,7 +52,13 @@ test('one official EuropePMC observation reaches real PostgreSQL, API and browse
     expect(id).toMatch(/^[1-9][0-9]*$/)
   }
   expect(committed.sourceId).not.toBe('')
-  expect(committed.llmIsMock).toBe(true)
+  expect(committed.llmIsMock).toBe(false)
+  expect(committed.pipelineStatus).toBe('awaiting_configuration')
+  expect(committed.pipelineStages.length).toBeGreaterThan(0)
+  expect(committed.pipelineStages.every((stage) => stage.attempts === 0)).toBe(true)
+  expect(committed.pipelineStages.find((stage) => stage.name === 'material')?.status).toBe(
+    'awaiting_configuration',
+  )
   expect(committed.scientificReviewed).toBe(false)
   const origin = new URL(committed.sourceUrl)
   expect(origin.protocol).toBe('https:')
@@ -100,11 +108,18 @@ test('one official EuropePMC observation reaches real PostgreSQL, API and browse
   expect(observed!.sourceId).toBe(committed.sourceId)
   expect(observed!.sourceUrl).toBe(committed.sourceUrl)
   expect(observed!.runId).toBe(committed.runId)
-  expect(observed!.review).toMatchObject({ isMock: true, scientificReviewed: false })
+  expect(observed!.review).toMatchObject({
+    isMock: false,
+    scientificReviewed: false,
+    inclusionStatus: 'pending-review',
+    pipeline: { status: 'awaiting_configuration' },
+  })
+  expect(observed!.review!.pipeline!.stages.every((stage) => stage.attempts === 0)).toBe(true)
   expect(Object.keys(observed!.raw).length).toBeGreaterThan(0)
   expect(observed!.title).not.toBe('')
 
   const drawer = page.getByRole('dialog', { name: '论文详情', exact: true })
+  await expect(drawer.getByText('缺少模型配置', { exact: true }).first()).toBeVisible()
   await drawer.getByRole('tab', { name: '来源与证据', exact: true }).click()
   const version = drawer.locator(
     `[data-testid="source-observation"][data-observation-id="${committed.observationId}"]`,
@@ -114,7 +129,7 @@ test('one official EuropePMC observation reaches real PostgreSQL, API and browse
   await expect(version.getByText(observed!.title, { exact: true })).toBeVisible()
   await expect(
     version.getByText('此版本的模型阅读为模拟输出；来源内容是真实采集记录。', { exact: true }),
-  ).toBeVisible()
+  ).toHaveCount(0)
   await expect(version.getByRole('link', { name: '官方来源记录', exact: true })).toHaveAttribute(
     'href',
     committed.sourceUrl,
