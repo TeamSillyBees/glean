@@ -11,6 +11,39 @@ describe('paper navigation', () => {
     for (const id of ['', '0', '-1', '1/2', '1e5', '9223372036854775808'])
       expect(validPaperId(id)).toBe(false)
   })
+  it.each([
+    '/workspace/glean/',
+    '//other.example/path',
+    '//user:pass@other.example/path',
+    '/workspace/%E8%AE%BA%E6%96%87%20notes/%2F%3F%23%25',
+    '/%2F%2Fother.example/path',
+  ])('keeps canonical links on the current origin at %s', (pathname) => {
+    // Use an absolute same-origin URL so // remains a pathname, not an authority.
+    history.replaceState(null, '', `${location.origin}${pathname}?q=private&token=secret#notes`)
+    const link = new URL(paperLink('9223372036854775807'))
+    expect(link.origin).toBe(location.origin)
+    expect(link.pathname).toBe(pathname)
+    expect(link.search).toBe('?paper=9223372036854775807')
+    expect(link.hash).toBe('')
+    expect(link.username).toBe('')
+    expect(link.password).toBe('')
+  })
+  it('does not retain credentials from the current URL', () => {
+    const origin = location.origin
+    vi.stubGlobal('window', {
+      location: new URL(
+        `${location.protocol}//user:pass@${location.host}/workspace/?token=secret#notes`,
+      ),
+    })
+    expect(paperLink('123')).toBe(`${origin}/workspace/?paper=123`)
+  })
+  it('opens details on a double-slash path without crossing origins', () => {
+    history.replaceState(null, '', `${location.origin}//other.example/path?token=secret#notes`)
+    const { result } = renderHook(usePaperNavigation)
+    act(() => result.current.open('9223372036854775807'))
+    expect(result.current.id).toBe('9223372036854775807')
+    expect(location.href).toBe(`${location.origin}//other.example/path?paper=9223372036854775807`)
+  })
   it('pushes once, traverses Back/Forward, and closes owned list entries with Back', async () => {
     const { result } = renderHook(usePaperNavigation)
     const length = history.length

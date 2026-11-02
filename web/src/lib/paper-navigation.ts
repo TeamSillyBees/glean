@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 const marker = 'gleanPaperNavigation'
 // paperLink 仅分享论文 ID，不带搜索、个人信息或会话参数。
 export function paperLink(id: string): string {
-  const url = new URL(window.location.pathname, window.location.origin)
+  const url = new URL(window.location.origin)
+  // Set the path separately: a leading // must not become another origin.
+  url.pathname = window.location.pathname
   url.searchParams.set('paper', id)
   return url.href
 }
