@@ -13,15 +13,17 @@
    | 类型 | 名称 | 内容 |
    | --- | --- | --- |
    | Variable | `PRODUCTION_DEPLOY_ENABLED` | 默认缺省即拒绝；完成准备后显式设为 `true` |
+   | Variable | `PRODUCTION_BASE_DIR` | 必填，无默认；服务器应用专用绝对目录，如 `/srv/glean`（仅示例） |
    | Variable | `PRODUCTION_SSH_HOST` | IPv4 或 DNS 主机名；此基线不接受 IPv6 字面量 |
    | Variable | `PRODUCTION_SSH_USER` | 已存在的专用部署账号 |
    | Variable | `PRODUCTION_SSH_PORT` | SSH 端口，缺省 `22` |
    | Secret | `PRODUCTION_SSH_KEY` | 已授权部署账号的私钥；不由工作流生成 |
-   | Secret | `PRODUCTION_SSH_KNOWN_HOSTS` | 经独立可信渠道核验的完整 OpenSSH known_hosts 记录 |
 
-   known_hosts 必须匹配主机名；非 22 端口使用 `[host]:port`。从服务器管理控制台 / 既有资产记录确认主机密钥及指纹，不能把工作流现场 `ssh-keyscan` 的结果直接当可信值。主机密钥更换时先走独立核验和审批，不能改成 `StrictHostKeyChecking=no`。
-4. 服务器预建 `/opt/glean/releases`，允许该账号在其中建立发布目录。工作流不调用 sudo，也不安装软件。账号需要运行部署脚本所需的 Docker / Atlas / 备份权限；Docker socket 权限实际上接近主机 root，应用专用主机和受限部署账号控制风险。SSH 服务端需提供 POSIX shell，部署脚本需要 Bash。
-5. 服务器 `/etc/glean/ops.env`、数据库 / Redis / JWT 密钥、证书、备份目录和部署状态均留在服务器；不上传 GitHub，不进入构建参数或制品。服务器必须已经能拉取这两个 GHCR 包：
+   按本项目选择，SSH / SCP **不检查服务器主机密钥**，无需配置 known_hosts Secret，也没有可选严格模式。连接仍用部署账号私钥认证且禁止交互密码；这不等于认证了服务器身份，错误 DNS、被冒充的主机或中间人可能接收发布内容并干预部署。此取舍不改变数据库 TLS、私钥保密或数据完整性要求。
+
+   base 仅允许由 ASCII 字母、数字、`_`、`-`、`.` 组成的路径段；禁止根目录、空格、引号、控制字符、`.` / `..` 段、重复或末尾斜杠、符号链接组件。详细布局与迁移方法见生产手册。
+4. 按生产手册在服务器预建 `$PRODUCTION_BASE_DIR` 及其固定子目录，允许该账号在 `$PRODUCTION_BASE_DIR/releases` 建立发布目录；保护 base 及父目录不被其他用户改写。base 本身及 `config/`、`releases/`、`backups/`、`state/`、`recovery/` 各控制目录须为该部署账号所有、`0700`，不是常见的 `0755`；具体准备示例及容器数据目录权限见生产手册。工作流不调用 sudo，也不安装软件。账号需要运行部署脚本所需的 Docker / Atlas / 备份权限；Docker socket 权限实际上接近主机 root，应用专用主机和受限部署账号控制风险。SSH 服务端需提供 POSIX shell，部署脚本需要 Bash。
+5. 服务器 `$PRODUCTION_BASE_DIR/config/ops.env`、数据库 / Redis / JWT 密钥、证书、备份目录和部署状态均留在服务器；不上传 GitHub，不进入构建参数或制品。服务器必须已经能拉取这两个 GHCR 包：
    - `ghcr.io/teamsillybees/glean-backend`
    - `ghcr.io/teamsillybees/glean-web`
 
@@ -35,14 +37,16 @@
 3. 审批人检查 SHA、对应 CI、迁移兼容性、备份可恢复性后批准 `production`。批准后重新验证 main 与同 SHA 的最新 CI，避免审批期间版本改变。
 4. 工作流构建后使用当前 job 的临时 `GITHUB_TOKEN` 推送 GHCR；不需要 PAT。登录只存在于临时 `DOCKER_CONFIG`，退出时 logout 并清理。镜像使用 SHA / run ID / attempt 唯一标签，**部署参数始终使用 `@sha256:…` digest，不使用 `latest` 或其他可移动 tag**。
 5. SSH 前再次检查 main 未变化；若此时已变化，会失败退出，可能已发布镜像但**未触碰生产服务器**，需对新的 main 重新运行。此检查不是对 main 的锁，后续 main 可以前进，但本次发布身份始终为审批过的不可变 SHA / digest。
-6. 从验证过的 Git commit 创建归档，补入 `deploy/REVISION`。严格校验 SSH 主机密钥后传入全新的 `/opt/glean/releases/<sha>-<run_id>-<attempt>`，再运行：
+6. 从验证过的 Git commit 创建归档，补入 `deploy/REVISION`。将归档传入全新的 `$PRODUCTION_BASE_DIR/releases/<sha>-<run_id>-<attempt>`；服务器拒绝符号链接路径，重复运行不会覆盖既有 release。工作流显式传入同一个 base 后运行以下命令（手动运行先 `export PRODUCTION_BASE_DIR=...`）：
 
    ```sh
-   GLEAN_OPS_ENV=/etc/glean/ops.env bash scripts/production/deploy.sh \
+   bash scripts/production/deploy.sh \
      '<40位提交SHA>' \
      'ghcr.io/teamsillybees/glean-backend@sha256:<64位digest>' \
      'ghcr.io/teamsillybees/glean-web@sha256:<64位digest>'
    ```
+
+   发布、配置、数据、原始档案、备份、状态与隔离恢复文件均在 base 中；容器内部路径、Docker 全局缓存/日志及外置数据库/Redis 存储不因此改变。不要仅修改 base 来迁移已有实例，必须先按生产手册执行人工维护迁移。
 
 7. 以工作流成功、服务器发布状态和实际 readiness 为证据；摘要仅在服务器脚本成功后记录 SHA / digests。备份、迁移、停写与失败恢复语义见生产手册。
 

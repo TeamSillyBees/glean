@@ -7,24 +7,34 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null || fail "Required tool is unavailable: $1"; }
 load_ops() {
-  local config="${GLEAN_OPS_ENV:-/etc/glean/ops.env}"
-  [[ -f "$config" && ! -L "$config" ]] || fail 'Server-local ops environment is missing or is a symlink.'
   need python3
+  : "${PRODUCTION_BASE_DIR:?Set the absolute server-local deployment base directory}"
+  export PRODUCTION_BASE_DIR
+  python3 "$ROOT/scripts/production/guard.py" layout
+  local requested_base="$PRODUCTION_BASE_DIR"
+  local config="$PRODUCTION_BASE_DIR/config/ops.env"
   python3 "$ROOT/scripts/production/guard.py" private-file "$config"
   set -a
-  # This is operator-provisioned shell configuration, not a downloaded artifact.
+  # Operator-provisioned shell configuration is trusted code, never a release artifact.
   source "$config"
   set +a
-  : "${GLEAN_ORIGINAL_ARCHIVE_DIR:?}" "${GLEAN_DATA_DIR:?}" "${GLEAN_BACKUP_ROOT:?}" "${GLEAN_STATE_DIR:?}"
-  for path in "$GLEAN_ORIGINAL_ARCHIVE_DIR" "$GLEAN_DATA_DIR" "$GLEAN_BACKUP_ROOT" "$GLEAN_STATE_DIR"; do
-    [[ "$path" = /* && "$path" != / ]] || fail 'Operational paths must be absolute, non-root directories.'
-  done
+  [[ "$PRODUCTION_BASE_DIR" = "$requested_base" ]] || fail 'ops.env may not change PRODUCTION_BASE_DIR.'
+  python3 "$ROOT/scripts/production/guard.py" layout
+  export GLEAN_OPS_ENV="$config"
+  export GLEAN_BACKEND_ENV="$PRODUCTION_BASE_DIR/config/backend.env"
+  export GLEAN_CONFIG_DIR="$PRODUCTION_BASE_DIR/config/configs"
+  export GLEAN_DATA_DIR="$PRODUCTION_BASE_DIR/data"
+  export GLEAN_ORIGINAL_ARCHIVE_DIR="$PRODUCTION_BASE_DIR/originals"
+  export GLEAN_BACKUP_ROOT="$PRODUCTION_BASE_DIR/backups"
+  export GLEAN_STATE_DIR="$PRODUCTION_BASE_DIR/state"
   [[ -d "$GLEAN_DATA_DIR" && -d "$GLEAN_ORIGINAL_ARCHIVE_DIR" ]] || fail 'Persistent data and original private archive directories must already exist.'
   python3 "$ROOT/scripts/production/guard.py" ops-paths
-  mkdir -p -- "$GLEAN_BACKUP_ROOT" "$GLEAN_STATE_DIR"
+  mkdir -p -- "$GLEAN_BACKUP_ROOT" "$GLEAN_STATE_DIR" "$PRODUCTION_BASE_DIR/recovery"
 }
+
 lock_ops() {
   need flock
+  python3 "$ROOT/scripts/production/guard.py" layout
   exec 9>"$GLEAN_STATE_DIR/operations.lock"
   flock -n 9 || fail 'Another deployment or backup operation is running.'
 }
@@ -48,7 +58,7 @@ backup_data() {
   need pg_dump; need pg_restore; need tar; need sha256sum
   validate_database DATABASE_URL
   local destination="$1"
-  [[ ! -e "$destination" ]] || fail 'Backup destination already exists.'
+  python3 "$ROOT/scripts/production/guard.py" backup-path "$destination"
   mkdir -m 700 -- "$destination"
   # Full database, including audit overlays, source evidence and Atlas revisions.
   pg_client DATABASE_URL pg_dump --format=custom --no-owner --no-privileges --file="$destination/database.dump" 2>"$destination/database.log"
@@ -77,12 +87,14 @@ activate() {
   need docker; need curl; need pg_dump; need pg_restore; need tar; need sha256sum
   [[ "${GLEAN_ALLOW_LOCAL_TEST_DB:-0}" = 0 ]] || fail 'Test database mode is prohibited for deployment.'
   validate_database DATABASE_URL
+  python3 "$ROOT/scripts/production/guard.py" release-path "$ROOT"
   : "${GLEAN_BACKEND_ENV:?}" "${GLEAN_CONFIG_DIR:?}"
   [[ -f "$GLEAN_BACKEND_ENV" && -d "$GLEAN_CONFIG_DIR" ]] || fail 'Server-local backend configuration is missing.'
   python3 "$ROOT/scripts/production/guard.py" private-file "$GLEAN_BACKEND_ENV"
   [[ "$mode" != migrate ]] || need atlas
   lock_ops
   python3 "$ROOT/scripts/production/guard.py" check-current "$GLEAN_STATE_DIR/current.json"
+  python3 "$ROOT/scripts/production/guard.py" active-mounts
   compose config --quiet
   compose pull
   local backup="$GLEAN_BACKUP_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-$RELEASE_SHA-$$"
@@ -100,6 +112,7 @@ activate() {
     compose stop backend
     fail 'Readiness failed; backend stopped. Review schema compatibility before manual code rollback.'
   fi
+  python3 "$ROOT/scripts/production/guard.py" layout
   if [[ -f "$GLEAN_STATE_DIR/current.json" ]]; then
     cp -- "$GLEAN_STATE_DIR/current.json" "$GLEAN_STATE_DIR/previous.json"
   fi

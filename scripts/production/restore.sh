@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 source "$(dirname -- "$0")/common.sh"
 [[ $# = 3 && "$3" = --confirm-empty-target ]] || fail 'Usage: restore.sh BACKUP_DIRECTORY NEW_RECOVERY_DIRECTORY --confirm-empty-target'
-backup="$(cd -- "$1" && pwd)"
+backup="$1"
 target="$2"
 [[ "$target" = /* && ! -e "$target" ]] || fail 'New data directory must be an absolute, absent path.'
 load_ops
+# The input backup must be inside the selected base, without symlink components.
+python3 "$ROOT/scripts/production/guard.py" existing-backup "$backup"
 python3 "$ROOT/scripts/production/guard.py" restore-target "$target"
 lock_ops
 validate_database GLEAN_RESTORE_DATABASE_URL

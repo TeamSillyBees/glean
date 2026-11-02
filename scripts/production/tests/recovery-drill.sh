@@ -44,10 +44,12 @@ values = {'DATABASE_URL': db('source_db'), 'GLEAN_RESTORE_DATABASE_URL': db('res
           'GLEAN_DATA_DIR': str(w/'data'), 'GLEAN_ORIGINAL_ARCHIVE_DIR': str(w/'originals'),
           'GLEAN_BACKUP_ROOT': str(w/'backups'), 'GLEAN_STATE_DIR': str(w/'state'),
           'GLEAN_ALLOW_LOCAL_TEST_DB': '1'}
-(w/'ops.env').write_text(''.join(k+'='+shlex.quote(v)+'\n' for k,v in values.items()))
-(w/'ops.env').chmod(0o600)
+(w/'config').mkdir(mode=0o700)
+(w/'config/ops.env').write_text(''.join(k+'='+shlex.quote(v)+'\n' for k,v in values.items()))
+(w/'config/ops.env').chmod(0o600)
 PY
-export GLEAN_OPS_ENV="$work/ops.env"
+export PRODUCTION_BASE_DIR="$work"
+export GLEAN_OPS_ENV="$work/config/ops.env"
 set -a; source "$GLEAN_OPS_ENV"; set +a
 mkdir -p "$GLEAN_DATA_DIR/uploads" "$GLEAN_ORIGINAL_ARCHIVE_DIR"
 printf 'uploaded-original-user-asset\n' > "$GLEAN_DATA_DIR/uploads/sentinel.txt"
@@ -66,17 +68,17 @@ SQL
 snapshot DATABASE_URL > "$work/before.jsonl"
 bash "$ROOT/scripts/production/backup.sh" --writers-stopped
 backup="$(find "$GLEAN_BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d)"
-bash "$ROOT/scripts/production/restore.sh" "$backup" "$work/restored" --confirm-empty-target
+bash "$ROOT/scripts/production/restore.sh" "$backup" "$work/recovery/restored" --confirm-empty-target
 snapshot GLEAN_RESTORE_DATABASE_URL > "$work/after.jsonl"
 cmp "$work/before.jsonl" "$work/after.jsonl"
-cmp "$GLEAN_DATA_DIR/uploads/sentinel.txt" "$work/restored/data/uploads/sentinel.txt"
-cmp "$GLEAN_ORIGINAL_ARCHIVE_DIR/original-library.md" "$work/restored/originals/original-library.md"
+cmp "$GLEAN_DATA_DIR/uploads/sentinel.txt" "$work/recovery/restored/data/uploads/sentinel.txt"
+cmp "$GLEAN_ORIGINAL_ARCHIVE_DIR/original-library.md" "$work/recovery/restored/originals/original-library.md"
 # A repeated restore must refuse the populated DB, not overwrite application state.
-if bash "$ROOT/scripts/production/restore.sh" "$backup" "$work/repeated" --confirm-empty-target >"$work/repeated.log" 2>&1; then
+if bash "$ROOT/scripts/production/restore.sh" "$backup" "$work/recovery/repeated" --confirm-empty-target >"$work/repeated.log" 2>&1; then
   echo 'ERROR: non-empty restore target was accepted.' >&2; exit 1
 fi
 grep -q 'not empty' "$work/repeated.log"
-test ! -e "$work/repeated"
+test ! -e "$work/recovery/repeated"
 snapshot GLEAN_RESTORE_DATABASE_URL > "$work/after-refusal.jsonl"
 cmp "$work/after.jsonl" "$work/after-refusal.jsonl"
 printf 'PASS: full real-schema PostgreSQL roundtrip, user/review/correction/original archives/uploads/monitor/migration state, and non-empty-target refusal.\n'

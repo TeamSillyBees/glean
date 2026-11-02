@@ -61,6 +61,7 @@ jobs:
       packages: write
     env:
       DEPLOY_SHA: ${{ needs.verify.outputs.commit }}
+      PRODUCTION_BASE_DIR: ${{ vars.PRODUCTION_BASE_DIR }}
     steps:
       - name: Require explicit environment enablement and revalidate after approval
         env:
@@ -68,6 +69,8 @@ jobs:
           DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
         run: |
           set -euo pipefail
+          # Narrow path grammar is intentional: the value also crosses SSH/SCP shells.
+          [[ "$PRODUCTION_BASE_DIR" =~ ^(/[a-zA-Z0-9._-]+)+$ && ! "$PRODUCTION_BASE_DIR" =~ (^|/)\.{1,2}(/|$) ]] || { echo 'Set PRODUCTION_BASE_DIR to a non-root absolute path without spaces, dot components or shell characters.'; exit 1; }
           [[ "$DEPLOY_ENABLED" == true ]] || { echo 'Production deployment is not enabled; configure protection and prerequisites first.'; exit 1; }
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
           main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
@@ -131,7 +134,6 @@ jobs:
           DEPLOY_USER: ${{ vars.PRODUCTION_SSH_USER }}
           DEPLOY_PORT: ${{ vars.PRODUCTION_SSH_PORT }}
           SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
           BACKEND_IMAGE: ${{ steps.images.outputs.backend }}
           WEB_IMAGE: ${{ steps.images.outputs.web }}
         run: |
@@ -141,7 +143,8 @@ jobs:
           [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           DEPLOY_PORT="${DEPLOY_PORT:-22}"
           [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$DEPLOY_PORT >= 1 && 10#$DEPLOY_PORT <= 65535 ))
-          [[ -n "$SSH_PRIVATE_KEY" && -n "$SSH_KNOWN_HOSTS" ]]
+          [[ -n "$SSH_PRIVATE_KEY" ]]
+          [[ "$PRODUCTION_BASE_DIR" =~ ^(/[a-zA-Z0-9._-]+)+$ && ! "$PRODUCTION_BASE_DIR" =~ (^|/)\.{1,2}(/|$) ]]
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
           for image in "$BACKEND_IMAGE" "$WEB_IMAGE"; do
@@ -150,18 +153,14 @@ jobs:
           work="$(mktemp -d "$RUNNER_TEMP/glean-deploy.XXXXXX")"
           trap 'rm -rf "$work"' EXIT
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$work/key"
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$work/known_hosts"
-          unset SSH_PRIVATE_KEY SSH_KNOWN_HOSTS
-          host_lookup="$DEPLOY_HOST"
-          if [[ "$DEPLOY_PORT" != 22 ]]; then host_lookup="[$DEPLOY_HOST]:$DEPLOY_PORT"; fi
-          ssh-keygen -F "$host_lookup" -f "$work/known_hosts" >/dev/null
+          unset SSH_PRIVATE_KEY
           ssh_options=(-i "$work/key" -o BatchMode=yes -o IdentitiesOnly=yes
-            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$work/known_hosts"
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
             -o GlobalKnownHostsFile=/dev/null -o PasswordAuthentication=no
             -o KbdInteractiveAuthentication=no -o ConnectTimeout=15
             -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
           target="$DEPLOY_USER@$DEPLOY_HOST"
-          release="/opt/glean/releases/$DEPLOY_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          release="$PRODUCTION_BASE_DIR/releases/$DEPLOY_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           # Archive committed files only: never runner files, .git, local secrets or dependencies.
           git archive --format=tar "$DEPLOY_SHA" > "$work/release.tar"
           mkdir -p "$work/stamp/deploy"
@@ -169,10 +168,24 @@ jobs:
           tar --append --file="$work/release.tar" -C "$work/stamp" deploy/REVISION
           gzip "$work/release.tar"
           # Fresh directory only: re-runs cannot overwrite a previously transferred release.
-          ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" "mkdir -- '$release'"
+          # The pre-provisioned private base prevents another user swapping checked paths.
+          # Check remote components BEFORE scp/tar can follow a symlink outside the base.
+          ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" "python3 - '$PRODUCTION_BASE_DIR' '$release'" <<'PY'
+          import os, stat, sys
+          from pathlib import Path
+          base, release = map(Path, sys.argv[1:])
+          for path in (base, *base.parents, base / 'releases'):
+              info = path.lstat()
+              if not stat.S_ISDIR(info.st_mode):
+                  raise SystemExit('Base and release ancestors must be real directories, not symlinks.')
+          info = base.stat()
+          if info.st_uid != os.geteuid() or info.st_mode & 0o077:
+              raise SystemExit('Base must belong to the deploy user with owner-only permissions (0700).')
+          release.mkdir(mode=0o700)
+          PY
           scp "${ssh_options[@]}" -P "$DEPLOY_PORT" "$work/release.tar.gz" "$target:$release/release.tar.gz"
           ssh "${ssh_options[@]}" -p "$DEPLOY_PORT" "$target" \
-            "set -eu; cd '$release'; tar --extract --gzip --file=release.tar.gz --no-same-owner; rm release.tar.gz; GLEAN_OPS_ENV=/etc/glean/ops.env bash scripts/production/deploy.sh '$DEPLOY_SHA' '$BACKEND_IMAGE' '$WEB_IMAGE'"
+            "set -eu; cd '$release'; tar --extract --gzip --file=release.tar.gz --no-same-owner; rm release.tar.gz; PRODUCTION_BASE_DIR='$PRODUCTION_BASE_DIR' bash scripts/production/deploy.sh '$DEPLOY_SHA' '$BACKEND_IMAGE' '$WEB_IMAGE'"
 
       - name: Record immutable deployment identity
         env:

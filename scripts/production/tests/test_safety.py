@@ -1,6 +1,7 @@
 """Offline contract tests: no production connection, daemon, or credentials required."""
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import shlex
@@ -95,19 +96,68 @@ class GuardTests(unittest.TestCase):
             with patch.dict(os.environ, {'GLEAN_RESTORE_DATABASE_URL': 'postgres://u:p@db.example/glean_new?sslmode=verify-full'}):
                 guard.distinct_restore_database()
 
+    def test_base_rejects_ambiguous_and_shell_unsafe_paths(self):
+        for value in ('', '/', 'relative', '/base/', '//base', '/a//b', '/a/../b', '/a/./b',
+                      '/a b', '/a\nb', "/a'b", '/a;touch-x', '/a$(id)', '/a${HOME}', '/a:other', '/中文'):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                guard.safe_path(value)
+        self.assertEqual(str(guard.safe_path('/srv/glean-v1.0_test')), '/srv/glean-v1.0_test')
+
     def test_restore_target_and_backup_paths_cannot_overlap_live_data(self):
         with tempfile.TemporaryDirectory() as directory:
-            paths = {key: str(Path(directory)/name) for key, name in
-                     (('GLEAN_DATA_DIR', 'data'), ('GLEAN_ORIGINAL_ARCHIVE_DIR', 'originals'),
-                      ('GLEAN_BACKUP_ROOT', 'backups'), ('GLEAN_STATE_DIR', 'state'))}
+            paths = {key: str(Path(directory)/name) for key, name in guard.LAYOUT.items()}
+            paths['PRODUCTION_BASE_DIR'] = directory
             with patch.dict(os.environ, paths):
                 guard.ops_paths()
-                guard.restore_target(str(Path(directory)/'isolated'))
-                with self.assertRaises(ValueError):
-                    guard.restore_target(str(Path(directory)/'data/restored'))
+                guard.restore_target(str(Path(directory)/'recovery/isolated'))
+                guard.backup_path(str(Path(directory)/'backups/new'))
+                for target in ('data/restored', 'backups/restored', 'state', 'recovery', '../outside'):
+                    with self.subTest(target=target), self.assertRaises(ValueError):
+                        guard.restore_target(directory+'/'+target)
                 with patch.dict(os.environ, {'GLEAN_BACKUP_ROOT': str(Path(directory)/'data/backups')}):
                     with self.assertRaises(ValueError):
                         guard.ops_paths()
+
+    def test_layout_rejects_symlinks_in_base_children_and_state_files(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            base = Path(directory)
+            with patch.dict(os.environ, {'PRODUCTION_BASE_DIR': directory}, clear=True):
+                for suffix in ('data', 'config', 'backups', 'state', 'recovery', 'releases'):
+                    link = base/suffix
+                    link.symlink_to(outside)
+                    with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                        guard.layout()
+                    link.unlink()
+                (base/'state').mkdir(mode=0o700)
+                for name in ('operations.lock', 'current.json', 'previous.json', 'current.json.new'):
+                    link = base/'state'/name
+                    link.symlink_to(Path(outside)/'absent')
+                    with self.subTest(name=name), self.assertRaises(ValueError):
+                        guard.layout()
+                    link.unlink()
+                alias = base/'alias'
+                alias.symlink_to(outside)
+                with patch.dict(os.environ, {'PRODUCTION_BASE_DIR': str(alias)}), self.assertRaises(ValueError):
+                    guard.layout()
+
+    def test_existing_container_mounts_block_base_switch_even_without_state(self):
+        values = {'GLEAN_DATA_DIR': '/new/data', 'GLEAN_CONFIG_DIR': '/new/config/configs'}
+        with patch.dict(os.environ, values), patch('subprocess.run') as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = 'a'*12
+            for source in ('/old/data', '/new/data'):
+                records = [{'Mounts': [{'Destination': '/app/var', 'Source': source, 'Type': 'bind'},
+                                       {'Destination': '/app/configs', 'Source': '/new/config/configs', 'Type': 'bind'}]}]
+                run.side_effect = [subprocess.CompletedProcess([], 0, 'a'*12),
+                                   subprocess.CompletedProcess([], 0, json.dumps(records))]
+                if source.startswith('/old'):
+                    with self.assertRaises(ValueError):
+                        guard.active_mounts()
+                else:
+                    guard.active_mounts()
+            run.side_effect = [subprocess.CompletedProcess([], 1, '', 'private daemon error')]
+            with self.assertRaisesRegex(ValueError, 'Unable to inspect'):
+                guard.active_mounts()
 
     def test_libpq_clients_receive_discrete_environment_never_uri_or_inherited_target(self):
         values = {'CHECK_URL': 'postgres://encoded%40user:p%24ss@db.example:5444/glean%20db?sslmode=verify-full&sslrootcert=%2Fprivate%2Fca.crt&connect_timeout=5&application_name=backup',
@@ -162,34 +212,33 @@ class DeploymentTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.work = Path(self.directory.name)
-        self.release = self.work/'release'
+        self.release = self.work/'releases/release'
+        (self.work/'releases').mkdir(mode=0o700)
         shutil.copytree(ROOT/'scripts/production', self.release/'scripts/production')
         shutil.copytree(ROOT/'deploy', self.release/'deploy')
         self.sha = 'a'*40
         (self.release/'deploy/REVISION').write_text(self.sha+'\n')
-        for name in ('data', 'originals', 'configs', 'bin'):
-            (self.work/name).mkdir()
+        for name in ('data', 'originals', 'config', 'config/configs', 'bin'):
+            (self.work/name).mkdir(mode=0o700)
         (self.work/'data/upload').write_text('upload-sentinel')
         (self.work/'originals/private.md').write_text('private-original-sentinel')
-        (self.work/'backend.env').write_text('INITRA_IDGEN_NODE=1\n')
-        (self.work/'backend.env').chmod(0o600)
-        values = {'DATABASE_URL': 'postgres://operator:never-log-this-secret@db.example/glean?sslmode=verify-full',
-                  'GLEAN_DATA_DIR': str(self.work/'data'), 'GLEAN_ORIGINAL_ARCHIVE_DIR': str(self.work/'originals'),
-                  'GLEAN_BACKUP_ROOT': str(self.work/'backups'), 'GLEAN_STATE_DIR': str(self.work/'state'),
-                  'GLEAN_BACKEND_ENV': str(self.work/'backend.env'), 'GLEAN_CONFIG_DIR': str(self.work/'configs')}
-        ops = self.work/'ops.env'
+        (self.work/'config/backend.env').write_text('INITRA_IDGEN_NODE=1\n')
+        (self.work/'config/backend.env').chmod(0o600)
+        values = {'DATABASE_URL': 'postgres://operator:never-log-this-secret@db.example/glean?sslmode=verify-full'}
+        ops = self.work/'config/ops.env'
         ops.write_text(''.join(k+'='+shlex.quote(v)+'\n' for k,v in values.items()))
         ops.chmod(0o600)
         self.env = {**os.environ, 'PATH': str(self.work/'bin')+':'+os.environ['PATH'],
-                    'GLEAN_OPS_ENV': str(ops), 'TEST_LOG': str(self.work/'commands.log'),
+                    'PRODUCTION_BASE_DIR': str(self.work), 'TEST_LOG': str(self.work/'commands.log'),
                     'GLEAN_ALLOW_LOCAL_TEST_DB': '0'}
-        for tool in ('docker', 'atlas', 'pg_dump', 'pg_restore', 'curl', 'sleep'):
+        for tool in ('docker', 'atlas', 'psql', 'pg_dump', 'pg_restore', 'curl', 'sleep'):
             path = self.work/'bin'/tool
             path.write_text('''#!/usr/bin/env python3
 import os, sys
 from pathlib import Path
 name = Path(sys.argv[0]).name
 with open(os.environ['TEST_LOG'], 'a') as log: log.write(name+' '+' '.join(sys.argv[1:])+'\\n')
+if name == 'psql': print('0')
 if name == 'pg_dump':
     target = next(a.split('=',1)[1] for a in sys.argv if a.startswith('--file='))
     Path(target).write_text('synthetic dump for shell sequencing test only')
@@ -235,7 +284,7 @@ if name == os.environ.get('TEST_FAIL'): sys.exit(1)
         self.assertFalse((self.work/'state/current.json').exists())
 
     def test_invalid_database_ports_fail_before_deployment_or_backup_actions(self):
-        ops = self.work/'ops.env'
+        ops = self.work/'config/ops.env'
         original = ops.read_text()
         for authority in ('db.example:0', 'db.example:65536', 'db.example:not-a-port',
                           'db.example:5432:5433', '[::1'):
@@ -253,6 +302,88 @@ if name == os.environ.get('TEST_FAIL'): sys.exit(1)
                     self.assertNotIn('never-log-this-secret', result.stdout + result.stderr)
                     self.assertEqual(log.read_bytes() if log.exists() else None, before_log)
                     self.assertEqual(list((self.work/'backups').iterdir()), before_backups)
+
+    def test_base_is_explicit_and_ops_cannot_redirect_paths(self):
+        ops = self.work/'config/ops.env'
+        original = ops.read_text()
+        for addition in ('GLEAN_DATA_DIR=/outside', 'GLEAN_STATE_DIR=/outside',
+                         'PRODUCTION_BASE_DIR=/outside', 'GLEAN_BACKUP_ROOT="$PRODUCTION_BASE_DIR/data"'):
+            with self.subTest(addition=addition):
+                ops.write_text(original+'\n'+addition+'\n')
+                result = self.run_deploy()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((self.work/'commands.log').exists())
+        ops.write_text(original)
+        del self.env['PRODUCTION_BASE_DIR']
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.work/'commands.log').exists())
+
+    def test_state_path_symlink_refused_before_any_server_command(self):
+        (self.work/'state').mkdir(mode=0o700)
+        sentinel = self.work/'sentinel'
+        sentinel.write_text('do not modify')
+        for name in ('current.json', 'current.json.new', 'previous.json', 'operations.lock'):
+            link = self.work/'state'/name
+            link.symlink_to(sentinel)
+            with self.subTest(name=name):
+                result = self.run_deploy()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(sentinel.read_text(), 'do not modify')
+                self.assertFalse((self.work/'commands.log').exists())
+            link.unlink()
+
+    def test_existing_state_identity_still_blocks_path_change(self):
+        (self.work/'state').mkdir(mode=0o700)
+        (self.work/'state/current.json').write_text(json.dumps({'identity': {'data': '/legacy/data'}}))
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('paths changed', result.stderr)
+        self.assertFalse((self.work/'commands.log').exists())
+
+    def test_ops_symlink_and_external_release_are_refused(self):
+        ops = self.work/'config/ops.env'
+        moved = self.work/'ops-saved'
+        ops.rename(moved)
+        ops.symlink_to(moved)
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.work/'commands.log').exists())
+        ops.unlink()
+        moved.rename(ops)
+        self.release.rename(self.work/'outside-release')
+        self.release = self.work/'outside-release'
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.work/'commands.log').exists())
+
+    def test_backup_restore_files_stay_inside_selected_base(self):
+        result = subprocess.run(['bash', str(self.release/'scripts/production/backup.sh'), '--writers-stopped'],
+                                env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        backup, = list((self.work/'backups').iterdir())
+        self.env['GLEAN_RESTORE_DATABASE_URL'] = 'postgres://operator:p@db.example/recovery?sslmode=verify-full'
+        target = self.work/'recovery/restored'
+        result = subprocess.run(['bash', str(self.release/'scripts/production/restore.sh'), str(backup), str(target), '--confirm-empty-target'],
+                                env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((target/'data/upload').read_text(), 'upload-sentinel')
+        self.assertEqual((target/'originals/private.md').read_text(), 'private-original-sentinel')
+        for directory in (self.work/'state', self.work/'backups', backup, self.work/'recovery', target):
+            self.assertEqual(directory.stat().st_mode & 0o777, 0o700)
+        log_before = (self.work/'commands.log').read_text()
+        for output in (self.work/'data/restored', self.work/'outside', self.work/'backups/nested'):
+            result = subprocess.run(['bash', str(self.release/'scripts/production/restore.sh'), str(backup), str(output), '--confirm-empty-target'],
+                                    env=self.env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((self.work/'commands.log').read_text(), log_before)
+
+    def test_stale_state_write_fails_before_mutating_services(self):
+        (self.work/'state').mkdir(mode=0o700)
+        (self.work/'state/current.json.new').write_text('unfinished')
+        result = self.run_deploy()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.work/'commands.log').exists())
 
     def test_revision_mismatch_fails_before_any_server_command(self):
         (self.release/'deploy/REVISION').write_text('d'*40)

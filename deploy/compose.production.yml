@@ -10,7 +10,7 @@ services:
     security_opt: [no-new-privileges:true]
     stop_grace_period: 60s
     env_file:
-      - ${GLEAN_BACKEND_ENV:?server-local backend environment required}
+      - ${PRODUCTION_BASE_DIR:?absolute deployment base required}/config/backend.env
     environment:
       APP_ENV: prod
       INITRA_SERVER_ADDR: "0.0.0.0:8080"
@@ -25,8 +25,8 @@ services:
       INITRA_AUTH_ALLOW_MEMORY_TOKEN_STORE: "false"
       INITRA_SERVER_DOCS_ENABLED: "false"
     volumes:
-      - ${GLEAN_CONFIG_DIR:?server-local configs required}:/app/configs:ro
-      - ${GLEAN_DATA_DIR:?persistent data directory required}:/app/var
+      - ${PRODUCTION_BASE_DIR:?absolute deployment base required}/config/configs:/app/configs:ro
+      - ${PRODUCTION_BASE_DIR:?absolute deployment base required}/data:/app/var
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m,mode=1777
     ports:
