@@ -8,10 +8,11 @@ import {
 } from '@tanstack/react-query'
 import { ArrowUpRight, Check, EyeOff } from 'lucide-react'
 import type { Paper, PaperPage, ReadStatus } from '../lib/types'
-import { api } from '../lib/api'
+import { api, ApiError } from '../lib/api'
 import { readLabels, safeLink } from '../lib/utils'
 import { Badge, ErrorState, ExternalLink, Loading } from './common'
 import { Button } from './ui/button'
+import { DialogClose } from './ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Tooltip } from './ui/tooltip'
 import { PaperOverview, PaperEvidence } from './paper-content'
@@ -121,7 +122,21 @@ export default function PaperDetailBody({
         <Loading />
       ) : query.isError ? (
         <div className="p-7">
-          <ErrorState error={query.error} retry={() => query.refetch()} />
+          {query.error instanceof ApiError && query.error.status === 404 ? (
+            <div role="alert">
+              <h2 className="font-semibold">未找到这篇论文</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                论文可能不存在。请返回列表，或检查链接。
+              </p>
+              <DialogClose asChild>
+                <Button variant="outline" className="mt-3">
+                  返回列表
+                </Button>
+              </DialogClose>
+            </div>
+          ) : (
+            <ErrorState error={query.error} retry={() => query.refetch()} />
+          )}
         </div>
       ) : (
         paper && (

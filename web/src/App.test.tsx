@@ -7,6 +7,8 @@ import { clearSession } from './lib/api'
 import { paper, topics, facets } from './test/fixtures'
 import type { Paper } from './lib/types'
 let canManage: boolean
+let identityId: string
+let identityName: string
 let failAccess: boolean
 let accessGate: Promise<Response> | null
 let currentTopics: typeof topics
@@ -20,6 +22,10 @@ let failPapers: boolean
 let failFacets: boolean
 let facetsGate: Promise<Response> | null
 let logoutGate: Promise<Response> | null
+let detailGate: Promise<Response> | null
+let detailStatus: number
+let detailSignal: AbortSignal | null | undefined
+let listTotal: number | null
 const ok = (data: unknown) =>
   new Response(JSON.stringify({ code: 'OK', message: 'success', data }), {
     status: 200,
@@ -27,7 +33,10 @@ const ok = (data: unknown) =>
   })
 beforeEach(() => {
   clearSession()
+  window.history.replaceState(null, '', '/')
   canManage = false
+  identityId = '9'
+  identityName = 'researcher'
   failAccess = false
   accessGate = null
   currentTopics = structuredClone(topics)
@@ -41,6 +50,10 @@ beforeEach(() => {
   failFacets = false
   facetsGate = null
   logoutGate = null
+  detailGate = null
+  detailStatus = 200
+  detailSignal = null
+  listTotal = null
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: string, init?: RequestInit) => {
@@ -50,7 +63,7 @@ beforeEach(() => {
         return ok({
           accessToken: 'test-access',
           refreshToken: 'test-refresh',
-          user: { userId: '9', username: 'researcher', nickname: '测试研究员' },
+          user: { userId: identityId, username: identityName, nickname: '测试研究员' },
         })
       if (url.pathname === '/api/v1/auth/password') return ok({})
       if (url.pathname === '/api/v1/auth/logout') return logoutGate || ok({})
@@ -85,7 +98,16 @@ beforeEach(() => {
         Object.assign(currentPaper, JSON.parse(String(init?.body)))
         return ok({ hidden: currentPaper.hidden, readStatus: currentPaper.readStatus })
       }
-      if (url.pathname.endsWith('/papers/123')) return ok(currentPaper)
+      if (/\/papers\/[^/]+$/.test(url.pathname)) {
+        detailSignal = init?.signal
+        if (!url.pathname.endsWith('/papers/123'))
+          return new Response(JSON.stringify({ message: 'not found' }), { status: 404 })
+        if (detailStatus !== 200)
+          return new Response(JSON.stringify({ message: 'detail unavailable' }), {
+            status: detailStatus,
+          })
+        return detailGate || ok(currentPaper)
+      }
       if (url.pathname.endsWith('/papers')) {
         if (failPapers)
           return new Response(JSON.stringify({ message: '测试后端不可用' }), { status: 503 })
@@ -97,7 +119,7 @@ beforeEach(() => {
             : [currentPaper]
         return ok({
           items,
-          total: items.length,
+          total: listTotal ?? items.length,
           page: Number(url.searchParams.get('page') || 1),
           pageSize: 20,
         })
@@ -662,4 +684,145 @@ it('opens password change from the account menu, cancels safely, and clears all 
   ).toBe(true)
   expect(localStorage.length).toBe(0)
   expect(sessionStorage.length).toBe(0)
+})
+
+describe('paper deep links', () => {
+  async function loginToLink(user: ReturnType<typeof userEvent.setup>) {
+    fireEvent.change(screen.getByLabelText('用户名'), { target: { value: identityName } })
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'test-password' } })
+    await user.click(screen.getByRole('button', { name: '进入工作台' }))
+    return screen.findByRole('dialog', { name: '论文详情' })
+  }
+  it('retains a hidden paper target through login without changing personal state; direct close never goes back', async () => {
+    currentPaper.hidden = true
+    window.history.replaceState(null, '', '/?paper=123')
+    const user = mount()
+    expect(window.location.search).toBe('?paper=123')
+    expect(paths.some((path) => path.endsWith('/papers/123'))).toBe(false)
+    const dialog = await loginToLink(user)
+    expect(await within(dialog).findByRole('button', { name: '恢复显示' })).toBeVisible()
+    expect(currentPaper.hidden).toBe(true)
+    const back = vi.spyOn(window.history, 'back')
+    await user.click(within(dialog).getByRole('button', { name: '关闭' }))
+    expect(window.location.search).toBe('')
+    expect(back).not.toHaveBeenCalled()
+    back.mockRestore()
+  })
+  it.each(['', 'no-such-id', '9223372036854775808'])(
+    'rejects invalid ID %s without requesting a paper',
+    async (id) => {
+      window.history.replaceState(null, '', `/?paper=${id}`)
+      const user = mount()
+      const dialog = await loginToLink(user)
+      expect(await within(dialog).findByText('论文链接无效')).toBeVisible()
+      expect(paths.some((path) => /\/papers\/[^/]+$/.test(path))).toBe(false)
+      await user.click(within(dialog).getByRole('button', { name: '返回列表' }))
+      expect(window.location.search).toBe('')
+    },
+  )
+  it('keeps a large unknown ID exact and offers return to list', async () => {
+    window.history.replaceState(null, '', '/?paper=9223372036854775807')
+    const user = mount()
+    const dialog = await loginToLink(user)
+    expect(await within(dialog).findByText('未找到这篇论文')).toBeVisible()
+    expect(paths).toContain('/api/v1/catalog/papers/9223372036854775807')
+    await user.click(within(dialog).getByRole('button', { name: '返回列表' }))
+    expect(window.location.search).toBe('')
+  })
+  it('retries a failed detail request without changing the target', async () => {
+    detailStatus = 503
+    window.history.replaceState(null, '', '/?paper=123')
+    const user = mount()
+    const dialog = await loginToLink(user)
+    await within(dialog).findByText('detail unavailable')
+    detailStatus = 200
+    await user.click(within(dialog).getByRole('button', { name: '重新连接' }))
+    expect(await within(dialog).findByRole('heading', { name: paper.titleZh })).toBeVisible()
+    expect(window.location.search).toBe('?paper=123')
+  })
+  it('copies only the canonical paper URL and reports clipboard failures', async () => {
+    window.history.replaceState(null, '', '/?paper=123&private=not-for-sharing#notes')
+    const user = mount()
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    const dialog = await loginToLink(user)
+    await user.click(within(dialog).getByRole('button', { name: '复制论文链接' }))
+    expect(write).toHaveBeenLastCalledWith(`${window.location.origin}/?paper=123`)
+    write.mockRejectedValueOnce(new Error('denied'))
+    await user.click(within(dialog).getByRole('button', { name: '复制论文链接' }))
+    expect(await screen.findByText('复制失败，请使用详情中的手动复制链接。')).toBeInTheDocument()
+    expect(within(dialog).getByRole('textbox', { name: '手动复制论文链接' })).toHaveValue(
+      `${window.location.origin}/?paper=123`,
+    )
+    write.mockRestore()
+  })
+  it('Back and Forward preserve in-memory search and page without putting them in the URL', async () => {
+    listTotal = 41
+    const user = mount()
+    await signIn(user)
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索论文或来源' }), {
+      target: { value: 'private search' },
+    })
+    await user.click(screen.getByRole('button', { name: '搜索' }))
+    await user.click(screen.getByRole('button', { name: '下一页' }))
+    await waitFor(() => expect(paths.some((path) => path.includes('page=2'))).toBe(true))
+    await user.click(
+      await screen.findByRole('button', { name: new RegExp(`查看 ${paper.titleZh}`) }),
+    )
+    expect(window.location.search).toBe('?paper=123')
+    act(() => window.history.back())
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveValue('private search')
+    expect(screen.getByText('2 / 3')).toBeInTheDocument()
+    act(() => window.history.forward())
+    const dialog = await screen.findByRole('dialog', { name: '论文详情' })
+    expect(await within(dialog).findByRole('heading', { name: paper.titleZh })).toBeVisible()
+    await user.click(within(dialog).getByRole('button', { name: '关闭' }))
+    await waitFor(() => expect(window.location.search).toBe(''))
+    expect(screen.getByText('2 / 3')).toBeInTheDocument()
+  })
+  it('refetches a shared target after account logout instead of showing the old personal state', async () => {
+    currentPaper.hidden = true
+    currentPaper.readStatus = 'read'
+    window.history.replaceState(null, '', '/?paper=123')
+    const user = mount()
+    const first = await loginToLink(user)
+    await within(first).findByRole('button', { name: '恢复显示' })
+    await user.click(within(first).getByRole('button', { name: '关闭' }))
+    await user.click(screen.getByRole('button', { name: /测试研究员/ }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: '退出登录' }),
+    )
+    await screen.findByRole('heading', { name: '回到你的研究工作台' })
+    identityId = '10'
+    identityName = 'other-researcher'
+    currentPaper = { ...currentPaper, hidden: false, readStatus: 'unread' }
+    window.history.replaceState(null, '', '/?paper=123')
+    const second = await loginToLink(user)
+    expect(await within(second).findByRole('button', { name: '隐藏' })).toBeVisible()
+    expect(within(second).queryByRole('button', { name: '恢复显示' })).not.toBeInTheDocument()
+    expect(paths.filter((path) => path.endsWith('/papers/123'))).toHaveLength(2)
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
+  })
+  it('Back aborts a pending detail request and a late response cannot reopen it', async () => {
+    let finish!: (response: Response) => void
+    detailGate = new Promise((resolve) => {
+      finish = resolve
+    })
+    const user = mount()
+    await signIn(user)
+    await user.click(
+      await screen.findByRole('button', { name: new RegExp(`查看 ${paper.titleZh}`) }),
+    )
+    await waitFor(() => expect(detailSignal).toBeTruthy())
+    act(() => window.history.back())
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(detailSignal?.aborted).toBe(true)
+    await act(async () => {
+      finish(ok(currentPaper))
+      await detailGate
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(window.location.search).toBe('')
+  })
 })

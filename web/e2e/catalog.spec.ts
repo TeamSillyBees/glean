@@ -263,6 +263,24 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await expect(
     drawer.getByRole('heading', { name: target.titleZh || target.title, exact: true }),
   ).toBeVisible()
+  // Only the string paper ID is shareable; private search/filter state stays in memory.
+  const sharedLink = new URL(page.url())
+  expect([...sharedLink.searchParams.entries()]).toEqual([['paper', target.id]])
+  expect(sharedLink.hash).toBe('')
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await drawer.getByRole('button', { name: '复制论文链接', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(sharedLink.href)
+  await page.goBack()
+  await expect(drawer).toBeHidden()
+  expect(new URL(page.url()).searchParams.has('paper')).toBe(false)
+  await expect(page.getByRole('textbox', { name: '搜索论文或来源' })).toHaveValue(query)
+  await expect(page.getByTestId('paper-card')).toHaveCount(found.items.length)
+  await page.goForward()
+  await expect(drawer).toBeVisible()
+  await expect(
+    drawer.getByRole('heading', { name: target.titleZh || target.title, exact: true }),
+  ).toBeVisible()
+  expect(new URL(page.url()).searchParams.get('paper')).toBe(target.id)
   await noHorizontalOverflow(page)
   await screenshot(page, info, 'paper-detail')
   const detailTrigger = page
@@ -310,6 +328,35 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await drawer.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(drawer).toBeHidden()
   await expect(page.getByRole('textbox', { name: '搜索论文或来源' })).toBeFocused()
+  // A copied link survives a fresh login/reload and reads hidden personal state
+  // without automatically restoring it. No list filter is needed to reach it.
+  const linkedPage = await page.context().newPage()
+  try {
+    await linkedPage.goto(sharedLink.href)
+    expect(new URL(linkedPage.url()).searchParams.get('paper')).toBe(target.id)
+    const hiddenDetail = catalogResponse(linkedPage, `papers/${target.id}`)
+    await login(linkedPage, username)
+    const linkedHidden = await data<Paper>(await hiddenDetail)
+    expect(linkedHidden.hidden).toBe(true)
+    expect(linkedHidden.readStatus).toBe('read')
+    const linkedDrawer = linkedPage.getByRole('dialog', { name: '论文详情', exact: true })
+    await expect(linkedDrawer.getByRole('button', { name: '恢复显示', exact: true })).toBeVisible()
+    await linkedPage.reload()
+    await expect(linkedPage.getByLabel('用户名', { exact: true })).toBeVisible()
+    expect(new URL(linkedPage.url()).searchParams.get('paper')).toBe(target.id)
+    const reloadedDetail = catalogResponse(linkedPage, `papers/${target.id}`)
+    await login(linkedPage, username)
+    expect((await data<Paper>(await reloadedDetail)).hidden).toBe(true)
+    await expect(linkedDrawer.getByRole('button', { name: '恢复显示', exact: true })).toBeVisible()
+    const historyLength = await linkedPage.evaluate(() => history.length)
+    await linkedDrawer.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(linkedDrawer).toBeHidden()
+    await expect(linkedPage).toHaveURL(new URL(sharedLink.pathname, sharedLink.origin).href)
+    expect(await linkedPage.evaluate(() => history.length)).toBe(historyLength)
+    await expect(linkedPage.getByTestId('paper-card').first()).toBeVisible()
+  } finally {
+    await linkedPage.close()
+  }
   const hiddenList = catalogResponse(page, 'papers', { hidden: 'only' })
   await navigate(page, '已隐藏')
   expect(
@@ -346,12 +393,32 @@ test('real historical catalog: login, filters, detail, durable personal state an
   })
   try {
     const other = await otherContext.newPage()
-    await other.goto('/')
+    // A preceding page must not be visited by closing a directly landed link.
+    await other.goto('/?landing=before')
+    await other.goto(sharedLink.href)
+    const otherDetail = catalogResponse(other, `papers/${target.id}`)
     await login(other, otherUsername)
-    await search(other, query)
-    const otherPaper = await detail(other, target)
+    const otherPaper = await data<Paper>(await otherDetail)
     expect(otherPaper.readStatus).toBe('unread')
     expect(otherPaper.hidden).toBe(false)
+    const otherDrawer = other.getByRole('dialog', { name: '论文详情', exact: true })
+    await expect(
+      otherDrawer.getByRole('heading', { name: target.titleZh || target.title, exact: true }),
+    ).toBeVisible()
+    await otherDrawer.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(otherDrawer).toBeHidden()
+    await expect(other).toHaveURL(new URL(sharedLink.pathname, sharedLink.origin).href)
+    await expect(other.getByTestId('paper-card').first()).toBeVisible()
+    // A valid string ID beyond the seeded catalog must reach the real 404 path.
+    const missingId = '9223372036854775807'
+    await other.goto(`/?paper=${missingId}`)
+    const missingDetail = catalogResponse(other, `papers/${missingId}`)
+    await login(other, otherUsername)
+    expect((await missingDetail).status()).toBe(404)
+    await expect(otherDrawer.getByText('未找到这篇论文', { exact: true })).toBeVisible()
+    await otherDrawer.getByRole('button', { name: '返回列表', exact: true }).click()
+    await expect(otherDrawer).toBeHidden()
+    await expect(other).toHaveURL(new URL(sharedLink.pathname, sharedLink.origin).href)
   } finally {
     await otherContext.close()
   }

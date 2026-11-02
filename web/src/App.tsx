@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, setSessionExpired } from './lib/api'
+import { usePaperNavigation } from './lib/paper-navigation'
 import {
   defaultFilters,
   type Facet,
@@ -412,7 +413,7 @@ function WorkspaceReady({
   const [search, setSearch] = useState(initialFilters.q)
   const [venueSearch, setVenueSearch] = useState('')
   const [venueQuery, setVenueQuery] = useState('')
-  const [selected, setSelected] = useState<string | null>(null)
+  const paperNavigation = usePaperNavigation()
   const [mobileNav, setMobileNav] = useState(false)
   const [mobileFilters, setMobileFilters] = useState(false)
   const [settings, setSettings] = useState(false)
@@ -520,14 +521,14 @@ function WorkspaceReady({
   const navigate = (next: View) => {
     setView(next)
     setMobileNav(false)
-    setSelected(null)
+    paperNavigation.clear()
   }
   const chooseTopic = (topic: TopicSlug) => {
     setView('papers')
     setFilters({ ...defaultFilters, topic })
     setSearch('')
     setMobileNav(false)
-    setSelected(null)
+    paperNavigation.clear()
   }
   const submitSearch = (event: FormEvent) => {
     event.preventDefault()
@@ -1045,7 +1046,7 @@ function WorkspaceReady({
                           topic={filters.topic}
                           onOpen={() => {
                             detailTrigger.current = document.activeElement as HTMLElement
-                            setSelected(paper.id)
+                            paperNavigation.open(paper.id)
                           }}
                         />
                       ))}
@@ -1168,8 +1169,8 @@ function WorkspaceReady({
         canManage={canManage}
         topics={topics.data?.items || []}
         activeTopic={filters.topic}
-        id={selected}
-        onClose={() => setSelected(null)}
+        id={paperNavigation.id}
+        onClose={paperNavigation.close}
         notify={setMessage}
       />
       <Dialog open={mobileNav} onOpenChange={setMobileNav}>

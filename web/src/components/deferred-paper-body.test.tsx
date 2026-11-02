@@ -7,6 +7,7 @@ import { paper } from '../test/fixtures'
 import { createPaperDetail } from './create-paper-detail'
 import type { PaperBodyProps } from './deferred-paper-body'
 import { TooltipProvider } from './ui/tooltip'
+import { usePaperNavigation } from '../lib/paper-navigation'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -162,4 +163,28 @@ describe('deferred paper dialog lifecycle', () => {
     expect(get).toHaveBeenCalledTimes(1)
     expect(get).toHaveBeenCalledWith('123', expect.any(AbortSignal))
   })
+})
+
+it('Back during a lazy import stays closed; Forward opens the current URL target', async () => {
+  history.replaceState(null, '', '/')
+  const gate = deferred<BodyModule>()
+  const Detail = createPaperDetail(() => gate.promise)
+  function NavigationHarness() {
+    const navigation = usePaperNavigation()
+    return (
+      <>
+        <button onClick={() => navigation.open('123')}>打开链接</button>
+        <Detail id={navigation.id} onClose={navigation.close} notify={() => {}} />
+      </>
+    )
+  }
+  render(<NavigationHarness />)
+  fireEvent.click(screen.getByRole('button', { name: '打开链接' }))
+  expect(screen.getByRole('status')).toHaveTextContent('正在打开论文详情')
+  act(() => history.back())
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  await act(async () => gate.resolve(loaded))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  act(() => history.forward())
+  expect(await screen.findByText('正文 123')).toBeInTheDocument()
 })

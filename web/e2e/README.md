@@ -16,6 +16,11 @@ API responses come from the running backend. It:
 - Exercises desktop and Pixel 7 viewports: login, server-side year/search filters,
   details/evidence, read/hidden mutations, persistence after reload/login and
   isolation between users. These catalog API requests reach Go and PostgreSQL.
+- Checks paper-only deep links on both viewport projects: canonical clipboard links,
+  Back/Forward with the in-memory search intact, direct landing and reload through
+  real login, hidden-paper state without automatic restoration, account isolation,
+  safe direct-link Close and an unknown numeric string ID from the real 404 endpoint.
+  These checks do not persist credentials or copy private filters into URLs.
 - Searches the year picker and the real venue registry, verifies an actual empty
   query, refreshes real source-health data, and checks that disabled scheduling
   plus no completed collection window stays visibly unknown rather than healthy.

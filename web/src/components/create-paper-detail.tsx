@@ -1,9 +1,10 @@
-import type { ComponentType } from 'react'
-import { BookOpen, X } from 'lucide-react'
+import { useState, type ComponentType } from 'react'
+import { BookOpen, Link, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
 import { deferPaperBody, type PaperBodyProps } from './deferred-paper-body'
 import type { Topic } from '../lib/types'
+import { paperLink, validPaperId } from '../lib/paper-navigation'
 
 export function createPaperDetail(load: () => Promise<{ default: ComponentType<PaperBodyProps> }>) {
   const DeferredPaperBody = deferPaperBody(load)
@@ -24,9 +25,10 @@ export function createPaperDetail(load: () => Promise<{ default: ComponentType<P
     notify: (message: string) => void
     restoreFocus?: () => void
   }) {
+    const [copyFallback, setCopyFallback] = useState<string | null>(null)
     return (
       <Dialog
-        open={!!id}
+        open={id !== null}
         onOpenChange={(open) => {
           if (!open) onClose()
         }}
@@ -52,6 +54,25 @@ export function createPaperDetail(load: () => Promise<{ default: ComponentType<P
                 原始证据与个人阅读状态分开保存。
               </DialogDescription>
             </div>
+            {id !== null && validPaperId(id) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="复制论文链接"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(paperLink(id))
+                    setCopyFallback(null)
+                    notify('论文链接已复制；打开链接后需要登录。')
+                  } catch {
+                    setCopyFallback(id)
+                    notify('复制失败，请使用详情中的手动复制链接。')
+                  }
+                }}
+              >
+                <Link />
+              </Button>
+            )}
             {/* 关闭入口与标题共用 sticky 层，滚动后仍可点击。 */}
             <DialogClose asChild>
               <Button
@@ -64,14 +85,36 @@ export function createPaperDetail(load: () => Promise<{ default: ComponentType<P
               </Button>
             </DialogClose>
           </div>
-          {id && (
-            <DeferredPaperBody
-              id={id}
-              notify={notify}
-              canManage={canManage}
-              topics={topics}
-              activeTopic={activeTopic}
-            />
+          {id !== null && copyFallback === id && (
+            <label className="block border-b px-5 py-3 text-sm sm:px-8">
+              手动复制论文链接
+              <input
+                className="form-input mt-2"
+                readOnly
+                value={paperLink(id)}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            </label>
+          )}
+          {id !== null && !validPaperId(id) ? (
+            <section role="alert" className="space-y-3 px-6 py-10 text-center">
+              <h2 className="font-semibold">论文链接无效</h2>
+              <p className="text-sm text-muted-foreground">请检查论文 ID，或返回列表选择论文。</p>
+              <Button variant="outline" onClick={onClose}>
+                返回列表
+              </Button>
+            </section>
+          ) : (
+            id !== null && (
+              <DeferredPaperBody
+                key={id}
+                id={id}
+                notify={notify}
+                canManage={canManage}
+                topics={topics}
+                activeTopic={activeTopic}
+              />
+            )
           )}
         </DialogContent>
       </Dialog>
