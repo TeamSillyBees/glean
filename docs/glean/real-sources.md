@@ -60,6 +60,12 @@ GLEAN_LIVE_SOURCE_CANARY=1 GLEAN_LIVE_SOURCE=pubmed go test -tags=live ./interna
 
 Canary 使用固定的小时间窗，不是 30 日全网扫描。捕获的 arXiv 363 条 cs.AI 子集只是该子集的解析证据，不能宣称全 arXiv 覆盖。来源查询、同义词和数据库本身都有覆盖边界；完整分页也不是“全部相关文献”的保证。
 
+## 已完成的手动验收
+
+2026-11-02 00:41:40 UTC，Starxy 手动触发[运行 41368520709](https://github.com/TeamSillyBees/glean/actions/runs/41368520709)（提交 [`4295f6a`](https://github.com/TeamSillyBees/glean/commit/4295f6a)），两个独立 job 均成功。[安全摘要 artifact 13107988478](https://github.com/TeamSillyBees/glean/actions/runs/41368520709/artifacts/13107988478)记录 Crossref、PubMed、arXiv、bioRxiv、medRxiv、Europe PMC 六项探针均 pass；产物按上述策略仅保留 7 日。Europe PMC 单条真实观察另通过临时 PostgreSQL、真实 Go API 与桌面/手机浏览器，两项浏览器测试通过，只有 LLM 审核为 mock。
+
+这是固定窗口、请求预算内的一次兼容性及单来源全链路证据，不代表六源均有论文命中、六源均已入库、完整分页、持续可达或全部相关文献覆盖；不改变历史科学结论，也不是生产部署验收。常规 CI 通过仍不等于实时来源可达。
+
 ## 官方依据
 
 - [Crossref REST API](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) 与 [2026 年 cursor / index-date 变更说明](https://community.crossref.org/t/changes-to-cursors-filtering-and-sorting-in-the-rest-api/16246)
