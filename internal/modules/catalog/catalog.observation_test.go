@@ -122,3 +122,71 @@ func TestObservationSearchBindsLiteralText(t *testing.T) {
 	require.NotContains(t, statement, "->>'raw'")
 	require.NotContains(t, statement, "->>'review'")
 }
+
+// TestPipelineProgressDoesNotChangeSourceIdentity 验证后续阶段不会创建新来源版本或自动科学纳入。
+func TestPipelineProgressDoesNotChangeSourceIdentity(t *testing.T) {
+	first := observationFixture()
+	hash, err := normalizeObservation(&first)
+	require.NoError(t, err)
+	second := observationFixture()
+	second.Pipeline = json.RawMessage(`{"status":"ready_for_display","stages":[{"name":"summary","status":"completed"}]}`)
+	second.Review.IsMock = false
+	second.Review.ScientificReviewed = true
+	nextHash, err := normalizeObservation(&second)
+	require.NoError(t, err)
+	require.Equal(t, hash, nextHash)
+	require.False(t, second.Review.ScientificReviewed)
+	require.Equal(t, "pending-review", second.Review.InclusionStatus)
+	require.JSONEq(t, string(second.Pipeline), string(second.Review.Pipeline))
+}
+
+// TestPipelineReviewPreservesExistingScientificDecision 验证进度可更新但既有科学判定与扩展字段不能被覆写。
+func TestPipelineReviewPreservesExistingScientificDecision(t *testing.T) {
+	existing := map[string]any{"scientificReviewed": true, "inclusionStatus": "included", "manualNote": "keep", "summary": "old"}
+	incoming := ReviewVO{Summary: "真实材料总结", InclusionStatus: "pending-review", Pipeline: json.RawMessage(`{"status":"needs_human_review"}`)}
+	merged, err := mergePipelineReview(existing, incoming)
+	require.NoError(t, err)
+	require.Equal(t, true, merged["scientificReviewed"])
+	require.Equal(t, "included", merged["inclusionStatus"])
+	require.Equal(t, "keep", merged["manualNote"])
+	require.Equal(t, "真实材料总结", merged["summary"])
+	require.Equal(t, "old", existing["summary"], "输入map不应被就地改写")
+	require.Equal(t, "needs_human_review", merged["pipeline"].(map[string]any)["status"])
+}
+
+// TestPipelineReprojectionUpdatesOnlyReview 验证已存在来源执行UPDATE而非丢弃后续模型结果，且不写主题/人工分类。
+func TestPipelineReprojectionUpdatesOnlyReview(t *testing.T) {
+	service, mock := catalogMock(t)
+	input := observationFixture()
+	input.DOI = ""
+	input.Review.Pipeline = json.RawMessage(`{"status":"needs_human_review"}`)
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT .*FROM "sys_user".* FOR SHARE`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(7))
+	mock.ExpectQuery(`SELECT .*FROM "glean_paper".* FOR UPDATE`).WillReturnRows(sqlmock.NewRows([]string{"id", "identity_key", "title"}).AddRow(11, "source:crossref:10.9999/source", "original"))
+	mock.ExpectQuery(`SELECT .*FROM "glean_observation"`).WillReturnRows(sqlmock.NewRows([]string{"id", "paper_id", "review"}).AddRow(12, 11, `{"scientificReviewed":false,"summary":"pending"}`))
+	mock.ExpectExec(`UPDATE "glean_observation" SET "review" = .*"updated_at" = .*WHERE`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`SELECT .*FROM "glean_observation"`).WillReturnRows(sqlmock.NewRows([]string{"id", "paper_id"}).AddRow(12, 11))
+	mock.ExpectQuery(`SELECT .*FROM "glean_observation_match"`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(13))
+	mock.ExpectQuery(`SELECT .*FROM "glean_membership"`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(14))
+	mock.ExpectCommit()
+	result, err := service.IngestObservation(entx.WithOperatorID(context.Background(), 7), input)
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, 0, result.MembershipsAdded)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestPipelineDTOUsesLatestReviewProjection 验证详情展示最新处理review而非首次不可变metadata里的pending快照。
+func TestPipelineDTOUsesLatestReviewProjection(t *testing.T) {
+	service, mock := catalogMock(t)
+	pending := `{"pipeline":{"status":"processing"},"source":"crossref","sourceId":"x"}`
+	completed := `{"pipeline":{"status":"needs_human_review"},"summary":"已阅读真实摘要","scientificReviewed":false}`
+	mock.ExpectQuery(`SELECT .*FROM "glean_observation"`).WillReturnRows(sqlmock.NewRows([]string{"id", "paper_id", "observed_at", "metadata", "review"}).AddRow(12, 11, time.Now(), pending, completed))
+	mock.ExpectQuery(`SELECT .*FROM "glean_observation_match"`).WillReturnRows(sqlmock.NewRows([]string{"id", "observation_id", "topic"}).AddRow(13, 12, "biomed-ai"))
+	items := []PaperVO{{ID: 11}}
+	require.NoError(t, service.attachObservations(context.Background(), items, true))
+	require.JSONEq(t, `{"status":"needs_human_review"}`, string(items[0].Review.Pipeline))
+	require.JSONEq(t, string(items[0].Review.Pipeline), string(items[0].Observations[0].Pipeline))
+	require.Equal(t, "已阅读真实摘要", items[0].Review.Summary)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

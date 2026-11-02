@@ -21,6 +21,7 @@ import (
 
 // Config 限制一次执行的工作量；正常装配采用 RuntimeConfig，调度由调用方显式触发。
 type Config struct {
+	PipelineAutoDisplay bool
 	StateKey            string
 	AnchorUTC           time.Time
 	RealFetchEnabled    bool
@@ -45,6 +46,8 @@ func DefaultConfig() Config {
 
 // Service 协调采集、审核和目录投影，数据库状态通过修订号 CAS 防止并发覆盖。
 type Service struct {
+	pipeline         PipelineProcessor
+	materialProvider MaterialProvider
 	client           *ent.Client
 	memory           *memoryState
 	ids              *idgen.Generator
@@ -232,10 +235,16 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 		if requested != nil {
 			for _, previous := range state.Runs {
 				if previous.RequestKey == s.windowKey(*requested, previous.TemplateVersion) {
+					if err := s.processPipelines(ctx, state); err != nil {
+						return state.Snapshot, err
+					}
 					return state.Snapshot, nil
 				}
 			}
 		} else if now.Before(state.Schedule.NextRunUTC) && s.knownSources(state) {
+			if err := s.processPipelines(ctx, state); err != nil {
+				return state.Snapshot, err
+			}
 			return state.Snapshot, nil
 		}
 		templates, _, templateErr := s.currentTemplates(ctx)
@@ -290,7 +299,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 		}
 		checkpoint.LastError = ""
 		checkpoint.NextRetryAt = time.Time{}
-		drainFirst := pendingCandidates(state, progress)
+		drainFirst := s.pipeline == nil && pendingCandidates(state, progress)
 		for !progress.Acquired && pages < s.config.MaxPagesPerCall && !drainFirst {
 			if err = ctx.Err(); err != nil {
 				return s.cancelRun(ctx, state, run, err)
@@ -368,19 +377,51 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				}
 				key, identity := recordIdentity(record)
 				candidate, exists := state.Records[key]
+				if !exists && s.pipeline != nil {
+					if archive, ok := s.publisher.(PipelineArchive); ok {
+						publication, found, archiveErr := archive.FindPipeline(ctx, record, key)
+						if archiveErr != nil {
+							return state.Snapshot, archiveErr
+						}
+						if found {
+							var saved PaperPipeline
+							if json.Unmarshal(publication.Review.Pipeline, &saved) != nil {
+								return state.Snapshot, bizerrors.BadRequest("论文处理归档无效")
+							}
+							candidate, archiveErr = archivedCandidate(publication, saved.CandidateID)
+							if archiveErr != nil {
+								return state.Snapshot, archiveErr
+							}
+							state.Records[key] = candidate
+							exists = true
+						}
+					}
+				}
 				if !exists {
-					candidate = &Candidate{ID: s.ids.NextID(), Key: key, Identity: identity, Record: record}
+					candidate = &Candidate{RunID: run.ID, Templates: append([]SearchTemplate(nil), templates...), ID: s.ids.NextID(), Key: key, Identity: identity, Record: record}
 					state.Records[key] = candidate
 				} else {
 					topics := uniqueStrings(append(candidate.Record.Topics, record.Topics...))
 					topicsChanged := len(topics) != len(candidate.Record.Topics)
-					if candidate.Compacted && topicsChanged {
+					templateChanged := s.pipeline != nil && candidate.Pipeline != nil && candidate.Record.TemplateVersion != run.TemplateVersion
+					if candidate.PipelineArchived && (topicsChanged || templateChanged) {
+						if err := s.restorePipeline(ctx, candidate); err != nil {
+							return state.Snapshot, err
+						}
+					}
+					if (candidate.Compacted || s.pipeline != nil) && (topicsChanged || templateChanged) {
 						candidate.Record = record
 						candidate.Compacted = false
 					}
-					if topicsChanged {
+					if topicsChanged || templateChanged {
 						candidate.Record.TemplateVersion = run.TemplateVersion
 						candidate.Review = nil
+						candidate.Templates = append([]SearchTemplate(nil), templates...)
+						if candidate.Pipeline != nil {
+							candidate.PipelineHistory = append(candidate.PipelineHistory, *candidate.Pipeline)
+						}
+						candidate.Pipeline = nil
+						candidate.PipelineProjected = false
 						candidate.Published = false
 					}
 					candidate.Record.Topics = topics
@@ -450,7 +491,14 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				reviewsUsed++
 				sourceReviews++
 				reviewCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
-				review, reviewErr := s.reviewer.Review(reviewCtx, candidate.Record)
+				var review Review
+				var reviewErr error
+				if s.pipeline != nil {
+					candidate.Pipeline = newPaperPipeline(candidate)
+					review = Review{Provider: "pipeline", PromptVersion: PipelineVersion, InclusionStatus: "pending", Summary: "真实来源已保存；自动处理待完成，未经人工科学核验。", Pipeline: pipelineJSON(pipelineWithHistory(candidate))}
+				} else {
+					review, reviewErr = s.reviewer.Review(reviewCtx, candidate.Record)
+				}
 				cancel()
 				if reviewErr != nil {
 					if ctx.Err() != nil {
@@ -478,11 +526,13 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				allReviewed = allReviewed && (state.Records[key].Review != nil || state.Records[key].Quarantine != nil)
 			}
 			if checkpoint.LastError == "" && progress.Acquired && allReviewed {
-				progress.Reviewed = true
+				progress.Reviewed = s.pipeline == nil
 				progress.LastError = ""
 				checkpoint.ConsecutiveFailures = 0
 				if checkpoint.Quarantined == 0 && (progress.AdvanceCheckpoint || run.RequestKey == "") {
-					checkpoint.ReviewedThrough = later(checkpoint.ReviewedThrough, run.FixedEnd)
+					if s.pipeline == nil {
+						checkpoint.ReviewedThrough = later(checkpoint.ReviewedThrough, run.FixedEnd)
+					}
 				}
 				if err = s.save(ctx, state); err != nil {
 					return Snapshot{}, err
@@ -570,6 +620,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				break
 			}
 		}
+	}
+	if err = s.processPipelines(ctx, state); err != nil {
+		return state.Snapshot, err
 	}
 	s.compact(state)
 	if err = s.save(ctx, state); err != nil {
@@ -840,7 +893,10 @@ func (s *Service) decorateSnapshot(snapshot *Snapshot) {
 		}
 	}
 	snapshot.Schedule.ReviewMode = "unknown"
-	if _, ok := s.reviewer.(MockReviewer); ok {
+	if s.pipeline != nil {
+		snapshot.Schedule.ReviewMode = "staged_pipeline"
+	}
+	if _, ok := s.reviewer.(MockReviewer); ok && s.pipeline == nil {
 		snapshot.Schedule.ReviewMode = "mock"
 	}
 	for _, checkpoint := range snapshot.Sources {
@@ -930,7 +986,10 @@ func (s *Service) Doctor(ctx context.Context) ([]Diagnostic, error) {
 	if !s.schedulerEnabled {
 		diagnostics = append(diagnostics, Diagnostic{Code: "SCHEDULER_DISABLED", Severity: "warning", Message: "Scheduled scans are disabled; use the finite real scan CLI or explicitly enable monitor.scheduler_enabled"})
 	}
-	if _, mock := s.reviewer.(MockReviewer); mock {
+	if s.pipeline != nil && !s.pipelineReady("material") {
+		diagnostics = append(diagnostics, Diagnostic{Code: "MODEL_CONFIGURATION_REQUIRED", Severity: "warning", Message: "真实来源可正常入库；模型处理未启用或配置缺失，正在等待配置且不会请求模型或全文来源"})
+	}
+	if _, mock := s.reviewer.(MockReviewer); mock && s.pipeline == nil {
 		diagnostics = append(diagnostics, Diagnostic{Code: "LLM_MOCK", Severity: "info", Message: "LLM review is mocked; no scientific inclusion decision has been made"})
 	}
 	return diagnostics, nil

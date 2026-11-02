@@ -231,6 +231,7 @@ export default function PaperDetailBody({
               <TabsContent value="overview">
                 <PaperOverview
                   paper={paper}
+                  canManage={canManage}
                   topicNames={Object.fromEntries(topics.map((topic) => [topic.slug, topic.name]))}
                 />
               </TabsContent>

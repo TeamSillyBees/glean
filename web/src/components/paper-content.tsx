@@ -2,6 +2,7 @@ import { CalendarDays, FileText, History, Link2, Quote } from 'lucide-react'
 import type { AbstractEvidence, Paper, SourceObservation } from '../lib/types'
 import { date, number, reviewLabels, topicLabels, manualReviewLabels } from '../lib/utils'
 import { Badge, ExternalLink } from './common'
+import { PaperPipelinePanel } from './paper-pipeline'
 
 const noteLabels: Record<string, string> = {
   contribution: '主要贡献',
@@ -114,9 +115,11 @@ function AbstractProvenance({ evidence }: { evidence: AbstractEvidence }) {
 }
 export function PaperOverview({
   paper,
+  canManage = false,
   topicNames = {},
 }: {
   paper: Paper
+  canManage?: boolean
   topicNames?: Record<string, string>
 }) {
   const notes = (paper.memberships || []).filter((m) =>
@@ -222,31 +225,43 @@ export function PaperOverview({
           </div>
         </section>
       )}
-      <section className="border-t pt-7">
-        <h3 className="section-title">
-          <FileText className="size-4" />
-          {paper.review?.isMock ? '模型模拟输出' : paper.review ? '模型阅读记录' : '模型总结待接入'}
-        </h3>
-        <p className="mt-2 text-xs leading-6 text-muted-foreground">
-          {paper.review?.isMock
-            ? '仅用于验证阅读流程，不是科学审读，也不改变真实来源和历史分类。'
-            : paper.review
-              ? '模型结果与来源记录分开展示，是否完成科学审读以记录为准。'
-              : '不影响真实论文检索。已有的原文摘要、历史笔记和来源证据仍可阅读。'}
-        </p>
-        {paper.review?.summary && (
-          <details className="mt-3">
-            <summary className="cursor-pointer rounded-sm py-1 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              {paper.review.isMock ? '查看明确标记的模拟总结' : '查看模型总结'}
-            </summary>
-            <Paragraph>{paper.review.summary}</Paragraph>
-            <p className="mt-3 text-xs text-muted-foreground">
-              {paper.review.provider} · {paper.review.model} · {paper.review.promptVersion} ·{' '}
-              {date(paper.review.reviewedAt)}
-            </p>
-          </details>
-        )}
-      </section>
+      {paper.review?.pipeline ? (
+        <PaperPipelinePanel
+          pipeline={paper.review.pipeline}
+          paperId={paper.id}
+          canManage={canManage}
+        />
+      ) : (
+        <section className="border-t pt-7">
+          <h3 className="section-title">
+            <FileText className="size-4" />
+            {paper.review?.isMock
+              ? '模型模拟输出'
+              : paper.review
+                ? '模型阅读记录'
+                : '模型总结待接入'}
+          </h3>
+          <p className="mt-2 text-xs leading-6 text-muted-foreground">
+            {paper.review?.isMock
+              ? '仅用于验证阅读流程，不是科学审读，也不改变真实来源和历史分类。'
+              : paper.review
+                ? '模型结果与来源记录分开展示，是否完成科学审读以记录为准。'
+                : '不影响真实论文检索。已有的原文摘要、历史笔记和来源证据仍可阅读。'}
+          </p>
+          {paper.review?.summary && (
+            <details className="mt-3">
+              <summary className="cursor-pointer rounded-sm py-1 text-sm font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {paper.review.isMock ? '查看明确标记的模拟总结' : '查看模型总结'}
+              </summary>
+              <Paragraph>{paper.review.summary}</Paragraph>
+              <p className="mt-3 text-xs text-muted-foreground">
+                {paper.review.provider} · {paper.review.model} · {paper.review.promptVersion} ·{' '}
+                {date(paper.review.reviewedAt)}
+              </p>
+            </details>
+          )}
+        </section>
+      )}
       <section>
         <h3 className="section-title">
           <CalendarDays className="size-4" />

@@ -272,7 +272,7 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 	if strings.ContainsAny(contact, "\r\n") {
 		return fmt.Errorf("contact cannot contain header line breaks")
 	}
-	runCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	runCtx, cancel := boundedLiveContext(ctx)
 	defer cancel()
 	ctx = runCtx
 	ids, err := idgen.NewGenerator(node)
@@ -293,12 +293,25 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 	}
 	client := data.NewEntClientFromDB(db, ids)
 	defer client.Close()
-	factory, err := httpclient.NewFactory(httpclient.Config{Enabled: true, Services: monitor.SourceHTTPServices(contact)}, logx.NewNop(), monitor.SourceHTTPFactoryOptions()...)
+	models := monitor.ModelPipelineConfigFromEnv()
+	if err := models.Validate(); err != nil {
+		return err
+	}
+	services := monitor.SourceHTTPServices(contact)
+	for name, service := range models.ModelHTTPServices() {
+		services[name] = service
+	}
+	for name, service := range monitor.MaterialHTTPServices(contact) {
+		services[name] = service
+	}
+	factoryOptions := append(monitor.SourceHTTPFactoryOptions(), monitor.MaterialHTTPFactoryOptions()...)
+	factoryOptions = append(factoryOptions, models.ModelHTTPFactoryOptions()...)
+	factory, err := httpclient.NewFactory(httpclient.Config{Enabled: true, Services: services}, logx.NewNop(), factoryOptions...)
 	if err != nil {
 		return fmt.Errorf("real source configuration invalid")
 	}
 	defer factory.ClearAll()
-	options := monitor.ProviderOptions{Config: monitor.RuntimeConfig(), Sources: names, OperatorID: operatorID}
+	options := monitor.ProviderOptions{Models: models, Config: monitor.RuntimeConfig(), Sources: names, OperatorID: operatorID}
 	options.Config.MaxPagesPerCall = maxPages
 	options.Config.PageSize = pageSize
 	catalogService := catalog.NewService(client)
@@ -477,4 +490,10 @@ func selectedRunID(snapshot monitor.Snapshot) idgen.ID {
 		return 0
 	}
 	return snapshot.Runs[len(snapshot.Runs)-1].ID
+}
+
+// boundedLiveContext 与后台调度保持三分钟总预算，允许120秒模型阶段及持久化余量。
+// 更短的调用方截止时间仍然优先，不延长外层授权窗口。
+func boundedLiveContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, 3*time.Minute)
 }

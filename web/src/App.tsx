@@ -843,7 +843,7 @@ function WorkspaceReady({
                         }))}
                       />
                     </div>
-                    <div className="w-32">
+                    <div className="w-40">
                       <Select
                         label="排序方式"
                         value={filters.sort}
@@ -851,6 +851,7 @@ function WorkspaceReady({
                         placeholder="排序方式"
                         options={[
                           { value: 'newest', label: '最新发表优先' },
+                          { value: 'model-priority', label: '模型阅读优先级' },
                           { value: 'observed', label: '最近来源变化' },
                           { value: 'source-updated', label: '来源最近更新' },
                           { value: 'oldest', label: '最早发表优先' },
@@ -860,6 +861,12 @@ function WorkspaceReady({
                     </div>
                   </div>
                 </div>
+                {filters.sort === 'model-priority' && (
+                  <p className="mb-3 text-xs leading-5 text-muted-foreground">
+                    按当前主题最新来源版本的 Jev
+                    相关分降序排列，未处理或未知分数后置；这是阅读优先级，不是科学纳入判定。
+                  </p>
+                )}
                 <div className="collection-toolbar">
                   <div role="group" aria-label="目录范围" className="collection-tabs">
                     {(

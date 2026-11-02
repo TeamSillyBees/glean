@@ -1,6 +1,7 @@
 import { CalendarDays, ChevronRight } from 'lucide-react'
 import type { Paper, TopicSlug } from '../lib/types'
 import { cn, date, manualReviewLabels, readLabels, reviewLabels } from '../lib/utils'
+import { PipelineBadge } from './paper-pipeline'
 import { Badge } from './common'
 import { Tooltip } from './ui/tooltip'
 import { readingSnippet } from '../lib/presentation'
@@ -93,6 +94,7 @@ export function PaperCard({
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+        {paper.review?.pipeline && <PipelineBadge pipeline={paper.review.pipeline} />}
         {tags.map((tag) => (
           <Badge key={tag}>{tag}</Badge>
         ))}

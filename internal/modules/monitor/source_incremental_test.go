@@ -178,7 +178,7 @@ func TestMedRxivCountMetadataAndNoFormalDOIReplacement(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if !strings.HasPrefix(f.requests[0].path, "/details/medrxiv/") || len(page.Records) != 1 || page.Records[0].Source != "medrxiv" || strings.Contains(page.Records[0].DOI, "formal-link") {
+	if !strings.HasPrefix(f.requests[0].path, "/details/medrxiv/") || len(page.Records) != 2 || page.Records[0].Source != "medrxiv" || strings.Contains(page.Records[0].DOI, "formal-link") {
 		t.Fatalf("medRxiv must retain preprint identity: %+v", page)
 	}
 	mismatch := jsonResponse(`{"messages":[{"status":"ok","cursor":0,"count":30,"total":30}],"collection":[]}`)
@@ -300,7 +300,11 @@ func TestDateOnlySourcesKeepSameDayOverlap(t *testing.T) {
 	}{{"biorxiv", NewBioRxivSource, "biorxiv-page.json"}, {"arxiv", NewArXivSource, "arxiv-oai-synthetic.xml"}} {
 		t.Run(tc.Name, func(t *testing.T) {
 			page, e := tc.Factory(&adapterExecutor{responses: []*httpclient.Response{adapterFixture(t, tc.Fixture)}}).Fetch(context.Background(), req)
-			if e != nil || len(page.Records) != 1 {
+			expected := 1
+			if tc.Name == "biorxiv" {
+				expected = 2
+			}
+			if e != nil || len(page.Records) != expected {
 				t.Fatalf("date-only midnight cannot drop same-day discoveries for noon lower bound: %+v %v", page, e)
 			}
 		})

@@ -156,10 +156,25 @@ task:
     sync_interval: 3m
     timezone: Asia/Shanghai
 
-# 真实公共来源 + 真实目录持久化，仅 LLM 审核使用明确 mock。启用此主开关会集中启用 task worker/scheduler（UTC），须同时配置现有操作员 ID。
+# 真实公共来源 + 真实目录持久化；模型未配置时等待配置，不回退mock。启用此主开关会集中启用 task worker/scheduler（UTC），须同时配置现有操作员 ID。
 monitor:
   scheduler_enabled: false
   sources: [crossref, pubmed, arxiv, biorxiv, europepmc, medrxiv]
   max_pages_per_call: 12
   contact: ""
   operator_id: ""
+
+  # endpoint 是完整POST URL；留空时不调用付费服务。api_key_env 是环境变量名，不是key本身。
+  models:
+    enabled: false # 显式启用且配置密钥后才允许模型处理及额外全文获取
+    auto_display: false # 仅控制模型产物展示，不代表科学纳入
+    jev:
+      endpoint: "" # 例 https://api.typesafe.ai/v1/systemone
+      model: "" # 建议核实后固定版本，例如 jev-1.14.0
+      api_key_env: INITRA_JEV_API_KEY
+      timeout: 60s
+    generative:
+      endpoint: "" # 所选OpenAI兼容服务的完整 /v1/chat/completions URL
+      model: ""
+      api_key_env: INITRA_GENERATIVE_API_KEY
+      timeout: 60s

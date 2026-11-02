@@ -30,7 +30,7 @@
 
 <img src="docs/screenshots/mobile-catalog.png" alt="手机端论文工作台：搜索、目录范围、筛选入口与论文卡片" width="360" />
 
-截图记录：2026-10-27，[提交 `bd20fb4`](https://github.com/TeamSillyBees/glean/commit/bd20fb4a5be5cae300a1c8cf6f15cdfc07db5d2f) 的 [GitHub Actions 运行 40531139041](https://github.com/TeamSillyBees/glean/actions/runs/40531139041)，来自 Chromium 桌面端与 Pixel 7 尺寸的移动端浏览器验收。图片为原始视口截图，仅更名复制；详细来源见[截图说明](docs/screenshots/README.md)。该次常规 CI 全部通过，另完成 320–1920px 七档目录布局检查；截图展示历史库界面，不代表实时采集验收结果，也不代表正式上线。LLM 调用仍为明确标识的 mock，历史笔记不是本次模型生成结果。
+截图记录：2026-10-27，[提交 `bd20fb4`](https://github.com/TeamSillyBees/glean/commit/bd20fb4a5be5cae300a1c8cf6f15cdfc07db5d2f) 的 [GitHub Actions 运行 40531139041](https://github.com/TeamSillyBees/glean/actions/runs/40531139041)，来自 Chromium 桌面端与 Pixel 7 尺寸的移动端浏览器验收。图片为原始视口截图，仅更名复制；详细来源见[截图说明](docs/screenshots/README.md)。该次常规 CI 全部通过，另完成 320–1920px 七档目录布局检查；截图展示历史库界面，不代表实时采集验收结果，也不代表正式上线。该次截图中的 LLM 为明确标识的 mock，历史笔记不是模型生成结果；当前流程见[论文处理说明](../docs/glean/paper-pipeline.md)。
 
 上述截图记录的是该提交的阅读界面，尚未展示新增的用户管理、研究主题与论文管理界面；不能据此认定管理模块已完成浏览器验收。
 
@@ -73,7 +73,7 @@ npm run preview
 
 - 业务数据来自经过认证的 `/api/v1/catalog/*`、`/api/v1/monitor/*`，沿用 initra 的统一响应结构。详见 [API 契约](../docs/glean/api-contract.md)。
 - 前端提供查询、阅读及受权限保护的管理操作，不自行采集外部来源、启动扫描、调用 LLM、自动推断科学分类或编造实时计数。
-- **不存在静默回退到演示数据的行为。** 后端错误有明确的重试状态。可预测且明确标记的模拟数据只用于测试；模型审核的 mock 标识显示在相应输出旁，不把真实来源论文标成假数据。
+- **不存在静默回退到演示数据的行为。** 后端错误有明确的重试状态。可预测且明确标记的模拟数据只用于测试；旧 mock 输出仍明确标识；新处理流程显示材料范围、模型阶段及待配置状态，不把真实来源论文标成假数据。
 - `src/lib/filters.ts` 将各主题原有的筛选维度映射为查询参数。选项值与分类来自后端 facets，不使用前端启发式推断。世界模型主题的 `display_*` 值由后端从原始 HTML 分类中导入。
 - 默认范围为后端定义的精选目录（`curated`），另有待审核、已移出主题和全部记录；全部记录包含历史背景及范围外条目。主题总数始终标为总记录数，而非精选数量。筛选项加载中、可重试错误和确实缺少标签是不同状态。
 - 历史筛选顺序：论文类型 → 方向 → **AI 方法（仅生物医学 AI）** → 期刊/会议范围 → 技术任务 → 模型作用 → 年份 → 收录状态 → 具体期刊/会议。生物医学 AI 的 9 项及另外两主题的 8 项筛选均可见；通过搜索精确后端标签，仍能找到低频选项。**科学审核证据**独立于用户的**未读 / 在读 / 已读**状态。

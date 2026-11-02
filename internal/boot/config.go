@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/teamsillybees/glean/internal/data"
+	monitormodule "github.com/teamsillybees/glean/internal/modules/monitor"
 	platformauth "github.com/teamsillybees/glean/internal/platform/auth"
 	platformconfig "github.com/teamsillybees/glean/internal/platform/config"
 	"github.com/teamsillybees/glean/internal/platform/httpclient"
@@ -37,11 +38,12 @@ type Config struct {
 
 // MonitorConfig 描述显式启用的真实来源调度；默认不启动任何采集定时器。
 type MonitorConfig struct {
-	SchedulerEnabled bool     `mapstructure:"scheduler_enabled"`
-	Sources          []string `mapstructure:"sources"`
-	MaxPagesPerCall  int      `mapstructure:"max_pages_per_call"`
-	Contact          string   `mapstructure:"contact"`
-	OperatorID       string   `mapstructure:"operator_id"`
+	Models           monitormodule.ModelPipelineConfig `mapstructure:"models"`
+	SchedulerEnabled bool                              `mapstructure:"scheduler_enabled"`
+	Sources          []string                          `mapstructure:"sources"`
+	MaxPagesPerCall  int                               `mapstructure:"max_pages_per_call"`
+	Contact          string                            `mapstructure:"contact"`
+	OperatorID       string                            `mapstructure:"operator_id"`
 }
 
 // AppConfig 描述应用基础元信息。
@@ -123,6 +125,9 @@ func (c *Config) SafeForLog() map[string]any {
 
 // Validate 对启动所需关键配置进行兜底校验。
 func (c *Config) Validate() error {
+	if err := c.Monitor.Models.Validate(); err != nil {
+		return err
+	}
 	if err := c.Redis.Validate(); err != nil {
 		return err
 	}
@@ -340,6 +345,16 @@ func configDefaults() map[string]any {
 		"monitor.max_pages_per_call":              12,
 		"monitor.contact":                         "",
 		"monitor.operator_id":                     "",
+		"monitor.models.enabled":                  false,
+		"monitor.models.auto_display":             false,
+		"monitor.models.jev.endpoint":             "",
+		"monitor.models.jev.model":                "",
+		"monitor.models.jev.api_key_env":          "INITRA_JEV_API_KEY",
+		"monitor.models.jev.timeout":              "60s",
+		"monitor.models.generative.endpoint":      "",
+		"monitor.models.generative.model":         "",
+		"monitor.models.generative.api_key_env":   "INITRA_GENERATIVE_API_KEY",
+		"monitor.models.generative.timeout":       "60s",
 		"task.enabled":                            true,
 		"task.backend":                            string(task.BackendAsynq),
 		"task.redis.enabled":                      true,

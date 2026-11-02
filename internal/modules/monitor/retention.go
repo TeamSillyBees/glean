@@ -20,7 +20,7 @@ func (s *Service) compact(state *monitorState) {
 			remaining := make([]string, 0, len(progress.CandidateKeys))
 			for _, key := range progress.CandidateKeys {
 				candidate, ok := state.Records[key]
-				if ok && (!candidate.Published || candidate.Review == nil) {
+				if ok && ((candidate.Pipeline != nil && (!pipelineTerminal(candidate.Pipeline) || !candidate.PipelineProjected)) || !candidate.Published || candidate.Review == nil) {
 					remaining = append(remaining, key)
 				}
 			}
@@ -29,6 +29,34 @@ func (s *Service) compact(state *monitorState) {
 	}
 	completed := make([]*Candidate, 0)
 	for _, candidate := range state.Records {
+		if candidate.Pipeline != nil {
+			if _, ok := s.publisher.(PipelineArchive); !ok || !candidate.PipelineProjected {
+				continue
+			}
+			// 完整档案已在目录确认持久化；热状态只保留队列状态，恢复时读取归档。
+			candidate.Record.Raw = nil
+			candidate.Record.Abstract = ""
+			candidate.Record.Authors = nil
+			candidate.Record.PublicationEvents = nil
+			candidate.Pipeline.Material.Text = ""
+			candidate.Pipeline.Material.Blocks = nil
+			candidate.Pipeline.Templates = nil
+			candidate.Pipeline.History = nil
+			candidate.Templates = nil
+			candidate.PipelineHistory = nil
+			for i := range candidate.Pipeline.Stages {
+				candidate.Pipeline.Stages[i].Result = nil
+			}
+			if candidate.Review != nil {
+				candidate.Review.Pipeline = nil
+				candidate.Review.Summary = ""
+			}
+			candidate.PipelineArchived = true
+			if pipelineTerminal(candidate.Pipeline) {
+				completed = append(completed, candidate)
+			}
+			continue
+		}
 		if candidate.Quarantine != nil || !candidate.Published || candidate.Review == nil {
 			continue
 		}

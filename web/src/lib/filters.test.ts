@@ -4,6 +4,14 @@ import { encodeFilters, filterFacets, restoreFilters, getFilterSpecs } from './f
 import { facets } from '../test/fixtures'
 import { safeLink } from './utils'
 describe('backend taxonomy transport', () => {
+  it('persists and transports server-side model priority sorting without sorting only the current page', () => {
+    expect(restoreFilters({ sort: 'model-priority' }).sort).toBe('model-priority')
+    expect(encodeFilters({ ...defaultFilters, sort: 'model-priority', page: 3 })).toMatchObject({
+      sort: 'model-priority',
+      page: 3,
+    })
+  })
+
   it('uses exact imported dimensions, not model classification', () => {
     const result = encodeFilters({
       ...defaultFilters,

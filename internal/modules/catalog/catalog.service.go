@@ -71,7 +71,7 @@ func validateQuery(q *PaperQuery) error {
 	if q.Hidden != "exclude" && q.Hidden != "include" && q.Hidden != "only" {
 		return bizerrors.BadRequest("invalid hidden filter")
 	}
-	if q.Sort != "newest" && q.Sort != "oldest" && q.Sort != "title" && q.Sort != "observed" && q.Sort != "source-updated" {
+	if q.Sort != "newest" && q.Sort != "oldest" && q.Sort != "title" && q.Sort != "observed" && q.Sort != "source-updated" && q.Sort != "model-priority" {
 		return bizerrors.BadRequest("invalid sort")
 	}
 	if len(q.Q) > 1200 || len(q.Dimension) > 2000 {

@@ -559,9 +559,7 @@ func (s *remoteSource) biorxiv(ctx context.Context, req FetchRequest) (Page, err
 			continue
 		}
 		// bioRxiv 无全文关键词参数。统一模板只作宽松发现，最终纳入仍由独立审核处理。
-		if !matchesTemplateGroups(item.Title+" "+item.Abstract, req.Template) {
-			continue
-		}
+		// 已取回记录全部保留，不以本地关键词不可逆丢弃。
 		record := Record{Source: s.name, SourceID: cleanDOI(item.DOI), DOI: cleanDOI(item.DOI), Title: item.Title, Abstract: item.Abstract, URL: "https://doi.org/" + cleanDOI(item.DOI), Version: item.Version, SourceUpdatedAt: updated, Topics: []string{req.Template.Topic}, Raw: append(json.RawMessage(nil), raw...)}
 		record.SourceURL = sourceRecordURL(s.name, record.SourceID)
 		record.PublicationType = "preprint"

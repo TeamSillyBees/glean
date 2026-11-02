@@ -37,6 +37,7 @@ func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int
 			if run.ID == target {
 				found = true
 				if !run.FinishedAt.IsZero() {
+
 					return latest, nil
 				}
 			}
@@ -62,6 +63,9 @@ func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int
 			if run.RequestKey == s.windowKey(*window, run.TemplateVersion) {
 				initialRequests = run.Requests
 				if !run.FinishedAt.IsZero() {
+					if s.pipeline != nil {
+						return s.runOnce(ctx, s.clock().UTC(), window, target)
+					}
 					return latest, nil
 				}
 			}

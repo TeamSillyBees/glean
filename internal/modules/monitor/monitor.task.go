@@ -27,7 +27,7 @@ func (s *Service) RegisterTasks(registry task.Registry) error {
 		}
 		_, err = s.RunOnce(ctx, now)
 		return err
-	}), task.WithRegisterModule("monitor"), task.WithRegisterOwner("glean"), task.WithRegisterDescription("有预算地推进采集、审核和目录投影"), task.WithRegisterDefaultMaxRetry(0), task.WithRegisterDefaultTimeout(2*time.Minute), task.WithRegisterBizKeyRequired(true), task.WithRegisterSideEffect(true), task.WithRegisterCostLevel(task.CostLevelLow))
+	}), task.WithRegisterModule("monitor"), task.WithRegisterOwner("glean"), task.WithRegisterDescription("有预算地推进采集、审核和目录投影"), task.WithRegisterDefaultMaxRetry(0), task.WithRegisterDefaultTimeout(3*time.Minute), task.WithRegisterBizKeyRequired(true), task.WithRegisterSideEffect(true), task.WithRegisterCostLevel(task.CostLevelLow))
 }
 
 // NextWakeAt 返回调用方应安排的最早 UTC 时间；退避期间不要求立即重试。
@@ -41,7 +41,7 @@ func (s *Service) NextWakeAt(ctx context.Context) (time.Time, error) {
 		if !s.knownSources(state) {
 			return s.clock().UTC(), nil
 		}
-		return state.Schedule.NextRunUTC, nil
+		return s.pipelineWakeAt(state, state.Schedule.NextRunUTC), nil
 	}
 	now := s.clock().UTC()
 	var next time.Time
@@ -60,7 +60,7 @@ func (s *Service) NextWakeAt(ctx context.Context) (time.Time, error) {
 	if next.IsZero() {
 		return now, nil
 	}
-	return next, nil
+	return s.pipelineWakeAt(state, next), nil
 }
 
 // RegisterSchedule 显式注册分钟唤醒脉冲；持久化服务决定 72 小时 UTC 锚点、分页续跑和退避，不能用漂移的 @every72h 替代。
@@ -72,6 +72,36 @@ func (s *Service) RegisterSchedule(scheduler task.Scheduler) error {
 	if s.requireOperator && s.operatorID <= 0 {
 		return bizerrors.BadRequest("scheduler requires an explicit audited operator")
 	}
-	item := task.Task{Type: TickTaskType, Payload: struct{}{}, Meta: task.TaskMeta{Name: "Glean literature monitor tick", Description: "显式启用的真实来源监控；LLM 审核明确模拟", Module: "monitor", Owner: "glean", Scenario: "literature-scheduler", BizKey: "monitor:tick:" + s.config.StateKey, BizKeyRequired: true, SideEffect: true, CostLevel: task.CostLevelLow, Idempotent: true}}
-	return scheduler.Register("* * * * *", item, task.WithMaxRetry(0), task.WithTimeout(2*time.Minute), task.WithUnique(45*time.Second))
+	item := task.Task{Type: TickTaskType, Payload: struct{}{}, Meta: task.TaskMeta{Name: "Glean literature monitor tick", Description: "显式启用的真实来源监控；分阶段真实模型处理，缺配置时保留待配置", Module: "monitor", Owner: "glean", Scenario: "literature-scheduler", BizKey: "monitor:tick:" + s.config.StateKey, BizKeyRequired: true, SideEffect: true, CostLevel: task.CostLevelLow, Idempotent: true}}
+	return scheduler.Register("* * * * *", item, task.WithMaxRetry(0), task.WithTimeout(3*time.Minute), task.WithUnique(45*time.Second))
+}
+
+func (s *Service) pipelineWakeAt(state *monitorState, next time.Time) time.Time {
+	if s.pipeline == nil {
+		return next
+	}
+	for _, c := range state.Records {
+		if c.Pipeline == nil || !c.Published {
+			continue
+		}
+		if !c.PipelineProjected {
+			next = s.clock().UTC()
+		}
+		for _, stage := range c.Pipeline.Stages {
+			if stage.Status == "completed" {
+				continue
+			}
+			if stage.Status == "pending" || stage.Status == "running" || stage.Status == "retry_wait" || (stage.Status == "awaiting_configuration" && s.pipelineReady(stage.Name)) {
+				at := stage.NextRetryAt
+				if at.IsZero() {
+					at = s.clock().UTC()
+				}
+				if at.Before(next) {
+					next = at
+				}
+			}
+			break
+		}
+	}
+	return next
 }

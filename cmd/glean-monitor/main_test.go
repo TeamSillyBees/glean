@@ -147,3 +147,21 @@ func TestRetryReportSurvivesOriginalHistoryCompaction(t *testing.T) {
 	_, err = retryReportSnapshot(snapshot, 1)
 	require.ErrorContains(t, err, "ambiguous")
 }
+
+// TestLiveBudgetAllowsMaximumModelStage 验证有限CLI能启动最大模型阶段并保留保存时间。
+func TestLiveBudgetAllowsMaximumModelStage(t *testing.T) {
+	ctx, cancel := boundedLiveContext(context.Background())
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
+	remaining := time.Until(deadline)
+	require.Greater(t, remaining, 120*time.Second+3*time.Second)
+	require.LessOrEqual(t, remaining, 3*time.Minute)
+	parent, parentCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer parentCancel()
+	child, childCancel := boundedLiveContext(parent)
+	defer childCancel()
+	parentDeadline, _ := parent.Deadline()
+	childDeadline, _ := child.Deadline()
+	require.Equal(t, parentDeadline, childDeadline)
+}

@@ -97,7 +97,11 @@ export function restoreFilters(saved: Record<string, unknown>): Partial<Filters>
   if (['exclude', 'include', 'only'].includes(String(saved.hidden)))
     result.hidden = saved.hidden as Filters['hidden']
   if ([20, 40, 100].includes(Number(saved.pageSize))) result.pageSize = Number(saved.pageSize)
-  if (['newest', 'oldest', 'title', 'observed', 'source-updated'].includes(String(saved.sort)))
+  if (
+    ['newest', 'oldest', 'title', 'observed', 'source-updated', 'model-priority'].includes(
+      String(saved.sort),
+    )
+  )
     result.sort = saved.sort as Filters['sort']
   return result
 }

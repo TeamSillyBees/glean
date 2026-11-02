@@ -17,10 +17,10 @@
 
 ## 不变边界与后续条件
 
-历史基线仍为 39,495 条主题成员关系、38,989 个身份候选，不是重新科学核验。六个真实来源已实现，但离线 CI、手动实时 API 验收与完整覆盖不同；LLM 仍明确标记 mock。细节见[来源边界](real-sources.md)与 [API 契约](api-contract.md)。
+历史基线仍为 39,495 条主题成员关系、38,989 个身份候选，不是重新科学核验。六个真实来源已实现，但离线 CI、手动实时 API 验收与完整覆盖不同；当前代码已加入真实模型 HTTP adapter；无真实密钥，尚未实服验收，见[论文处理流程](paper-pipeline.md)。细节见[来源边界](real-sources.md)与 [API 契约](api-contract.md)。
 
-2026-11-02 00:41:40 UTC，Starxy 通过 `workflow_dispatch` 触发[独立实源运行 41368520709](https://github.com/TeamSillyBees/glean/actions/runs/41368520709)（[`4295f6a`](https://github.com/TeamSillyBees/glean/commit/4295f6a)），两个任务成功：六源有界兼容性探针均通过；Europe PMC 一条真实观察经 PostgreSQL、API 到桌面/手机，两项浏览器测试通过。此结果取代此前未执行实源验收的状态，不代表六源均有论文命中、六源全链路入库、完整分页或持续可达；LLM 仍为 mock，实际服务器未部署。安全产物与范围见[来源验证记录](real-sources.md#已完成的手动验收)。
+2026-11-02 00:41:40 UTC，Starxy 通过 `workflow_dispatch` 触发[独立实源运行 41368520709](https://github.com/TeamSillyBees/glean/actions/runs/41368520709)（[`4295f6a`](https://github.com/TeamSillyBees/glean/commit/4295f6a)），两个任务成功：六源有界兼容性探针均通过；Europe PMC 一条真实观察经 PostgreSQL、API 到桌面/手机，两项浏览器测试通过。此结果取代此前未执行实源验收的状态，不代表六源均有论文命中、六源全链路入库、完整分页或持续可达；该次验收使用 mock LLM，不是新模型流程的实服验收；当时实际服务器未部署。安全产物与范围见[来源验证记录](real-sources.md#已完成的手动验收)。
 
 - [x] CI 选择门的相关变更 RUN 与仅文档 SKIP 两条分支均已验收。
 - [ ] 实际服务器尚未部署；上线前需用户提供目标、访问条件、私有配置/密钥及生产授权，并按[生产指南](production.md)演练。
-- [ ] 真实 LLM 接入需确定提供方/模型及密钥；秘密不得进入仓库。这些条件不阻断其他开发。
+- [ ] 真实模型实服验收需确定提供方/模型及密钥；秘密不得进入仓库。这些条件不阻断其他开发。

@@ -105,6 +105,7 @@ func (s *Service) attachObservations(ctx context.Context, items []PaperVO, detai
 		}
 		if detail {
 			metadata.Review = review
+			metadata.Pipeline = review.Pipeline
 			metadata.Topics = uniqueSorted(matched[o.ID])
 			observation := SourceObservationVO{ObservationInput: metadata, ID: o.ID, ContentHash: o.ContentHash}
 			item.Observations = append(item.Observations, observation)

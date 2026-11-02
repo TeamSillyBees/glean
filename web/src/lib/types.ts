@@ -148,7 +148,7 @@ export interface Filters {
   reviewStatus: string
   readStatus: string
   hidden: 'exclude' | 'include' | 'only'
-  sort: 'newest' | 'oldest' | 'title' | 'observed' | 'source-updated'
+  sort: 'newest' | 'oldest' | 'title' | 'observed' | 'source-updated' | 'model-priority'
   page: number
   pageSize: number
 }
@@ -188,7 +188,60 @@ export const defaultFilters: Filters = {
   pageSize: 20,
 }
 
+export interface PaperPipeline {
+  candidateId?: string
+  version: string
+  status: string
+  material: {
+    scope: string
+    text?: string
+    sourceUrl: string
+    sha256: string
+    reason?: string
+    truncated?: boolean
+    blocks?: { id: string; kind: string; text: string; sourceUrl: string; sha256: string }[]
+  }
+  scientificReviewed: boolean
+  stages: PipelineStage[]
+}
+export interface PipelineStage {
+  name: string
+  status: string
+  attempts: number
+  inputHash: string
+  provider: string
+  model: string
+  promptVersion: string
+  ruleVersion: string
+  nextRetryAt?: string
+  error?: string
+  result?: {
+    topics?: {
+      topic: string
+      relevant: boolean
+      category: string
+      score: number
+      confidence?: number | null
+    }[]
+    claimSupport?: number[]
+    relevant?: boolean
+    category?: string
+    score?: number
+    confidence?: number
+    summary?: string
+    supported?: boolean
+    issues?: string[]
+    claims?: {
+      text: string
+      quote: string
+      evidenceBlockId?: string
+      numbers?: string[]
+      citations?: string[]
+    }[]
+  }
+}
 export interface Review {
+  pipeline?: PaperPipeline | null
   provider: string
   model: string
   promptVersion: string

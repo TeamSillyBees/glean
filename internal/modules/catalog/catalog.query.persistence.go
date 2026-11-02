@@ -227,6 +227,8 @@ func (s *Service) Papers(ctx context.Context, q PaperQuery) (PaperPageVO, error)
 		return PaperPageVO{}, bizerrors.WrapDBContext(ctx, err, "count papers failed")
 	}
 	switch q.Sort {
+	case "model-priority":
+		query.Order(modelPriorityOrder(q.Topic), ent.Desc(gleanpaper.FieldID))
 	case "observed", "source-updated":
 		query.Order(func(sel *sql.Selector) {
 			o := sql.Table(gleanobservation.Table)
@@ -558,4 +560,22 @@ func historicalReadingNotes(raw map[string]any) map[string]string {
 		}
 	}
 	return notes
+}
+
+// modelPriorityOrder 仅按最新真实来源版本的当前主题模型分排序；未知后置，不回退旧版本，不改变科学分类。
+func modelPriorityOrder(topic string) func(*sql.Selector) {
+	return func(sel *sql.Selector) {
+		o := sql.Table(gleanobservation.Table)
+		latest := sql.Dialect(dialect.Postgres).Select(o.C(gleanobservation.FieldReview)).From(o).
+			Where(sql.And(sql.ColumnsEQ(o.C(gleanobservation.FieldPaperID), sel.C(gleanpaper.FieldID)), liveObservationSQL(o.C(gleanobservation.FieldMetadata)))).
+			OrderBy(sql.Desc(o.C(gleanobservation.FieldObservedAt)), sql.Desc(o.C(gleanobservation.FieldID))).Limit(1)
+		sel.OrderExpr(sql.ExprFunc(func(b *sql.Builder) {
+			b.WriteString("(SELECT MAX(CASE WHEN jsonb_typeof(decision->'score') = 'number' THEN CASE WHEN (decision->>'score')::numeric BETWEEN 0 AND 1 THEN (decision->>'score')::numeric END END) FROM (").Join(latest).
+				WriteString(") latest_pipeline CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(latest_pipeline.review->'pipeline'->'stages') = 'array' THEN latest_pipeline.review->'pipeline'->'stages' ELSE '[]'::jsonb END) stage CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(stage->'result'->'topics') = 'array' THEN stage->'result'->'topics' ELSE '[]'::jsonb END) decision WHERE stage->>'name' = 'classification' AND stage->>'status' = 'completed'")
+			if topic != "" {
+				b.WriteString(" AND decision->>'topic' = ").Arg(topic)
+			}
+			b.WriteString(") DESC NULLS LAST")
+		}))
+	}
 }

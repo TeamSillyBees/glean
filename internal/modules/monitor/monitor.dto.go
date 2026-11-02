@@ -95,14 +95,15 @@ type Source interface {
 
 // Review 是明确区分模拟与真实审核的版本化输出。
 type Review struct {
-	Provider           string    `json:"provider"`
-	Model              string    `json:"model"`
-	PromptVersion      string    `json:"promptVersion"`
-	ReviewedAt         time.Time `json:"reviewedAt"`
-	IsMock             bool      `json:"isMock"`
-	ScientificReviewed bool      `json:"scientificReviewed"`
-	InclusionStatus    string    `json:"inclusionStatus"`
-	Summary            string    `json:"summary"`
+	Pipeline           json.RawMessage `json:"pipeline,omitempty"`
+	Provider           string          `json:"provider"`
+	Model              string          `json:"model"`
+	PromptVersion      string          `json:"promptVersion"`
+	ReviewedAt         time.Time       `json:"reviewedAt"`
+	IsMock             bool            `json:"isMock"`
+	ScientificReviewed bool            `json:"scientificReviewed"`
+	InclusionStatus    string          `json:"inclusionStatus"`
+	Summary            string          `json:"summary"`
 }
 
 // Reviewer 允许后续替换真实模型，不需要现在配置凭据。
@@ -124,14 +125,20 @@ type Publisher interface {
 
 // Candidate 持久化来源版本、审核和目录投影状态，避免失败重试丢失证据。
 type Candidate struct {
-	Quarantine *Quarantine `json:"quarantine,omitempty"`
-	Compacted  bool        `json:"compacted"`
-	ID         idgen.ID    `json:"id"`
-	Key        string      `json:"key"`
-	Identity   string      `json:"identity"`
-	Record     Record      `json:"record"`
-	Review     *Review     `json:"review,omitempty"`
-	Published  bool        `json:"published"`
+	PipelineArchived  bool             `json:"pipelineArchived"`
+	PipelineHistory   []PaperPipeline  `json:"pipelineHistory,omitempty"`
+	RunID             idgen.ID         `json:"runId,omitempty"`
+	Templates         []SearchTemplate `json:"templates,omitempty"`
+	Pipeline          *PaperPipeline   `json:"pipeline,omitempty"`
+	PipelineProjected bool             `json:"pipelineProjected"`
+	Quarantine        *Quarantine      `json:"quarantine,omitempty"`
+	Compacted         bool             `json:"compacted"`
+	ID                idgen.ID         `json:"id"`
+	Key               string           `json:"key"`
+	Identity          string           `json:"identity"`
+	Record            Record           `json:"record"`
+	Review            *Review          `json:"review,omitempty"`
+	Published         bool             `json:"published"`
 }
 
 // RejectedRecordError 标识单条永久无效或身份冲突；不包含原始错误和敏感信息。

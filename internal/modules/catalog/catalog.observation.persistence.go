@@ -54,6 +54,16 @@ func normalizeObservation(in *ObservationInput, knownTopics ...string) (string, 
 	if !json.Valid(in.Raw) {
 		return "", bizerrors.BadRequest("source observation requires valid raw JSON")
 	}
+	if len(in.Pipeline) == 0 {
+		in.Pipeline = in.Review.Pipeline
+	}
+	if len(in.Pipeline) > 0 {
+		if !json.Valid(in.Pipeline) {
+			return "", bizerrors.BadRequest("pipeline requires valid JSON")
+		}
+		in.Review.Pipeline = in.Pipeline
+		in.Review.ScientificReviewed = false
+	}
 	// 来源元数据是事实；模拟模型只能产生未审核状态，不得提升科学纳入或阅读标记。
 	if in.Review.IsMock || !in.Review.ScientificReviewed {
 		in.Review.ScientificReviewed = false
@@ -88,6 +98,7 @@ func normalizeObservation(in *ObservationInput, knownTopics ...string) (string, 
 	canonical.TemplateVersion = ""
 	canonical.CoreDiscovery = false
 	canonical.Review = ReviewVO{}
+	canonical.Pipeline = nil
 	var raw any
 	decoder := json.NewDecoder(bytes.NewReader(in.Raw))
 	decoder.UseNumber()
@@ -262,6 +273,16 @@ func (s *Service) IngestObservation(ctx context.Context, input ObservationInput)
 			if observation.PaperID != paper.ID {
 				return fmt.Errorf("%w: observation parent changed", errIdentityConflict)
 			}
+			// 来源版本保持不可变；后续模型阶段只更新独立 review JSON，不修改主题或人工审核。
+			if !result.Created && len(input.Review.Pipeline) > 0 {
+				review, mergeErr := mergePipelineReview(observation.Review, input.Review)
+				if mergeErr != nil {
+					return mergeErr
+				}
+				if _, err := c.GleanObservation.UpdateOneID(observation.ID).SetReview(review).Save(ctx); err != nil {
+					return err
+				}
+			}
 			result.PaperID = paper.ID
 			result.ObservationID = observation.ID
 			for _, topic := range input.Topics {
@@ -320,4 +341,27 @@ func sourceChangeType(source, previous, current string) string {
 		}
 	}
 	return "metadata_updated"
+}
+
+// mergePipelineReview 更新处理进度，保留旧记录的科学判定及未知审核字段。
+func mergePipelineReview(existing map[string]any, incoming ReviewVO) (map[string]any, error) {
+	result := make(map[string]any, len(existing))
+	for key, value := range existing {
+		result[key] = value
+	}
+	encoded, err := json.Marshal(incoming)
+	if err != nil {
+		return nil, err
+	}
+	var update map[string]any
+	if err := json.Unmarshal(encoded, &update); err != nil {
+		return nil, err
+	}
+	for key, value := range update {
+		if reviewed, _ := existing["scientificReviewed"].(bool); reviewed && (key == "scientificReviewed" || key == "inclusionStatus") {
+			continue
+		}
+		result[key] = value
+	}
+	return result, nil
 }

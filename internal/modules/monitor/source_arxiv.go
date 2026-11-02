@@ -143,9 +143,7 @@ func (s *remoteSource) arxiv(ctx context.Context, req FetchRequest) (Page, error
 				continue records
 			}
 			record := Record{Source: s.name, SourceID: a.ID, ArxivID: a.ID, Title: strings.Join(strings.Fields(a.Title), " "), Abstract: strings.TrimSpace(a.Abstract), DOI: cleanDOI(a.DOI), Journal: a.Journal, SourceUpdatedAt: updated, Topics: []string{req.Template.Topic}, Raw: rawXML(item.Raw), PublicationType: "preprint"}
-			if !matchesTemplateGroups(record.Title+" "+record.Abstract, req.Template) {
-				continue
-			}
+			// 已取回记录全部保留；主题仅为发现候选，相关性由后续阶段判断。
 			maxVersion := 0
 			for _, v := range a.Versions {
 				n, e := strconv.Atoi(strings.TrimPrefix(v.Number, "v"))

@@ -208,7 +208,7 @@ func TestBioRxivPagingUsesRawCountAndNoInventedFormalDate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Complete || rxivOffset(t, page.NextCursor) != 2 || len(page.Records) != 1 {
+	if page.Complete || rxivOffset(t, page.NextCursor) != 2 || len(page.Records) != 2 {
 		t.Fatalf("filtered records must not affect source cursor: %+v", page)
 	}
 	r := page.Records[0]
@@ -370,8 +370,8 @@ func TestArXivTranslatesTermGroupsWithoutDroppingContext(t *testing.T) {
 	req.Template.TermGroups[1] = []string{"unrelated"}
 	f = &adapterExecutor{responses: []*httpclient.Response{adapterFixture(t, "arxiv-oai-synthetic.xml")}}
 	page, err = NewArXivSource(f).Fetch(context.Background(), req)
-	if err != nil || len(page.Records) != 0 {
-		t.Fatal("local OAI filtering must require each context group")
+	if err != nil || len(page.Records) != 1 {
+		t.Fatal("已取回的非关键词匹配记录必须保留供后续语义判定")
 	}
 }
 
@@ -383,16 +383,16 @@ func TestBioRxivRequiresEachContextGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Records) != 1 || rxivOffset(t, page.NextCursor) != 2 {
-		t.Fatal("a discovery hit must match at least one term in each group, without changing upstream page offsets")
+	if len(page.Records) != 2 || rxivOffset(t, page.NextCursor) != 2 {
+		t.Fatal("所有已取回记录应持久化，分页offset仍按原始数量")
 	}
 	req.Template.TermGroups[1] = []string{"digital twin", "world model"}
 	page, err = NewBioRxivSource(&adapterExecutor{responses: []*httpclient.Response{fixture}}).Fetch(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Records) != 0 || rxivOffset(t, page.NextCursor) != 2 {
-		t.Fatal("a language-agent-only hit must not bypass required context group")
+	if len(page.Records) != 2 || rxivOffset(t, page.NextCursor) != 2 {
+		t.Fatal("上下文不匹配只能作为语义判定，不允许采集适配器丢弃")
 	}
 }
 

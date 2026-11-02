@@ -33,7 +33,7 @@ func TestCatalogMonitorAdapterPreservesAuthenticity(t *testing.T) {
 	writer := &observationWriterRecorder{}
 	publisher := &catalogMonitorPublisher{catalog: writer, operator: 7}
 	now := time.Now().UTC()
-	publication := monitor.Publication{Record: monitor.Record{Source: "crossref", TemplateVersion: "snapshot-frozen-version", SourceID: "10.1234/a", CoreDiscovery: true, PMID: "12345678", SourceURL: "https://doi.org/10.1234/a", Title: "Real paper", ArxivID: "2401.12345", Authors: []string{"A"}, PublicationType: "journal-article", Topics: []string{"biomed-ai"}, AcquiredAt: now, Raw: json.RawMessage(`{"title":"Real paper"}`)}, Review: monitor.Review{Provider: "mock", IsMock: true, ScientificReviewed: false, InclusionStatus: "pending"}}
+	publication := monitor.Publication{Record: monitor.Record{Source: "crossref", TemplateVersion: "snapshot-frozen-version", SourceID: "10.1234/a", CoreDiscovery: true, PMID: "12345678", SourceURL: "https://doi.org/10.1234/a", Title: "Real paper", ArxivID: "2401.12345", Authors: []string{"A"}, PublicationType: "journal-article", Topics: []string{"biomed-ai"}, AcquiredAt: now, Raw: json.RawMessage(`{"title":"Real paper"}`)}, Review: monitor.Review{Provider: "mock", IsMock: true, ScientificReviewed: false, InclusionStatus: "pending", Pipeline: json.RawMessage(`{"status":"awaiting_configuration"}`)}}
 	require.NoError(t, publisher.Publish(context.Background(), 100, []monitor.Publication{publication}))
 	require.Len(t, writer.inputs, 1)
 	require.Equal(t, "snapshot-frozen-version", writer.inputs[0].TemplateVersion)
@@ -42,6 +42,8 @@ func TestCatalogMonitorAdapterPreservesAuthenticity(t *testing.T) {
 	require.True(t, writer.inputs[0].CoreDiscovery)
 	require.Equal(t, "12345678", writer.inputs[0].PMID)
 	require.Equal(t, "https://doi.org/10.1234/a", writer.inputs[0].SourceURL)
+	require.JSONEq(t, string(publication.Review.Pipeline), string(writer.inputs[0].Review.Pipeline))
+	require.JSONEq(t, string(publication.Review.Pipeline), string(writer.inputs[0].Pipeline))
 	require.True(t, writer.inputs[0].Review.IsMock)
 	require.False(t, writer.inputs[0].Review.ScientificReviewed)
 	publication.Record.IsMock = true
@@ -72,7 +74,7 @@ func TestCatalogPublisherRejectsOnlyTypedPermanentErrors(t *testing.T) {
 func TestOfficialSourceOriginGuard(t *testing.T) {
 	config, hooks := monitorHTTPConfig(&Config{})
 	config.Enabled = true
-	require.Len(t, hooks, 6)
+	require.Len(t, hooks, 7)
 	factory, err := httpclient.NewFactory(config, nil, hooks...)
 	require.NoError(t, err)
 	client, err := factory.Get("glean-crossref")
@@ -88,4 +90,45 @@ func TestOfficialSourceOriginGuard(t *testing.T) {
 		require.False(t, service.Retry.Enabled)
 		require.NotContains(t, service.Headers["User-Agent"], "contact:")
 	}
+}
+
+// archiveObservationRecorder 测试归档读写往返，不触发模型或外部网络。
+type archiveObservationRecorder struct {
+	observationWriterRecorder
+	input                 catalog.ObservationInput
+	loaded                idgen.ID
+	source, sourceID, key string
+}
+
+func (w *archiveObservationRecorder) LoadPipelineObservation(_ context.Context, id idgen.ID) (catalog.ObservationInput, error) {
+	w.loaded = id
+	return w.input, nil
+}
+func (w *archiveObservationRecorder) FindPipelineObservation(_ context.Context, source, sourceID, key string) (catalog.ObservationInput, bool, error) {
+	w.source, w.sourceID, w.key = source, sourceID, key
+	return w.input, true, nil
+}
+
+// TestCatalogPipelineArchiveRoundTrip 验证归档还原完整Record及包含模板/历史的Pipeline，不读取列表瘦身结果。
+func TestCatalogPipelineArchiveRoundTrip(t *testing.T) {
+	writer := &archiveObservationRecorder{}
+	publisher := &catalogMonitorPublisher{catalog: writer, operator: 7}
+	now := time.Now().UTC()
+	original := monitor.Publication{
+		Record: monitor.Record{Source: "crossref", SourceID: "10.1234/archive", SourceURL: "https://doi.org/10.1234/archive", DOI: "10.1234/archive", Title: "Original", Abstract: "Complete abstract", Raw: json.RawMessage(`{"original":"source payload"}`), Authors: []string{"A"}, ISSNs: []string{"0028-0836"}, Topics: []string{"biomed-ai"}, Journal: "Source journal", URL: "https://example.org/paper", PMID: "123", ArxivID: "2401.12345", PublicationType: "journal-article", Version: "v2", TemplateVersion: "v3", CoreDiscovery: true, AcquiredAt: now, SourceUpdatedAt: now, PublicationEvents: []monitor.PublicationEvent{{Kind: "online", Date: now, Evidence: "source"}}},
+		Review: monitor.Review{Pipeline: json.RawMessage(`{"candidateId":"321","key":"record-key","runId":"9","templates":[{"topic":"biomed-ai","version":"v3"}],"history":[{"status":"completed"}]}`), Summary: "model summary"},
+	}
+	require.NoError(t, publisher.Publish(context.Background(), 9, []monitor.Publication{original}))
+	writer.input = writer.inputs[0]
+	loaded, err := publisher.LoadPipeline(context.Background(), 321)
+	require.NoError(t, err)
+	require.Equal(t, idgen.ID(321), writer.loaded)
+	require.Equal(t, original, loaded)
+	found, ok, err := publisher.FindPipeline(context.Background(), original.Record, "record-key")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, original, found)
+	require.Equal(t, original.Record.Source, writer.source)
+	require.Equal(t, original.Record.SourceID, writer.sourceID)
+	require.Equal(t, "record-key", writer.key)
 }

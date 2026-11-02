@@ -140,7 +140,7 @@ type PaperQuery struct {
 	Hidden          string `query:"hidden" default:"exclude" enum:"exclude,include,only"`
 	Page            int    `query:"page" default:"1" minimum:"1" maximum:"1000000"`
 	PageSize        int    `query:"pageSize" default:"20" minimum:"1" maximum:"100"`
-	Sort            string `query:"sort" default:"newest" enum:"newest,oldest,title,observed,source-updated"`
+	Sort            string `query:"sort" default:"newest" enum:"newest,oldest,title,observed,source-updated,model-priority"`
 }
 
 // PaperPageVO 为稳定排序的全局去重分页结果。
@@ -238,16 +238,17 @@ type stateResponse struct {
 	Body response.SuccessVO[PaperStateVO]
 }
 
-// ReviewVO 将 LLM 模拟输出与真实来源和正式科研纳入判定严格分离。
+// ReviewVO 将模型处理输出与真实来源和人工科学纳入判定严格分离。
 type ReviewVO struct {
-	Provider           string    `json:"provider"`
-	Model              string    `json:"model"`
-	PromptVersion      string    `json:"promptVersion"`
-	ReviewedAt         time.Time `json:"reviewedAt"`
-	IsMock             bool      `json:"isMock"`
-	ScientificReviewed bool      `json:"scientificReviewed"`
-	InclusionStatus    string    `json:"inclusionStatus"`
-	Summary            string    `json:"summary"`
+	Pipeline           json.RawMessage `json:"pipeline,omitempty"`
+	Provider           string          `json:"provider"`
+	Model              string          `json:"model"`
+	PromptVersion      string          `json:"promptVersion"`
+	ReviewedAt         time.Time       `json:"reviewedAt"`
+	IsMock             bool            `json:"isMock"`
+	ScientificReviewed bool            `json:"scientificReviewed"`
+	InclusionStatus    string          `json:"inclusionStatus"`
+	Summary            string          `json:"summary"`
 }
 
 // PublicationEventVO 保留来源明示的日期类型，不用接收日期替代在线/卷期日期。
@@ -259,6 +260,7 @@ type PublicationEventVO struct {
 
 // ObservationInput 是真实来源向目录提交的版本化证据，不等于科学纳入批准。
 type ObservationInput struct {
+	Pipeline          json.RawMessage      `json:"pipeline,omitempty"`
 	Kind              string               `json:"kind,omitempty"`
 	AbstractEvidence  *AbstractEvidenceVO  `json:"abstractEvidence,omitempty"`
 	CoreDiscovery     bool                 `json:"coreDiscovery,omitempty"`

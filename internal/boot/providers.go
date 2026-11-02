@@ -115,7 +115,7 @@ func registerModules(injector *do.Injector, cfg *Config) {
 	if cfg.Monitor.OperatorID != "" {
 		monitorOperator, _ = idgen.Parse(cfg.Monitor.OperatorID)
 	}
-	monitormodule.Provide(injector, monitormodule.ProviderOptions{Config: monitorConfig, Sources: cfg.Monitor.Sources, SchedulerEnabled: cfg.Monitor.SchedulerEnabled, OperatorID: monitorOperator})
+	monitormodule.Provide(injector, monitormodule.ProviderOptions{Models: cfg.Monitor.Models, Config: monitorConfig, Sources: cfg.Monitor.Sources, SchedulerEnabled: cfg.Monitor.SchedulerEnabled, OperatorID: monitorOperator})
 }
 
 func storageproviderMaxFileSize(cfg *Config) int64 {

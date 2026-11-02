@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"fmt"
 	"github.com/samber/do"
 	"github.com/teamsillybees/glean/internal/data/ent"
@@ -10,6 +11,8 @@ import (
 
 // ProviderOptions 定义真实来源服务装配；构造本身不会请求外部 API。
 type ProviderOptions struct {
+	Processor        PipelineProcessor
+	Models           ModelPipelineConfig
 	Templates        TemplateProvider
 	Config           Config
 	Sources          []string
@@ -31,7 +34,7 @@ func RuntimeConfig() Config {
 	return cfg
 }
 
-// NewRuntimeService 创建真实采集与真实目录投影的持久化服务；只有 LLM Reviewer 使用明确 mock。
+// NewRuntimeService 创建真实采集与真实目录投影的持久化服务；缺模型配置时等待配置而不模拟科学审核。
 func NewRuntimeService(client *ent.Client, ids *idgen.Generator, factory *httpclient.Factory, options ProviderOptions, publisher Publisher, journals JournalProvider) (*Service, error) {
 	if options.Templates == nil {
 		return nil, fmt.Errorf("live monitor requires a topic template provider")
@@ -40,14 +43,28 @@ func NewRuntimeService(client *ent.Client, ids *idgen.Generator, factory *httpcl
 	if cfg.StateKey == "" {
 		cfg = RuntimeConfig()
 	}
+	cfg.PipelineAutoDisplay = options.Models.AutoDisplay
 	sources, err := NewHTTPSourceSet(factory, options.Sources)
 	if err != nil {
 		return nil, err
 	}
-	service, err := NewService(client, ids, cfg, sources, MockReviewer{}, publisher, journals)
+	service, err := NewService(client, ids, cfg, sources, pipelineOnlyReviewer{}, publisher, journals)
 	if err != nil {
 		return nil, err
 	}
+	processor := options.Processor
+	if processor == nil {
+		processor, err = NewModelPipelineProcessor(factory, options.Models)
+		if err != nil {
+			return nil, err
+		}
+	}
+	service.SetPipelineProcessor(processor)
+	materialExecutor, err := factory.Get("glean-material")
+	if err != nil {
+		return nil, err
+	}
+	service.SetMaterialProvider(NewHTTPMaterialProvider(materialExecutor))
 	service.templates = options.Templates
 	service.operatorID = options.OperatorID
 	service.requireOperator = true
@@ -109,4 +126,12 @@ func ProvideWithFactory(injector *do.Injector, factory func(*do.Injector) (*Serv
 		}
 		return NewModule(handler), nil
 	})
+}
+
+// pipelineOnlyReviewer 仅封锁旧版构造接口；真实运行误入旧分支时失败，而不是返回模拟成功。
+type pipelineOnlyReviewer struct{}
+
+// Review 拒绝旧审核路径，真实运行只能通过持久化阶段编排。
+func (pipelineOnlyReviewer) Review(context.Context, Record) (Review, error) {
+	return Review{}, &PipelineError{Kind: "legacy_pipeline_disabled"}
 }

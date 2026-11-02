@@ -32,3 +32,19 @@ log:
     enabled: true
     level: debug
     path: ./var/logs/app.jsonl
+
+# 可选：先通过私密环境变量设置实际key；这里永远只填写变量名。
+monitor:
+  models:
+    enabled: false # 显式启用且配置密钥后才允许模型处理及额外全文获取
+    auto_display: false # 仅控制模型产物展示，不代表科学纳入
+    jev:
+      endpoint: ""
+      model: ""
+      api_key_env: INITRA_JEV_API_KEY
+      timeout: 60s
+    generative:
+      endpoint: ""
+      model: ""
+      api_key_env: INITRA_GENERATIVE_API_KEY
+      timeout: 60s
