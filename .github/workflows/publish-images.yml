@@ -1,0 +1,163 @@
+name: Glean image publication
+
+# Building and publishing images is independent of production access and enablement.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full 40-character SHA of current main with successful Glean CI
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: glean-image-publication
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    if: github.repository == 'TeamSillyBees/glean' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - name: Require current main and latest successful exact-commit push CI
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full lowercase commit SHA is required.'; exit 1; }
+          [[ "$DEPLOY_SHA" == "$GITHUB_SHA" ]] || { echo 'Dispatch main at the requested commit.'; exit 1; }
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          [[ "$DEPLOY_SHA" == "$main_sha" ]] || { echo 'Only current main may be published.'; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$DEPLOY_SHA&branch=main&event=push&per_page=100" \
+            | jq --exit-status --arg sha "$DEPLOY_SHA" --arg repo "$GITHUB_REPOSITORY" '
+                .workflow_runs | sort_by(.run_number) | last |
+                .head_sha == $sha and .head_branch == "main" and .event == "push" and
+                .head_repository.full_name == $repo and .status == "completed" and .conclusion == "success"' >/dev/null
+          printf 'commit=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DEPLOY_SHA: ${{ needs.verify.outputs.commit }}
+    outputs:
+      backend: ${{ steps.images.outputs.backend }}
+      web: ${{ steps.images.outputs.web }}
+    steps:
+      - name: Checkout validated immutable commit without saved credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.verify.outputs.commit }}
+          persist-credentials: false
+
+      - name: Build release images without registry or production credentials
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$DEPLOY_SHA" ]]
+          image_base="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="$DEPLOY_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker build --platform linux/amd64 --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$DEPLOY_SHA" --tag "$image_base-backend:$tag" .
+          docker build --platform linux/amd64 --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$DEPLOY_SHA" --tag "$image_base-web:$tag" ./web
+
+      - name: Publish to GHCR with this job's ephemeral token and capture digests
+        id: images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export DOCKER_CONFIG
+          DOCKER_CONFIG="$(mktemp -d "$RUNNER_TEMP/glean-registry.XXXXXX")"
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin >/dev/null 2>&1
+          image_base="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="$DEPLOY_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          for component in backend web; do
+            image="$image_base-$component"
+            docker push "$image:$tag"
+            digest_ref="$(docker image inspect "$image:$tag" --format '{{index .RepoDigests 0}}')"
+            [[ "$digest_ref" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]
+            [[ "$digest_ref" == "$image@sha256:"* ]]
+            printf '%s=%s\n' "$component" "$digest_ref" >> "$GITHUB_OUTPUT"
+          done
+
+  validate:
+    name: Pull published digests and verify isolated HTTP behavior
+    needs: [verify, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_SHA: ${{ needs.verify.outputs.commit }}
+      BACKEND_IMAGE: ${{ needs.publish.outputs.backend }}
+      WEB_IMAGE: ${{ needs.publish.outputs.web }}
+    steps:
+      - name: Checkout committed smoke tests and migrations
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.verify.outputs.commit }}
+          persist-credentials: false
+
+      - name: Pull from GHCR on a fresh runner and verify immutable image identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export DOCKER_CONFIG
+          DOCKER_CONFIG="$(mktemp -d "$RUNNER_TEMP/glean-registry.XXXXXX")"
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin >/dev/null 2>&1
+          for image in "$BACKEND_IMAGE" "$WEB_IMAGE"; do
+            [[ "$image" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]
+            docker pull --platform linux/amd64 "$image"
+            docker image inspect "$image" | jq --exit-status --arg sha "$DEPLOY_SHA" --arg repo "$GITHUB_REPOSITORY" '
+              .[0] | .Os == "linux" and .Architecture == "amd64" and
+              .Config.Labels["org.opencontainers.image.revision"] == $sha and
+              .Config.Labels["org.opencontainers.image.source"] == ("https://github.com/" + $repo) and
+              (.Config.User == "65532:65532" or .Config.User == "nginx")' >/dev/null
+          done
+
+      - name: Verify published backend, frontend and API proxy with disposable dependencies
+        run: bash scripts/ci/container-smoke.sh
+
+      - name: Record verified image manifest
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/glean-images"
+          jq --null-input --arg commit "$DEPLOY_SHA" --arg run_id "$GITHUB_RUN_ID" --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg backend "$BACKEND_IMAGE" --arg web "$WEB_IMAGE" \
+            '{schema: 1, commit: $commit, run_id: $run_id, run_attempt: $run_attempt, backend: $backend, web: $web}' \
+            > "$RUNNER_TEMP/glean-images/images.json"
+          printf 'Published and pulled on a fresh runner; isolated HTTP smoke passed.\n\nCommit: `%s`\n\nBackend: `%s`\n\nWeb: `%s`\n\nProduction deployment was not invoked.\n' \
+            "$DEPLOY_SHA" "$BACKEND_IMAGE" "$WEB_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save verified digest manifest for a separate manual deployment
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: glean-images-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/glean-images/images.json
+          if-no-files-found: error
+          retention-days: 90

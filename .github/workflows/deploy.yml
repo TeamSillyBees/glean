@@ -1,11 +1,15 @@
 name: Glean production deployment
 
-# Publishing and production access are never triggered by push, PR or CI completion.
+# Production consumes a verified image publication; it never builds or pushes images.
 on:
   workflow_dispatch:
     inputs:
       commit:
         description: Full 40-character SHA of current main with successful Glean CI
+        required: true
+        type: string
+      image_run_id:
+        description: Successful Glean image publication run ID for that exact commit
         required: true
         type: string
 
@@ -30,6 +34,9 @@ jobs:
       actions: read
     outputs:
       commit: ${{ steps.release.outputs.commit }}
+      backend: ${{ steps.images.outputs.backend }}
+      web: ${{ steps.images.outputs.web }}
+      image_attempt: ${{ steps.images.outputs.image_attempt }}
     steps:
       # Deliberately no checkout before validating the immutable release identity.
       - name: Require current main and latest successful exact-commit push CI
@@ -49,6 +56,32 @@ jobs:
                 .head_repository.full_name == $repo and .status == "completed" and .conclusion == "success"' >/dev/null
           printf 'commit=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Require successful image publication and validate its digest manifest
+        id: images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ inputs.commit }}
+          IMAGE_RUN_ID: ${{ inputs.image_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_RUN_ID" =~ ^[1-9][0-9]*$ ]] || { echo 'A numeric image publication run ID is required.'; exit 1; }
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$IMAGE_RUN_ID")"
+          jq --exit-status --arg sha "$DEPLOY_SHA" --arg repo "$GITHUB_REPOSITORY" --arg id "$IMAGE_RUN_ID" '
+            (.id | tostring) == $id and .path == ".github/workflows/publish-images.yml" and
+            .head_sha == $sha and .head_branch == "main" and .event == "workflow_dispatch" and
+            .head_repository.full_name == $repo and .status == "completed" and .conclusion == "success"' <<< "$run" >/dev/null
+          attempt="$(jq --raw-output '.run_attempt' <<< "$run")"
+          [[ "$attempt" =~ ^[1-9][0-9]*$ ]]
+          work="$(mktemp -d "$RUNNER_TEMP/glean-images.XXXXXX")"
+          trap 'rm -rf "$work"' EXIT
+          gh run download "$IMAGE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "glean-images-$attempt" --dir "$work"
+          jq --exit-status --arg sha "$DEPLOY_SHA" --arg id "$IMAGE_RUN_ID" --arg attempt "$attempt" '
+            .schema == 1 and .commit == $sha and .run_id == $id and .run_attempt == $attempt and
+            (.backend | test("^ghcr[.]io/teamsillybees/glean-backend@sha256:[0-9a-f]{64}$")) and
+            (.web | test("^ghcr[.]io/teamsillybees/glean-web@sha256:[0-9a-f]{64}$"))' "$work/images.json" >/dev/null
+          printf 'backend=%s\nweb=%s\nimage_attempt=%s\n' \
+            "$(jq --raw-output '.backend' "$work/images.json")" "$(jq --raw-output '.web' "$work/images.json")" "$attempt" >> "$GITHUB_OUTPUT"
+
   deploy:
     needs: verify
     runs-on: ubuntu-24.04
@@ -58,7 +91,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      packages: write
     env:
       DEPLOY_SHA: ${{ needs.verify.outputs.commit }}
       PRODUCTION_BASE_DIR: ${{ vars.PRODUCTION_BASE_DIR }}
@@ -81,52 +113,35 @@ jobs:
                 .head_sha == $sha and .head_branch == "main" and .event == "push" and
                 .head_repository.full_name == $repo and .status == "completed" and .conclusion == "success"' >/dev/null
 
+      - name: Revalidate the same successful image publication attempt after approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_RUN_ID: ${{ inputs.image_run_id }}
+          IMAGE_ATTEMPT: ${{ needs.verify.outputs.image_attempt }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_RUN_ID" =~ ^[1-9][0-9]*$ && "$IMAGE_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$IMAGE_RUN_ID" \
+            | jq --exit-status --arg sha "$DEPLOY_SHA" --arg repo "$GITHUB_REPOSITORY" --arg id "$IMAGE_RUN_ID" --arg attempt "$IMAGE_ATTEMPT" '
+                (.id | tostring) == $id and (.run_attempt | tostring) == $attempt and
+                .path == ".github/workflows/publish-images.yml" and
+                .head_sha == $sha and .head_branch == "main" and .event == "workflow_dispatch" and
+                .head_repository.full_name == $repo and .status == "completed" and .conclusion == "success"' >/dev/null
+
       - name: Checkout validated immutable commit without saved credentials
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.verify.outputs.commit }}
           persist-credentials: false
 
-      - name: Build release images without production credentials
-        run: |
-          set -euo pipefail
-          [[ "$(git rev-parse HEAD)" == "$DEPLOY_SHA" ]]
-          image_base="ghcr.io/${GITHUB_REPOSITORY,,}"
-          tag="$DEPLOY_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$DEPLOY_SHA" --tag "$image_base-backend:$tag" .
-          docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$DEPLOY_SHA" --tag "$image_base-web:$tag" ./web
-
-      - name: Publish to GHCR with this job's ephemeral token and capture digests
-        id: images
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          umask 077
-          export DOCKER_CONFIG
-          DOCKER_CONFIG="$(mktemp -d "$RUNNER_TEMP/glean-registry.XXXXXX")"
-          trap 'docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin >/dev/null 2>&1
-          image_base="ghcr.io/${GITHUB_REPOSITORY,,}"
-          tag="$DEPLOY_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          for component in backend web; do
-            image="$image_base-$component"
-            docker push "$image:$tag"
-            digest_ref="$(docker image inspect "$image:$tag" --format '{{index .RepoDigests 0}}')"
-            [[ "$digest_ref" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]
-            [[ "$digest_ref" == "$image@sha256:"* ]]
-            printf '%s=%s\n' "$component" "$digest_ref" >> "$GITHUB_OUTPUT"
-          done
-
       - name: Reject a superseded release before contacting production
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$DEPLOY_SHA" ]]
           main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
-          [[ "$DEPLOY_SHA" == "$main_sha" ]] || { echo 'Main advanced during build; images published but production was not changed.'; exit 1; }
+          [[ "$DEPLOY_SHA" == "$main_sha" ]] || { echo 'Main advanced; production was not changed.'; exit 1; }
 
       - name: Transfer immutable release and run server-local deployment
         env:
@@ -134,8 +149,8 @@ jobs:
           DEPLOY_USER: ${{ vars.PRODUCTION_SSH_USER }}
           DEPLOY_PORT: ${{ vars.PRODUCTION_SSH_PORT }}
           SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
-          BACKEND_IMAGE: ${{ steps.images.outputs.backend }}
-          WEB_IMAGE: ${{ steps.images.outputs.web }}
+          BACKEND_IMAGE: ${{ needs.verify.outputs.backend }}
+          WEB_IMAGE: ${{ needs.verify.outputs.web }}
         run: |
           set -euo pipefail
           umask 077
@@ -189,8 +204,8 @@ jobs:
 
       - name: Record immutable deployment identity
         env:
-          BACKEND_IMAGE: ${{ steps.images.outputs.backend }}
-          WEB_IMAGE: ${{ steps.images.outputs.web }}
+          BACKEND_IMAGE: ${{ needs.verify.outputs.backend }}
+          WEB_IMAGE: ${{ needs.verify.outputs.web }}
         run: |
           printf 'Deployed commit: `%s`\n\nBackend: `%s`\n\nWeb: `%s`\n' \
             "$DEPLOY_SHA" "$BACKEND_IMAGE" "$WEB_IMAGE" >> "$GITHUB_STEP_SUMMARY"

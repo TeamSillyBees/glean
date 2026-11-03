@@ -23,7 +23,7 @@ type deploymentStep struct {
 
 type deploymentJob struct {
 	If          string            `yaml:"if"`
-	Needs       string            `yaml:"needs"`
+	Needs       any               `yaml:"needs"`
 	Environment string            `yaml:"environment"`
 	Permissions map[string]string `yaml:"permissions"`
 	Steps       []deploymentStep  `yaml:"steps"`
@@ -41,7 +41,12 @@ type deploymentWorkflow struct {
 
 func readDeploymentWorkflow(t *testing.T) deploymentWorkflow {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", "deploy.yml"))
+	return readReleaseWorkflow(t, "deploy.yml")
+}
+
+func readReleaseWorkflow(t *testing.T, name string) deploymentWorkflow {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", name))
 	require.NoError(t, err)
 	var workflow deploymentWorkflow
 	require.NoError(t, yaml.Unmarshal(content, &workflow))
@@ -61,12 +66,12 @@ func TestDeploymentWorkflowSecurity(t *testing.T) {
 	require.Contains(t, verify.If, "github.ref == 'refs/heads/main'")
 	require.Contains(t, verify.If, "github.repository == 'TeamSillyBees/glean'")
 	require.Equal(t, map[string]string{"contents": "read", "actions": "read"}, verify.Permissions)
-	require.Len(t, verify.Steps, 1)
+	require.Len(t, verify.Steps, 2)
 	require.Empty(t, verify.Steps[0].Uses)
 	deploy := workflow.Jobs["deploy"]
 	require.Equal(t, "verify", deploy.Needs)
 	require.Equal(t, "production", deploy.Environment)
-	require.Equal(t, map[string]string{"contents": "read", "actions": "read", "packages": "write"}, deploy.Permissions)
+	require.Equal(t, map[string]string{"contents": "read", "actions": "read"}, deploy.Permissions)
 	require.Contains(t, deploy.Steps[0].Run, `[[ "$DEPLOY_ENABLED" == true ]]`)
 	require.Contains(t, deploy.Steps[0].Run, ".conclusion == \"success\"")
 
@@ -103,9 +108,11 @@ func TestDeploymentWorkflowSecurity(t *testing.T) {
 	for _, forbidden := range []string{"ssh-keyscan", "ssh-keygen -F", "SSH_KNOWN_HOSTS", "StrictHostKeyChecking=yes", "set -x", "pull_request_target", ":latest", "--build-arg", "--password "} {
 		require.NotContains(t, shellScripts, forbidden)
 	}
-	require.Contains(t, shellScripts, "--password-stdin")
-	require.Contains(t, shellScripts, "docker logout ghcr.io")
-	require.Contains(t, shellScripts, `rm -rf "$DOCKER_CONFIG"`)
+	for _, forbidden := range []string{"docker build", "docker push", "docker login"} {
+		require.NotContains(t, shellScripts, forbidden, "部署只能消费已经验证的镜像，不再接触 registry 写入权限")
+	}
+	require.Contains(t, verify.Steps[1].Run, "glean-images-$attempt")
+	require.Contains(t, verify.Steps[1].Run, ".github/workflows/publish-images.yml")
 }
 
 // TestDeploymentShellSyntax 在无网络、无凭据的情况下解析所有内联 shell。
@@ -113,19 +120,24 @@ func TestDeploymentShellSyntax(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash unavailable")
 	}
-	for jobName, job := range readDeploymentWorkflow(t).Jobs {
-		for _, step := range job.Steps {
-			if step.Run == "" {
-				continue
+	for _, name := range []string{"deploy.yml", "publish-images.yml"} {
+		for jobName, job := range readReleaseWorkflow(t, name).Jobs {
+			for _, step := range job.Steps {
+				if step.Run == "" {
+					continue
+				}
+				t.Run(name+"/"+jobName+"/"+step.Name, func(t *testing.T) {
+					command := exec.Command("bash", "-n")
+					command.Stdin = strings.NewReader(step.Run)
+					output, err := command.CombinedOutput()
+					require.NoError(t, err, "%s", output)
+				})
 			}
-			t.Run(jobName+"/"+step.Name, func(t *testing.T) {
-				command := exec.Command("bash", "-n")
-				command.Stdin = strings.NewReader(step.Run)
-				output, err := command.CombinedOutput()
-				require.NoError(t, err, "%s", output)
-			})
 		}
 	}
+	command := exec.Command("bash", "-n", filepath.Join(repoRoot(t), "scripts/ci/container-smoke.sh"))
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "%s", output)
 }
 
 // TestDeploymentReleaseGuard 拒绝错误 SHA、PR 成功和被失败的新执行覆盖的旧成功。
@@ -159,7 +171,7 @@ func TestDeploymentReleaseGuard(t *testing.T) {
 		{"latest pending", sha, sha, []map[string]any{success, run(2, sha, "main", "push", "TeamSillyBees/glean", "in_progress", "")}, false},
 	}
 	workflow := readDeploymentWorkflow(t)
-	guards := []string{workflow.Jobs["verify"].Steps[0].Run, workflow.Jobs["deploy"].Steps[0].Run}
+	guards := []string{workflow.Jobs["verify"].Steps[0].Run, workflow.Jobs["deploy"].Steps[0].Run, readReleaseWorkflow(t, "publish-images.yml").Jobs["verify"].Steps[0].Run}
 	for index, guard := range guards {
 		for _, tc := range cases {
 			t.Run(string(rune('A'+index))+"/"+tc.name, func(t *testing.T) {
@@ -170,7 +182,7 @@ func TestDeploymentReleaseGuard(t *testing.T) {
 				fakeGH := "#!/bin/bash\nset -eu\ncase \"$2\" in\n*/git/ref/heads/main) printf '%s\\n' \"$TEST_MAIN\" ;;\n*/actions/workflows/ci.yml/runs?*) cat \"$TEST_RUNS\" ;;\n*) exit 90 ;;\nesac\n"
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "gh"), []byte(fakeGH), 0700))
 				command := exec.Command("bash", "-c", guard)
-				command.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"), "DEPLOY_SHA="+tc.input, "DEPLOY_ENABLED=true", "PRODUCTION_BASE_DIR=/srv/glean", "GITHUB_REPOSITORY=TeamSillyBees/glean", "GITHUB_OUTPUT="+filepath.Join(dir, "output"), "TEST_MAIN="+tc.main, "TEST_RUNS="+filepath.Join(dir, "runs.json"))
+				command.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"), "DEPLOY_SHA="+tc.input, "GITHUB_SHA="+sha, "DEPLOY_ENABLED=true", "PRODUCTION_BASE_DIR=/srv/glean", "GITHUB_REPOSITORY=TeamSillyBees/glean", "GITHUB_OUTPUT="+filepath.Join(dir, "output"), "TEST_MAIN="+tc.main, "TEST_RUNS="+filepath.Join(dir, "runs.json"))
 				output, err := command.CombinedOutput()
 				if tc.ok {
 					require.NoError(t, err, "%s", output)
