@@ -40,7 +40,7 @@ jobs:
 
   verify:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Go, PostgreSQL and historical baseline
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -208,7 +208,7 @@ jobs:
 
   recovery:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Isolated backup and empty-database recovery
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -246,7 +246,7 @@ jobs:
 
   frontend:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Frontend tests and production build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -287,7 +287,7 @@ jobs:
 
   containers:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Container builds and isolated HTTP smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -334,7 +334,7 @@ jobs:
 
   browser:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Real database and browser acceptance
     runs-on: ubuntu-24.04
     timeout-minutes: 30

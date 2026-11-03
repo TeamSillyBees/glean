@@ -38,7 +38,7 @@ func TestCIEfficiencyPreservesValidation(t *testing.T) {
 	require.Len(t, ci.Jobs, 7)
 	for _, name := range []string{"verify", "recovery", "frontend", "containers", "browser"} {
 		job := ci.Jobs[name]
-		require.Equal(t, "needs.changes.outputs.docs_only != 'true'", job.If, name)
+		require.Equal(t, "${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}", job.If, name)
 		require.Equal(t, "changes", job.Needs, name)
 		require.Nil(t, job.ContinueOnError, name)
 	}
