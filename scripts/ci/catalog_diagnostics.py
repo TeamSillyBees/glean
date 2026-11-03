@@ -53,6 +53,9 @@ def select(repo, event_name, event, checkout_sha):
     """Return (enabled, constant reason); no untrusted path/event text in outputs."""
     if event_name not in {"push", "pull_request"}:
         return True, "manual or unsupported event"
+    # Main publication requires full validation at this exact SHA, even for docs.
+    if event_name == "push" and isinstance(event, dict) and event.get("ref") == "refs/heads/main":
+        return True, "main always receives complete validation"
     try:
         current = commit(repo, checkout_sha)
         if git(repo, "rev-parse", "HEAD").decode().strip() != current:
