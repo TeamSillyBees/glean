@@ -49,7 +49,7 @@ def safe_path(path):
     return path.startswith("web/public/") and PurePosixPath(path).suffix in {".svg", ".png", ".jpg", ".webp", ".ico"}
 
 
-def select(repo, event_name, event, checkout_sha):
+def select(repo, event_name, event, checkout_sha, allow_path=safe_path):
     """Return (enabled, constant reason); no untrusted path/event text in outputs."""
     if event_name not in {"push", "pull_request"}:
         return True, "manual or unsupported event"
@@ -83,7 +83,7 @@ def select(repo, event_name, event, checkout_sha):
         if not raw or not raw.endswith(b"\0"):
             return True, "empty or ambiguous diff"
         paths = raw[:-1].decode("utf-8", errors="strict").split("\0")
-        if not all(safe_path(path) for path in paths):
+        if not all(allow_path(path) for path in paths):
             return True, "changes outside frontend/documentation allowlist"
         return False, "proven frontend/documentation-only diff"
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, AttributeError):

@@ -110,7 +110,7 @@ func TestHistoricalQueryDiagnosticsAreRequired(t *testing.T) {
 	workflow := readWorkflowBoundary(t, "ci.yml")
 	require.Contains(t, workflow.On, "workflow_dispatch")
 	verify := workflow.Jobs["verify"]
-	require.Empty(t, verify.If)
+	require.Equal(t, "needs.changes.outputs.docs_only != 'true'", verify.If)
 	found, selected, tested := false, false, false
 	for _, step := range verify.Steps {
 		require.Nil(t, step.ContinueOnError)
@@ -156,7 +156,7 @@ func TestHistoricalQueryDiagnosticsAreRequired(t *testing.T) {
 	}
 	require.True(t, found)
 	for _, name := range []string{"browser", "recovery"} {
-		require.Empty(t, workflow.Jobs[name].If)
+		require.Equal(t, "needs.changes.outputs.docs_only != 'true'", workflow.Jobs[name].If)
 		for _, step := range workflow.Jobs[name].Steps {
 			require.NotContains(t, step.If, "catalog_diagnostics")
 		}

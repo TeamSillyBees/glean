@@ -35,12 +35,16 @@ func TestCIEfficiencyPreservesValidation(t *testing.T) {
 	require.Equal(t, "glean-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}", workflow.Concurrency.Group)
 	require.Equal(t, "${{ github.event_name == 'pull_request' }}", workflow.Concurrency.Cancel)
 	ci := readWorkflowBoundary(t, "ci.yml")
-	require.Len(t, ci.Jobs, 5)
-	for name, job := range ci.Jobs {
-		require.Empty(t, job.If, name)
-		require.Nil(t, job.Needs, name)
+	require.Len(t, ci.Jobs, 7)
+	for _, name := range []string{"verify", "recovery", "frontend", "containers", "browser"} {
+		job := ci.Jobs[name]
+		require.Equal(t, "needs.changes.outputs.docs_only != 'true'", job.If, name)
+		require.Equal(t, "changes", job.Needs, name)
 		require.Nil(t, job.ContinueOnError, name)
 	}
+	require.Equal(t, "always()", ci.Jobs["result"].If)
+	require.Equal(t, []any{"changes", "verify", "recovery", "frontend", "containers", "browser"}, ci.Jobs["result"].Needs)
+	require.Contains(t, ci.Jobs["result"].Steps[1].Run, "scripts/ci/ci_gate.py")
 	for _, name := range []string{"verify", "browser"} {
 		foundModule, foundBuild := false, false
 		for _, step := range ci.Jobs[name].Steps {
@@ -76,5 +80,8 @@ func TestCIEfficiencyPreservesValidation(t *testing.T) {
 	for _, prohibited := range []string{"docker push", "docker login", "packages: write", "production/deploy.sh", "continue-on-error:"} {
 		require.NotContains(t, commands, prohibited)
 	}
-	require.True(t, strings.Index(commands, "wait \"$frontend_pid\"\n          trap - EXIT") < strings.Index(commands, "- name: Start actual Go HTTP API"))
+	wait := strings.Index(commands, "wait \"$frontend_pid\"\n          trap - EXIT")
+	start := strings.Index(commands, "- name: Start actual Go HTTP API")
+	require.GreaterOrEqual(t, wait, 0)
+	require.Greater(t, start, wait)
 }
