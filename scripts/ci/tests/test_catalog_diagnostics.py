@@ -51,6 +51,11 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertFalse(selector.safe_path(path))
 
+    def test_main_always_runs_even_for_docs_or_invalid_payload(self):
+        self.save("docs/guide.md")
+        self.assertTrue(self.push(ref="refs/heads/main"))
+        self.assertTrue(selector.select(self.repo, "push", {"ref": "refs/heads/main"}, None)[0])
+
     def test_frontend_and_docs_skip(self):
         self.save("web/src/App.tsx")
         self.save("docs/guide.md")

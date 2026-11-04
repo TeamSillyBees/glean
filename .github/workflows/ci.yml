@@ -1,7 +1,9 @@
 name: Glean CI
 
 on:
+  # Main retains full exact-commit CI; feature branches use their PR once.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -9,17 +11,38 @@ permissions:
   contents: read
 
 concurrency:
-  group: glean-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A unique non-PR group protects running AND pending main/dispatch runs.
+  group: glean-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  changes:
+    name: Classify complete PR diff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - name: Checkout complete history for fail-closed PR scope
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Test CI selection and failure propagation
+        run: python3 -m unittest discover -s scripts/ci/tests -v
+      - name: Select PR documentation or complete validation
+        id: scope
+        run: python3 scripts/ci/ci_scope.py
+
   verify:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Go, PostgreSQL and historical baseline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       # Isolated CI service only; no application, LLM or source API secrets required.
@@ -47,10 +70,29 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
+        id: go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
+
+      - name: Cache locked Go modules
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/go/pkg/mod
+          key: gomod-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+
+      - name: Restore rolling compiled Go packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/go-build
+          # Refresh source-dependent outputs instead of freezing them at go.sum.
+          # Role-specific keys avoid competing saves. GitHub's branch scoping
+          # prevents main from restoring a PR's cache; Go validates cached inputs.
+          key: gobuild-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gobuild-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('go.sum') }}-
+            gobuild-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - name: Verify module dependencies and generated Ent sources
         run: |
@@ -165,6 +207,8 @@ jobs:
           go build -o "$RUNNER_TEMP/glean-enrichabstract" ./tools/enrichabstract
 
   recovery:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Isolated backup and empty-database recovery
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -201,8 +245,10 @@ jobs:
         run: bash scripts/production/tests/recovery-drill.sh
 
   frontend:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Frontend tests and production build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -240,8 +286,10 @@ jobs:
         run: npm run format:check
 
   containers:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Container builds and isolated HTTP smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -255,10 +303,28 @@ jobs:
           LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" \
             docker compose --env-file /dev/null --profile app config --quiet
 
-      - name: Build backend and frontend images without publishing
-        run: |
-          docker build --tag glean-backend:ci .
-          docker build --tag glean-web:ci ./web
+      - name: Set up isolated Buildx builder
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build cached backend image without publishing
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          tags: glean-backend:ci
+          load: true
+          push: false
+          cache-from: type=gha,scope=glean-ci-backend
+          cache-to: type=gha,mode=max,ignore-error=true,scope=glean-ci-backend
+
+      - name: Build cached frontend image without publishing
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./web
+          tags: glean-web:ci
+          load: true
+          push: false
+          cache-from: type=gha,scope=glean-ci-web
+          cache-to: type=gha,mode=max,ignore-error=true,scope=glean-ci-web
 
       - name: Smoke-test backend, frontend and API proxy with disposable dependencies
         env:
@@ -267,8 +333,10 @@ jobs:
         run: bash scripts/ci/container-smoke.sh
 
   browser:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs_only != 'true') }}
     name: Real database and browser acceptance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       # Dedicated disposable services, not application or user credentials.
@@ -323,10 +391,29 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
+        id: go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
+
+      - name: Cache locked Go modules
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/go/pkg/mod
+          key: gomod-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+
+      - name: Restore rolling compiled Go packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/go-build
+          # Refresh source-dependent outputs instead of freezing them at go.sum.
+          # Role-specific keys avoid competing saves. GitHub's branch scoping
+          # prevents main from restoring a PR's cache; Go validates cached inputs.
+          key: gobuild-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            gobuild-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('go.sum') }}-
+            gobuild-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -354,9 +441,20 @@ jobs:
           go build -o "$runtime/importbaseline" ./tools/importbaseline
           go build -o "$runtime/browserseed" ./test/e2e/browserseed
 
-      - name: Import all real historical records into PostgreSQL
+      - name: Prepare frontend alongside the complete historical import
         run: |
           set -euo pipefail
+          # Frontend files and isolated database import are independent. Wait for
+          # both, even on failure; a failed background install must fail this job.
+          (
+            set -euo pipefail
+            cd web
+            npm ci --no-audit --no-fund
+            npm run build
+            npx playwright install --with-deps chromium
+          ) &
+          frontend_pid=$!
+          trap 'status=$?; wait "$frontend_pid" || status=1; exit "$status"' EXIT
           runtime="$RUNNER_TEMP/glean-browser"
           "$runtime/browserseed"
           timeout 15m "$runtime/importbaseline" -mode import -node 17 -operator 7 \
@@ -376,6 +474,8 @@ jobs:
           test "$(psql -Atqc 'SELECT COUNT(*) FROM glean_membership')" = 39495
           test "$(psql -Atqc 'SELECT COUNT(*) FROM glean_paper WHERE is_mock')" = 0
           psql -Atqc 'SELECT COUNT(*) AS actual_papers FROM glean_paper'
+          wait "$frontend_pid"
+          trap - EXIT
 
       - name: Start actual Go HTTP API
         run: |
@@ -385,13 +485,6 @@ jobs:
           echo "$!" > "$runtime/server.pid"
           curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-all-errors \
             --max-time 5 --retry-max-time 90 http://127.0.0.1:18080/ready > /dev/null
-
-      - name: Build actual frontend and install CI Chromium
-        working-directory: web
-        run: |
-          npm ci --no-audit --no-fund
-          npm run build
-          npx playwright install --with-deps chromium
 
       - name: Exercise real catalog, personal state and administrator workflows in browsers
         working-directory: web
@@ -428,3 +521,19 @@ jobs:
           runtime="$RUNNER_TEMP/glean-browser"
           if [ -f "$runtime/server.pid" ]; then kill "$(cat "$runtime/server.pid")" 2>/dev/null || true; fi
           rm -rf "$runtime"
+
+  result:
+    name: CI validation
+    if: always()
+    needs: [changes, verify, recovery, frontend, containers, browser]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout validation contract
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Require the selected validation to have completed honestly
+        env:
+          CI_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/ci_gate.py

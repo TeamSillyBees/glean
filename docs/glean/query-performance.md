@@ -17,7 +17,7 @@ GLEAN_CATALOG_QUERY_DIAGNOSTICS=1 go test ./internal/modules/catalog \
 
 未设置开关或数据库 URL 时明确跳过。普通 `go test ./...` 不额外导入全库；
 正常 CI 的 `verify` job 默认开启诊断，并强制检查该测试确实通过。
-仅在完整 Git diff 被 `scripts/ci/catalog_diagnostics.py` 证明为允许列表中的前端源码/静态图片或 Markdown 文档时，
+main 的每一次 push 与手动触发均开启完整诊断。仅对 PR，在完整 Git diff 被 `scripts/ci/catalog_diagnostics.py` 证明为允许列表中的前端源码/静态图片或 Markdown 文档时，
 才关闭这一个耗时的全历史性能测试；关闭时仍断言测试显式 skip，不生成诊断 artifact。
 `query-performance.md`、测试、依赖、后端、schema、数据、工作流和未知路径始终触发诊断。
 手动 `workflow_dispatch` 总是运行；缺失/无效/全零 SHA、浅克隆、历史不可用、diff 失败或空 diff 均默认运行。
