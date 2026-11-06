@@ -1,6 +1,6 @@
 # 47.104.200.154 实际部署记录
 
-更新日期：2026-11-07（Asia/Shanghai）。Glean 已部署到 **https://glean.starxy.cc**，运行已合并到 `main` 的功能提交 `ab256b4c9c205005dbed7e452ed161e729555a16`。首次管理员初始化、完整历史基线导入及检索路线、协议与审计迁移已完成，本次上线采集状态页的手动连通性测试；自动采集、任务 worker/scheduler 和模型调用保持关闭。
+更新日期：2026-11-07（Asia/Shanghai）。Glean 已部署到 **https://glean.starxy.cc**，运行已合并到 `main` 的功能提交 `3189c048554a87aebd199b7c8709123354965a14`。首次管理员初始化、完整历史基线导入及检索路线、协议与审计迁移已完成，本次补齐“查看来源进度”、论文标题和详情入口的非提交按钮语义；自动采集、任务 worker/scheduler 和模型调用保持关闭。
 
 ## 当前布局与启动方式
 
@@ -63,13 +63,13 @@ certbot renew --dry-run --run-deploy-hooks --no-random-sleep-on-renew \
 
 ## 版本、数据与账号
 
-- [功能版本 ab256b4 的 Glean CI](https://github.com/TeamSillyBees/glean/actions/runs/42250831448) 成功。
-- [镜像发布与独立 runner 拉取验收](https://github.com/TeamSillyBees/glean/actions/runs/42251902058) 成功，run attempt 为 1。
+- [功能版本 3189c04 的 Glean CI](https://github.com/TeamSillyBees/glean/actions/runs/42255439217) 成功。
+- [镜像发布与独立 runner 拉取验收](https://github.com/TeamSillyBees/glean/actions/runs/42256355039) 成功，run attempt 为 1。
 - 前后端镜像均由生产主机匿名按 digest 拉取，并核对 Linux/amd64、镜像 digest 和提交标签；独立 runner 另核对镜像来源。未使用中转导入，未向服务器保存 GitHub token。
 
 ```text
-ghcr.io/teamsillybees/glean-backend@sha256:2a03389ac0e5d9b752f1f28243523537219ee8da3b59b69c2102658128147e94
-ghcr.io/teamsillybees/glean-web@sha256:77c499f7964abba9d9e0a61aea9a4370b25ca839962585c17901cad7d5ff8d9e
+ghcr.io/teamsillybees/glean-backend@sha256:d98653405addb8707b714b5cfe4a547369f3225e11f33ea5bec0089c13e5e4a4
+ghcr.io/teamsillybees/glean-web@sha256:1fb54aeae985f3abcb017c0e980b35ab29d8defa497acf3ffb80766cd088331a
 ```
 
 完整基线导入结果：**38,989 篇去重论文、39,495 条主题成员关系、0 条隔离失败**。其中生物医学 AI 31,399 条、LLM/Agent 4,059 条、生物医学世界模型 4,037 条。报告位于 `backups/initialization-1060363/import-report.json`。
@@ -127,6 +127,20 @@ ghcr.io/teamsillybees/glean-web@sha256:77c499f7964abba9d9e0a61aea9a4370b25ca8399
 
 版本切换于 2026-11-07 00:29（Asia/Shanghai）完成，无 schema 或迁移变更。升级前一致性备份位于 `backups/before-update-ab256b4-20261106T162836Z/`，已校验 PostgreSQL dump 目录、Redis RDB、归档结构和 SHA256。38,989 篇论文、39,495 条主题关系及其他业务表数量均未改变；原有 Compose、配置和凭据保持不变。
 
+该版本的 [Glean CI](https://github.com/TeamSillyBees/glean/actions/runs/42250831448) 和[镜像发布验收](https://github.com/TeamSillyBees/glean/actions/runs/42251902058) 均通过。
+
+## 2026-11-07 导航按钮与 1Password 兼容修复
+
+用户反馈只剩论文页右上角“查看来源进度”仍触发更新密码提示。走查发现上次覆盖了共享 `Button` 和侧栏，却遗漏 `FreshnessStrip`、`PaperCard` 中三个直接使用的原生按钮。缺少 `type` 时其 DOM 类型为 `submit`，与扩展误判点击的现象吻合；该入口实际位于搜索表单外，点击流程只切换页面并读取来源状态，没有发出登录或改密请求。
+
+修复提交 `445909b` 为“查看来源进度”、论文标题和详情按钮补齐 `type="button"`，启用 `react/button-has-type` 静态检查，并修正测试夹具中的同类遗漏。新增回归在修复前捕捉到三个按钮隐式提交周围表单，修复后不再提交。登录和改密仍保留独立表单、正确的 `method` 与自动填充标记，参照 [1Password 官方表单建议](https://www.1password.dev/web/compatible-website-design)。
+
+走查中的管理浏览器回归还暴露了测试竞态：年份纠错断言可能收到切换目录时发出的旧响应。提交 `3189c04` 改为在保存后显式刷新，并读取该次新请求的响应，保留原有年份数量增减断言。
+
+250 项前端测试、类型检查、lint、构建和完整 CI 通过。真实浏览器覆盖桌面、手机、快捷入口鼠标点击与回车导航、论文详情、管理、协议保存及改密；线上另外核对三个按钮的发布代码、HTTPS、登录、查询和会话撤销。**1Password 扩展弹窗本身尚未直接验收**：现有 Chrome 页面控制连续超时；代码和站点行为的验证不能代替该扩展状态下的复测。
+
+版本切换于 2026-11-07 00:57（Asia/Shanghai）完成。没有后端或迁移变更，升级前一致性备份位于 `backups/before-update-3189c04-20261106T165715Z/`。业务表数量、配置和凭据均核对一致，数据库迁移版本仍为 `20261106000000`。
+
 ## 验收与备份
 
 已通过：
@@ -136,11 +150,12 @@ ghcr.io/teamsillybees/glean-web@sha256:77c499f7964abba9d9e0a61aea9a4370b25ca8399
 - 未登录 API 返回 401、CORS 白名单、管理员登录/身份、三个主题精确数量、论文列表和真实来源证据。
 - 当前检索方案与采集状态接口；期刊每页 20 条、默认影响因子降序、相邻页面无重复以及期刊类型筛选。
 - 手动来源连通性接口、线上前端按钮资源、生产六源有效响应，以及测试前后采集状态一致。
+- 本次三个导航入口的线上非提交按钮代码；快捷入口的鼠标与键盘行为在隔离真实浏览器中通过。
 - 检索功能升级时已验收长期运行列表、共享模型预算与协议计划预览接口，当时模型累计调用为 0。
 - 退出当前验收会话后原 access token 失效；密码与 token 未输出到验收日志。
 - Let’s Encrypt 模拟续期及 Nginx reload。
 
-功能提交的完整 CI 已通过 Go/PostgreSQL、前端、真实浏览器、容器以及备份恢复验证，镜像发布后另在全新 runner 按 digest 拉取验收。本次生产 HTTP 验收、逐源连通性结果与升级记录在 `backups/before-update-ab256b4-20261106T162836Z/acceptance.json`、`deployment.json`；先前升级验收保留在各版备份目录，首次上线验收仍保留在 `backups/initialization-1060363/acceptance.json`。
+功能提交的完整 CI 已通过 Go/PostgreSQL、前端、真实浏览器、容器以及备份恢复验证，镜像发布后另在全新 runner 按 digest 拉取验收。本次生产 HTTP 验收、按钮代码核对与升级记录在 `backups/before-update-3189c04-20261106T165715Z/acceptance.json`、`deployment.json`；逐源连通性与先前升级验收保留在各版备份目录，首次上线验收仍保留在 `backups/initialization-1060363/acceptance.json`。
 
 备份目录：
 
@@ -148,7 +163,8 @@ ghcr.io/teamsillybees/glean-web@sha256:77c499f7964abba9d9e0a61aea9a4370b25ca8399
 - `initialization-1060363/`：私有迁移/seed/import/doctor 日志、导入报告及 HTTP 验收结果。
 - `before-update-c9eee61-20261106T133309Z/`：检索功能升级前一致性备份、SHA256 清单及迁移/切换/验收记录。
 - `before-update-7fa0b91-20261106T150459Z/`：页面易用性修复上线前一致性备份、SHA256 清单、旧版镜像引用与切换/验收记录。
-- `before-update-ab256b4-20261106T162836Z/`：手动连通性测试上线前一致性备份、SHA256 清单、旧版镜像引用、逐源测试与切换/验收记录；`COMPLETE` 表示备份完成，`DEPLOYED` 表示已切换，`VERIFIED` 表示最终数据和服务核对通过。
+- `before-update-ab256b4-20261106T162836Z/`：手动连通性测试上线前一致性备份、SHA256 清单、旧版镜像引用、逐源测试与切换/验收记录。
+- `before-update-3189c04-20261106T165715Z/`：导航按钮修复前一致性备份、SHA256 清单、旧版镜像引用与按钮代码/HTTP 验收记录；`COMPLETE` 表示备份完成，`DEPLOYED` 表示已切换，`VERIFIED` 表示最终数据和服务核对通过。
 - `deployed-*/`：上线后短暂停写生成的 PostgreSQL dump、角色、Redis RDB、应用数据、私有配置/证书归档、版本和 SHA256 清单；`COMPLETE` 表示各备份步骤及结构校验完成。
 
 生产备份包含秘密，只留在服务器私有目录。已核验 dump 目录、tar 结构、Redis RDB 和文件校验和；尚未对这些完整生产备份做异机恢复，也未配置周期备份或异机副本。先前环境准备中的隔离迁移/恢复演练不等于这份备份的恢复验收。
