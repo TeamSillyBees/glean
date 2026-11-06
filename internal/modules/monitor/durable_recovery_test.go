@@ -138,8 +138,8 @@ func TestEuropePMCHTTPResumeAfter503(t *testing.T) {
 	memory := &memoryState{}
 	now := scenarioTime
 	provider := &mutableTemplates{items: []SearchTemplate{TopicSearchTemplate("custom", [][]string{{"original"}}, 1)}}
+	base := offline(t, DemoSources(scenarioTime, false), nil, nil)
 	build := func() *Service {
-		base := offline(t, DemoSources(scenarioTime, false), nil, nil)
 		cfg := RuntimeConfig()
 		s, err := NewOfflineService(base.ids, cfg, []Source{NewEuropePMCSource(executor)}, MockReviewer{}, publisher)
 		require.NoError(t, err)
@@ -180,4 +180,15 @@ func TestEuropePMCHTTPResumeAfter503(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, executor.requests, 3)
 	require.Equal(t, 1, provider.calls)
+	requests, err := build().auditRequests(ctx, done.Runs[0].ID, 0, 100)
+	require.NoError(t, err)
+	require.Len(t, requests, 3)
+	require.Equal(t, "success", requests[0].Status)
+	require.Equal(t, "failed", requests[1].Status)
+	require.Equal(t, 503, *requests[1].HTTPStatus)
+	require.Equal(t, "success", requests[2].Status)
+	require.Equal(t, 1, *requests[0].CumulativeUnique)
+	require.Nil(t, requests[1].CumulativeUnique, "failed requests cannot invent a source count")
+	require.Equal(t, 2, *requests[2].CumulativeUnique)
+	assertAuditZIP(t, build(), done.Runs[0].ID, 3, 2)
 }

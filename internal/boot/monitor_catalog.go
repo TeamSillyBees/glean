@@ -9,6 +9,7 @@ import (
 	"github.com/teamsillybees/glean/internal/platform/entx"
 	"github.com/teamsillybees/glean/internal/platform/httpclient"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 type catalogObservationWriter interface {
@@ -18,6 +19,17 @@ type catalogObservationWriter interface {
 type catalogMonitorPublisher struct {
 	catalog  catalogObservationWriter
 	operator idgen.ID
+}
+
+// RetrievalExportPage 转发当前登录用户可读取的目录账本，不借用运行操作员的个人状态。
+func (p *catalogMonitorPublisher) RetrievalExportPage(ctx context.Context, runID, after idgen.ID, limit int) ([]retrieval.CatalogExportRecord, error) {
+	reader, ok := p.catalog.(interface {
+		RetrievalExportPage(context.Context, idgen.ID, idgen.ID, int) ([]retrieval.CatalogExportRecord, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("catalog audit export unavailable")
+	}
+	return reader.RetrievalExportPage(ctx, runID, after, limit)
 }
 
 // NewCatalogMonitorPublisher 将真实来源持久化到独立目录；审核 mock 不会污染论文来源真伪标记。
