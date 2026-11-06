@@ -55,7 +55,7 @@ test('真实改密：校验、取消、旧会话撤销与新密码登录', async
     await expect(page.getByRole('status')).toHaveText(/密码已修改/)
     await expect(page.getByRole('button', { name: '进入工作台' })).toBeVisible()
     // A fresh authenticated query in the other session must be rejected, not served from cache.
-    await other.getByRole('textbox', { name: '搜索论文或来源' }).fill('session-revocation-check')
+    await other.getByRole('searchbox', { name: '搜索论文或来源' }).fill('session-revocation-check')
     await other.getByRole('button', { name: '搜索', exact: true }).click()
     await expect(other.getByRole('button', { name: '进入工作台' })).toBeVisible()
     await expect(other.getByRole('status')).toHaveText(/会话已结束/)

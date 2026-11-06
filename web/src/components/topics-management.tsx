@@ -75,14 +75,17 @@ export function TopicsView({
     </section>
   )
 }
-function TopicEditor({
+// TopicEditor 复用主题写入与版本校验，可聚焦编辑检索配置。
+export function TopicEditor({
   topic,
   onClose,
   notify,
+  searchOnly = false,
 }: {
   topic?: Topic
   onClose: () => void
   notify: (message: string) => void
+  searchOnly?: boolean
 }) {
   const client = useQueryClient()
   const labelId = useId()
@@ -148,6 +151,7 @@ function TopicEditor({
       if (client.getQueryCache().find({ queryKey: ['topics'], exact: true }) !== variables.original)
         return
       if (mounted.current) {
+        void client.invalidateQueries({ queryKey: ['templates'] })
         notify('研究主题已保存。后续扫描使用新配置。')
         onClose()
       }
@@ -181,13 +185,19 @@ function TopicEditor({
     })
   }
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <DialogTitle>{topic ? '编辑研究主题' : '新增研究主题'}</DialogTitle>
+    <form onSubmit={submit} className="space-y-4" autoComplete="off" data-1p-ignore>
+      <DialogTitle>
+        {searchOnly ? '编辑检索方案' : topic ? '编辑研究主题' : '新增研究主题'}
+      </DialogTitle>
       <DialogDescription>
-        每行是一组必须满足的检索词，同组使用 |
-        分隔同义词。内置主题留空保留默认检索模板；新主题启用检索时需填写词组或检索路线。
+        {searchOnly
+          ? '保存后用于下次采集。'
+          : '每行是一组必须满足的检索词，同组使用 | 分隔同义词。内置主题留空保留默认检索模板；新主题启用检索时需填写词组或检索路线。'}
       </DialogDescription>
       <fieldset disabled={pending || previewing} className="space-y-4">
+        {searchOnly && !topic?.searchProtocol && !parsedRoutes.length && (
+          <KeywordGroups value={terms} onChange={setTerms} />
+        )}
         <details className="rounded-lg border p-3" open={!!topic?.searchProtocol || undefined}>
           <summary className="cursor-pointer text-sm font-medium">导入完整检索协议</summary>
           <p className="my-3 text-xs leading-6 text-muted-foreground">
@@ -251,53 +261,61 @@ function TopicEditor({
             </div>
           )}
         </details>
-        <label className="block text-sm">
-          主题名称
-          <input
-            required
-            maxLength={100}
-            className={managementField}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <label className="block text-sm">
-          <span id={`${labelId}-description`}>主题说明</span>
-          <textarea
-            aria-labelledby={`${labelId}-description`}
-            className={managementField}
-            maxLength={2000}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </label>
-        <label className="block text-sm">
-          <span id={`${labelId}-rule`}>纳入规则</span>
-          <textarea
-            aria-labelledby={`${labelId}-rule`}
-            className={managementField}
-            maxLength={4000}
-            value={rule}
-            onChange={(e) => setRule(e.target.value)}
-          />
-        </label>
-        <label className="block text-sm">
-          <span id={`${labelId}-terms`}>检索词组</span>
-          <textarea
-            aria-labelledby={`${labelId}-terms`}
-            required={
-              enabled &&
-              parsedRoutes.length === 0 &&
-              !['biomed-ai', 'llm-agent', 'biomed-worldmodel'].includes(topic?.slug || '')
-            }
-            rows={4}
-            className={managementField}
-            value={terms}
-            disabled={!!(topic?.searchProtocol || protocolPreview)}
-            onChange={(e) => setTerms(e.target.value)}
-            placeholder={'cancer | tumor\nartificial intelligence | machine learning'}
-          />
-        </label>
+        {!searchOnly && (
+          <label className="block text-sm">
+            主题名称
+            <input
+              required
+              maxLength={100}
+              className={managementField}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+        )}
+        {!searchOnly && (
+          <label className="block text-sm">
+            <span id={`${labelId}-description`}>主题说明</span>
+            <textarea
+              aria-labelledby={`${labelId}-description`}
+              className={managementField}
+              maxLength={2000}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </label>
+        )}
+        {!searchOnly && (
+          <label className="block text-sm">
+            <span id={`${labelId}-rule`}>纳入规则</span>
+            <textarea
+              aria-labelledby={`${labelId}-rule`}
+              className={managementField}
+              maxLength={4000}
+              value={rule}
+              onChange={(e) => setRule(e.target.value)}
+            />
+          </label>
+        )}
+        {!searchOnly && (
+          <label className="block text-sm">
+            <span id={`${labelId}-terms`}>检索词组</span>
+            <textarea
+              aria-labelledby={`${labelId}-terms`}
+              required={
+                enabled &&
+                parsedRoutes.length === 0 &&
+                !['biomed-ai', 'llm-agent', 'biomed-worldmodel'].includes(topic?.slug || '')
+              }
+              rows={4}
+              className={managementField}
+              value={terms}
+              disabled={!!(topic?.searchProtocol || protocolPreview)}
+              onChange={(e) => setTerms(e.target.value)}
+              placeholder={'cancer | tumor\nartificial intelligence | machine learning'}
+            />
+          </label>
+        )}
         <details
           className="rounded-lg border p-3"
           open={!!topic?.searchRoutes?.length || undefined}
@@ -381,10 +399,64 @@ function TopicEditor({
             取消
           </Button>
           <Button type="submit" disabled={!!routesError || protocolBlocked}>
-            {pending ? '保存中…' : '保存主题'}
+            {pending ? '保存中…' : searchOnly ? '保存方案' : '保存主题'}
           </Button>
         </div>
       </fieldset>
     </form>
+  )
+}
+
+function KeywordGroups({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const groups = value ? value.split('\n') : ['']
+  function update(next: string[]) {
+    onChange(next.join('\n'))
+  }
+  return (
+    <section className="space-y-3" aria-label="检索关键词">
+      <h3 className="text-sm font-medium">关键词</h3>
+      <p className="text-xs text-muted-foreground">每组至少匹配一个词，组与组同时满足。</p>
+      {groups.map((group, index) => (
+        <div key={index} className="rounded-lg border p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <label htmlFor={`keyword-group-${index}`} className="text-sm">
+              第 {index + 1} 组
+            </label>
+            {groups.length > 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`删除第 ${index + 1} 组`}
+                onClick={() => update(groups.filter((_, i) => i !== index))}
+              >
+                删除
+              </Button>
+            )}
+          </div>
+          <textarea
+            id={`keyword-group-${index}`}
+            className={managementField}
+            rows={3}
+            value={group.split(' | ').join('\n')}
+            placeholder="每行一个关键词或同义词"
+            onChange={(event) =>
+              update(
+                groups.map((item, i) =>
+                  i === index ? event.target.value.split('\n').join(' | ') : item,
+                ),
+              )
+            }
+          />
+        </div>
+      ))}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={groups.length >= 10}
+        onClick={() => update([...groups, ''])}
+      >
+        添加关键词组
+      </Button>
+    </section>
   )
 }

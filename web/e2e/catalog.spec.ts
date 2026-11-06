@@ -517,6 +517,14 @@ test('real historical catalog: login, filters, detail, durable personal state an
   expect((await data<{ items: unknown[] }>(await runsResponse)).items).toEqual([])
   await expect(page.getByText('还没有扫描记录', { exact: true })).toBeVisible()
 
+  const plansResponse = apiResponse(page, '/api/v1/monitor/templates')
+  await navigate(page, '检索方案')
+  expect((await plansResponse).status()).toBe(200)
+  await expect(page.getByText('检索来源', { exact: true })).toBeVisible()
+  await expect(page.getByText(/仅编译预览，尚未执行/)).toBeHidden()
+  await noHorizontalOverflow(page)
+  await screenshot(page, info, 'search-plans')
+
   const venuesResponse = catalogResponse(page, 'venues')
   await navigate(page, '期刊与会议')
   const venues = await data<{ items: Venue[]; total: number; page: number; pageSize: number }>(

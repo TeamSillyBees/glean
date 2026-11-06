@@ -66,7 +66,7 @@ const RunsView = deferredView(async () => ({
   default: (await import('./components/monitor')).RunsView,
 }))
 const TemplatesView = deferredView(async () => ({
-  default: (await import('./components/monitor')).TemplatesView,
+  default: (await import('./components/search-plans')).TemplatesView,
 }))
 const VenuesView = deferredView(async () => ({
   default: (await import('./components/venues')).VenuesView,
@@ -99,8 +99,8 @@ const viewMeta: Record<View, { title: string; description: string }> = {
     description: '采集、审核与目录投影，每一步都留下记录。',
   },
   templates: {
-    title: '检索模板',
-    description: '统一检索意图，保留各来源的语法与证据。',
+    title: '检索方案',
+    description: '设置关键词，决定后续采集查找哪些论文。',
   },
   venues: {
     title: '期刊与会议',
@@ -629,7 +629,7 @@ function WorkspaceReady({
           active={view === 'templates'}
           onClick={() => navigate('templates')}
         >
-          检索模板
+          检索方案
         </NavButton>
         <NavButton icon={BookMarked} active={view === 'venues'} onClick={() => navigate('venues')}>
           期刊与会议
@@ -1181,7 +1181,14 @@ function WorkspaceReady({
           ) : view === 'runs' ? (
             <RunsView canManage={canManage} />
           ) : view === 'templates' ? (
-            <TemplatesView topic={filters.topic} />
+            <TemplatesView
+              key={filters.topic}
+              topic={filters.topic}
+              topicInfo={topics.data?.items.find((item) => item.slug === filters.topic)}
+              canManage={canManage}
+              notify={setMessage}
+              onOpenRuns={() => navigate('runs')}
+            />
           ) : (
             <VenuesView topic={filters.topic} q={venueQuery} />
           )}

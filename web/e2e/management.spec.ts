@@ -54,7 +54,7 @@ async function navigate(page: Page, name: string | RegExp) {
   await expect(drawer).toBeHidden()
 }
 async function search(page: Page, q: string) {
-  await page.getByRole('textbox', { name: '搜索论文或来源' }).fill(q)
+  await page.getByRole('searchbox', { name: '搜索论文或来源' }).fill(q)
   const result = response(page, '/api/v1/catalog/papers', 'GET', { q })
   await page.getByRole('button', { name: '搜索', exact: true }).click()
   return data<PaperPage>(await result)
@@ -131,6 +131,25 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
     true,
   )
   await page.screenshot({ path: info.outputPath('access-recovered-real-backend.png') })
+  const currentPlanResponse = response(page, '/api/v1/monitor/templates')
+  await navigate(page, '检索方案')
+  const currentPlan = await data<{ items: { topic: string; termGroups: string[][] }[] }>(
+    await currentPlanResponse,
+  )
+  const groups = currentPlan.items.find((item) => item.topic === 'biomed-ai')!.termGroups
+  await page.getByRole('button', { name: '编辑检索方案', exact: true }).click()
+  const planDialog = page.getByRole('dialog', { name: '编辑检索方案', exact: true })
+  await expect(planDialog.getByLabel('第 1 组', { exact: true })).toHaveValue(groups[0].join('\n'))
+  await page.screenshot({ path: info.outputPath('search-plan-editor.png') })
+  const planSaved = response(page, '/api/v1/catalog/topics/biomed-ai', 'PUT')
+  const recompiledPlan = response(page, '/api/v1/monitor/templates')
+  await planDialog.getByRole('button', { name: '保存方案', exact: true }).click()
+  const savedPlan = await data<Topic>(await planSaved)
+  expect(savedPlan.termGroups?.map((group) => [...group].sort())).toEqual(
+    groups.map((group) => [...group].sort()),
+  )
+  expect((await recompiledPlan).status()).toBe(200)
+  await expect(planDialog).toBeHidden()
   const selected = initial.items[0]
   expect(selected).toBeDefined()
   const userList = response(page, '/api/v1/users')
@@ -244,7 +263,7 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   await expect(topicDialog).toBeHidden()
   await navigate(page, new RegExp(`^${topicName}`))
   const compiled = response(page, '/api/v1/monitor/templates')
-  await navigate(page, '检索模板')
+  await navigate(page, '检索方案')
   const preview = await data<{
     previews?: { topic: string; source: string; query?: string; queries?: string[]; mode: string }[]
   }>(await compiled)
@@ -256,6 +275,12 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
     'glioblastoma',
   ])
   expect(topicPreviews.find((item) => item.source === 'arxiv')?.mode).toBe('full_window')
+  for (const routeNumber of [1, 2, 3]) {
+    await expect(
+      page.getByRole('heading', { name: `检索路线 ${routeNumber}`, exact: true }),
+    ).toBeVisible()
+  }
+  await page.getByText('高级：查看各来源查询语句', { exact: true }).click()
   await expect(page.getByText(/仅编译预览，尚未执行/)).toBeVisible()
   await expect(page.getByText('独立查询 2', { exact: true })).toBeVisible()
   await expect(page.getByText(/不在来源端按关键词过滤/)).toBeVisible()

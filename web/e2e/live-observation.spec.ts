@@ -85,7 +85,7 @@ test('one official EuropePMC observation reaches real PostgreSQL, API and browse
     .getByRole('button', { name: '全部记录', exact: true })
     .click()
   await data<PaperPage>(await all)
-  await page.getByRole('textbox', { name: '搜索论文或来源', exact: true }).fill(title)
+  await page.getByRole('searchbox', { name: '搜索论文或来源', exact: true }).fill(title)
   const searched = response(page, '/api/v1/catalog/papers', { q: title, collectionScope: 'all' })
   await page.getByRole('button', { name: '搜索', exact: true }).click()
   const found = await data<PaperPage>(await searched)

@@ -1,9 +1,8 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Activity, FileCode2, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Activity, RefreshCw } from 'lucide-react'
 import { request } from '../lib/api'
-import { date, number, topicLabels } from '../lib/utils'
-import type { TopicSlug } from '../lib/types'
+import { date, number } from '../lib/utils'
 import { Badge, Empty, ErrorState, Loading } from './common'
 import { Button } from './ui/button'
 import type { Run } from './run-types'
@@ -12,33 +11,6 @@ import { RunRecovery } from './run-recovery'
 import { RunAudit } from './run-audit'
 export { SourcesView } from './source-health'
 export { FreshnessStrip } from './freshness-strip'
-interface QueryPreview {
-  queryId: string
-  queryVersion: string
-  topic: string
-  source: string
-  mode: string
-  query: string
-  queries?: string[]
-  warnings?: string[]
-  enabled: boolean
-  backfillFrom?: string
-}
-interface SearchTemplate {
-  id: string
-  version: string
-  topic: string
-  query: string
-  terms: string[]
-  core: boolean
-  policy: {
-    jifMinimum: number
-    jifStrict: boolean
-    ccf: string[]
-    fullPaperRequired: boolean
-    mainTrackRequired: boolean
-  }
-}
 const validDate = (value?: string) =>
   value && !value.startsWith('0001-') ? date(value) : '尚未建立'
 const statusLabels: Record<string, string> = {
@@ -245,137 +217,6 @@ export function RunsView({ canManage = false }: { canManage?: boolean }) {
             ? '已显示全部归档'
             : '读取更早的检索归档'}
       </Button>
-    </div>
-  )
-}
-export function TemplatesView({ topic }: { topic: TopicSlug }) {
-  const query = useQuery({
-    queryKey: ['templates'],
-    queryFn: ({ signal }) =>
-      request<{ items: SearchTemplate[]; version: string; previews?: QueryPreview[] }>(
-        '/api/v1/monitor/templates',
-        {
-          signal,
-        },
-      ),
-  })
-  if (query.isLoading) return <Loading />
-  if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />
-  const items = (query.data?.items || []).filter((item) => item.topic === topic)
-  const previews = (query.data?.previews || []).filter((item) => item.topic === topic)
-  return (
-    <div className="space-y-5">
-      <div className="border-b pb-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <ShieldCheck className="size-4 text-primary" />
-          <h2 className="text-sm font-semibold">检索与纳入，分开判断</h2>
-          <Badge className="ml-auto">{query.data?.version}</Badge>
-        </div>
-        <p className="mt-3 text-sm leading-7 text-muted-foreground">
-          统一模板表达检索意图，由后端翻译为各来源语法。检索命中不意味着满足主题、期刊或全文门槛。
-        </p>
-      </div>
-      <section aria-label="来源查询编译预览" className="space-y-3">
-        <h2 className="text-sm font-semibold">来源查询编译预览</h2>
-        <p className="text-sm text-muted-foreground">
-          仅编译预览，尚未执行。以下来自已保存的主题与当前来源配置；打开此页不会请求外部文献库或启动采集。
-        </p>
-        {!previews.length ? (
-          <p className="text-xs text-muted-foreground">
-            暂无该主题的逐来源编译预览；旧接口可能尚未提供，不能据此认定路线已执行。
-          </p>
-        ) : (
-          previews.map((preview, index) => (
-            <article
-              key={`${preview.source}-${preview.queryId}-${index}`}
-              className="min-w-0 space-y-2 rounded-xl border p-4"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="break-all text-sm font-medium">
-                  {preview.queryId} · {preview.source}
-                </h3>
-                <Badge tone={preview.enabled ? 'neutral' : 'amber'}>
-                  {preview.enabled ? '来源已配置启用' : '来源未启用'}
-                </Badge>
-              </div>
-              <p className="break-all text-xs text-muted-foreground">
-                编译模式 {preview.mode} · 查询版本 {preview.queryVersion}
-              </p>
-              {!preview.enabled && (
-                <p className="text-xs text-amber-800">
-                  当前配置未启用此来源，运行时不会执行这条来源查询。
-                </p>
-              )}
-              {preview.backfillFrom && <p className="text-xs">历史起点：{preview.backfillFrom}</p>}
-              {preview.mode === 'seed_union' && (
-                <p className="text-xs text-muted-foreground">
-                  独立种子查询分别请求后取并集，不等价于服务端布尔词组匹配。
-                </p>
-              )}
-              {preview.mode === 'full_window' && (
-                <p className="text-xs text-amber-800">
-                  采集整个时间窗口，不在来源端按关键词过滤；保存后仍需下游评估主题相关性。
-                </p>
-              )}
-              {preview.queries?.length ? (
-                <ol className="space-y-2">
-                  {preview.queries.map((seed, seedIndex) => (
-                    <li key={seedIndex}>
-                      <p className="mb-1 text-xs text-muted-foreground">独立查询 {seedIndex + 1}</p>
-                      <pre className="overflow-auto whitespace-pre-wrap break-words rounded bg-secondary p-3 text-xs">
-                        {seed}
-                      </pre>
-                    </li>
-                  ))}
-                </ol>
-              ) : preview.query ? (
-                <pre className="overflow-auto whitespace-pre-wrap break-words rounded bg-secondary p-3 text-xs">
-                  {preview.query}
-                </pre>
-              ) : null}
-              {preview.warnings?.map((warning, warningIndex) => (
-                <p key={warningIndex} className="break-words text-xs text-amber-800">
-                  来源限制：{warning}
-                </p>
-              ))}
-            </article>
-          ))
-        )}
-      </section>
-      {!items.length ? (
-        <Empty title="暂无该主题的检索模板" description="已配置的版本化模板会在这里展示。" />
-      ) : (
-        items.map((template) => (
-          <section key={template.id} className="overflow-hidden rounded-xl border bg-card">
-            <div className="flex flex-wrap items-center gap-3 border-b px-4 py-4 sm:px-5">
-              <FileCode2 className="size-4 text-primary" />
-              <h3 className="text-sm font-semibold">
-                {topicLabels[template.topic] || template.topic}
-              </h3>
-              {template.core && <Badge tone="violet">核心模板</Badge>}
-              <span className="ml-auto font-mono text-xs text-muted-foreground">{template.id}</span>
-            </div>
-            <div className="p-4 sm:p-5">
-              <div className="flex flex-wrap gap-2">
-                {(template.terms || []).map((term) => (
-                  <Badge key={term}>{term}</Badge>
-                ))}
-              </div>
-              <pre className="mt-5 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-secondary p-4 font-mono text-sm leading-7 text-foreground">
-                {template.query}
-              </pre>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Badge tone="green">
-                  期刊影响因子 {template.policy.jifStrict ? '>' : '≥'} {template.policy.jifMinimum}
-                </Badge>
-                <Badge>CCF 会议评级 {(template.policy.ccf || []).join(' / ')}</Badge>
-                {template.policy.fullPaperRequired && <Badge>完整论文</Badge>}
-                {template.policy.mainTrackRequired && <Badge>主会 / 主轨</Badge>}
-              </div>
-            </div>
-          </section>
-        ))
-      )}
     </div>
   )
 }
