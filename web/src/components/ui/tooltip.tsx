@@ -8,7 +8,7 @@ export function Tooltip({ children, label }: { children: ReactNode; label: strin
       <Primitive.Portal>
         <Primitive.Content
           sideOffset={6}
-          className="z-[70] rounded-md bg-foreground px-3 py-2 text-xs text-white shadow-lg"
+          className="z-[70] w-max max-w-[calc(100vw-2rem)] rounded-md bg-foreground px-3 py-2 text-xs leading-6 text-white shadow-lg sm:max-w-xs"
         >
           {label}
           <Primitive.Arrow className="fill-foreground" />

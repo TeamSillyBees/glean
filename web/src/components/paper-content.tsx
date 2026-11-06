@@ -172,7 +172,7 @@ export function PaperOverview({
               : '当前未获取摘要。'}
             {notes.length
               ? '可先阅读下方保留的历史笔记，或打开论文原文。'
-              : '可打开论文原文继续阅读；摘要不会由模拟内容补齐。'}
+              : '可打开论文原文继续阅读。'}
           </p>
         )}
         {!paper.abstractZh && (canonicalAbstract || recoveredAbstract) && (

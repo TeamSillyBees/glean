@@ -10,7 +10,7 @@ export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: ()
     (item) => item.blocked || item.consecutiveFailures > 0 || (item.quarantined || 0) > 0,
   ).length
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b py-3 text-xs text-muted-foreground">
+    <div className="freshness-strip">
       <span className="flex items-center gap-1.5">
         <Radio className="size-3.5 text-primary" />
         {query.isLoading
@@ -25,7 +25,7 @@ export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: ()
       <button
         type="button"
         onClick={onOpen}
-        className="ml-auto inline-flex min-h-8 items-center gap-1 rounded px-1 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="freshness-link focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         查看来源进度
         <ArrowUpRight className="size-3" />

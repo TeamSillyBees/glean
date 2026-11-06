@@ -77,7 +77,7 @@ describe('deferred paper dialog lifecycle', () => {
     expect(load).not.toHaveBeenCalled()
     const trigger = open()
     const dialog = screen.getByRole('dialog', { name: '论文详情' })
-    expect(dialog).toHaveAccessibleDescription('原始证据与个人阅读状态分开保存。')
+    expect(dialog).toHaveAccessibleDescription('阅读摘要、查看来源，记录你的阅读进度。')
     expect(screen.getByRole('status')).toHaveTextContent('正在打开论文详情')
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(trigger).toHaveFocus())

@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { ArrowUpRight, Check, EyeOff } from 'lucide-react'
+import { ArrowUpRight, Check, Eye, EyeOff } from 'lucide-react'
 import type { Paper, PaperPage, ReadStatus } from '../lib/types'
 import { api, ApiError } from '../lib/api'
 import { readLabels, safeLink } from '../lib/utils'
@@ -141,16 +141,16 @@ export default function PaperDetailBody({
       ) : (
         paper && (
           <div className="px-5 py-6 sm:px-8">
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Badge>{paper.venue || '来源待核验'}</Badge>
-              {paper.year > 0 && <Badge>{paper.year}</Badge>}
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm leading-6 text-muted-foreground">
+              <span>{paper.venue || '期刊 / 会议待补充'}</span>
+              {paper.year > 0 && <span className="tabular-nums">{paper.year}</span>}
               {paper.review?.isMock && <Badge tone="violet">模型总结为模拟输出</Badge>}
               {paper.hidden && <Badge tone="amber">已隐藏</Badge>}
             </div>
             <h2 className="break-words text-xl font-semibold leading-[1.6] text-foreground sm:text-2xl [overflow-wrap:anywhere]">
               {paper.titleZh || paper.title}
             </h2>
-            {paper.titleZh && (
+            {paper.titleZh && paper.title !== paper.titleZh && (
               <p className="mt-3 break-words text-sm leading-7 text-muted-foreground [overflow-wrap:anywhere]">
                 {paper.title}
               </p>
@@ -181,8 +181,9 @@ export default function PaperDetailBody({
             <div
               role="group"
               aria-label="个人阅读与隐藏"
-              className="mt-6 flex flex-wrap items-center gap-2 border-t pt-5"
+              className="mt-6 flex flex-wrap items-center gap-2 border-y py-3"
             >
+              <span className="mr-1 text-xs text-muted-foreground">个人阅读</span>
               {(['unread', 'reading', 'read'] as ReadStatus[]).map((status) => (
                 <Button
                   key={status}
@@ -206,13 +207,13 @@ export default function PaperDetailBody({
                   disabled={pending}
                   onClick={() => changeState(paper, { hidden: !paper.hidden })}
                 >
-                  <EyeOff />
+                  {paper.hidden ? <Eye /> : <EyeOff />}
                   {paper.hidden ? '恢复显示' : '隐藏'}
                 </Button>
               </Tooltip>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              隐藏状态适用于所有主题；可在「已隐藏」中恢复。个人阅读状态不会改变原始审读记录。
+              隐藏会应用于所有主题，可在「已隐藏」中恢复。个人阅读状态不改变论文的审核结果。
             </p>
             {mutation.isError && mutation.variables?.paper.id === id && (
               <p role="alert" className="mt-3 text-sm text-red-700">

@@ -437,7 +437,7 @@ describe('Glean query workspace', () => {
     expect(screen.getByRole('combobox', { name: '发表年份' })).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: '世界模型的作用' })).not.toBeInTheDocument()
   })
-  it('logs in against the backend, shows API counts and ordered original taxonomy filters', async () => {
+  it('groups frequent filters and keeps the remaining taxonomy available on demand', async () => {
     const user = mount()
     await signIn(user)
     expect(await screen.findByRole('heading', { name: paper.titleZh })).toBeInTheDocument()
@@ -445,17 +445,26 @@ describe('Glean query workspace', () => {
     const names = screen
       .getAllByRole('combobox')
       .map((element) => element.getAttribute('aria-label'))
-    expect(names.slice(0, 9)).toEqual([
+    expect(names.slice(0, 7)).toEqual([
+      '个人阅读状态',
+      '采集来源',
+      '发表年份',
+      '具体期刊/会议',
       '论文类型',
       '生物医学方向',
       'AI方法',
-      '期刊/会议范围',
-      '技术任务',
-      'AI的作用',
-      '发表年份',
-      '收录状态',
-      '具体期刊/会议',
     ])
+    const more = screen.getByText('更多筛选').closest('details')!
+    expect(more).not.toHaveAttribute('open')
+    expect(screen.getByRole('combobox', { name: '技术任务' })).not.toBeVisible()
+    await user.click(within(more).getByText('更多筛选'))
+    expect(more).toHaveAttribute('open')
+    // 折叠只改变展示，原目录的精确字段仍可选择。
+    expect(
+      within(more)
+        .getAllByRole('combobox')
+        .map((item) => item.getAttribute('aria-label')),
+    ).toEqual(['期刊/会议范围', '技术任务', 'AI的作用', '收录状态'])
     expect(paths.some((path) => path.startsWith('/api/v1/catalog/papers?'))).toBe(true)
     const requests = vi.mocked(fetch).mock.calls
     expect(requests.every(([input]) => String(input).startsWith('/api/'))).toBe(true)
@@ -473,12 +482,21 @@ describe('Glean query workspace', () => {
     await screen.findByRole('heading', { name: paper.titleZh })
     expect(screen.getByTestId('filters-loading')).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('combobox', { name: '论文类型' })).toBeDisabled()
-    expect(screen.queryByText('当前目录暂无此标签')).not.toBeInTheDocument()
+    expect(screen.queryByText('暂无此标签')).not.toBeInTheDocument()
     await act(async () => {
       finish(ok(facets))
     })
     await screen.findByTestId('filters-ready')
     expect(screen.getByRole('combobox', { name: '论文类型' })).toBeEnabled()
+  })
+  it('shows saved additional filters when the workspace opens', async () => {
+    saved = { task: '分类' }
+    const user = mount()
+    await signIn(user)
+    const task = await screen.findByRole('combobox', { name: '技术任务' })
+    expect(task.closest('details')).toHaveAttribute('open')
+    expect(task).toHaveTextContent('分类')
+    expect(screen.getByRole('button', { name: '移除 技术任务：分类' })).toBeInTheDocument()
   })
   it('offers a retry rather than claiming there are no facet labels on failure', async () => {
     failFacets = true
@@ -505,9 +523,13 @@ describe('Glean query workspace', () => {
       ).toBe(true),
     )
     await user.click(within(scopes).getByRole('button', { name: '待审核' }))
+    await user.click(screen.getByRole('button', { name: '当前目录范围说明' }))
     expect(
-      screen.getByText('包括新发现及手动转回待审核的记录，尚未完成科学审读。'),
+      within(screen.getByRole('dialog', { name: '目录范围说明' })).getByText(
+        '新发现或手动转回待审核的记录，尚未完成审读。',
+      ),
     ).toBeInTheDocument()
+    await user.keyboard('{Escape}')
     await waitFor(() =>
       expect(
         paths.some((path) => path.includes('/facets?') && path.includes('collectionScope=pending')),
@@ -646,11 +668,31 @@ describe('Glean query workspace', () => {
     await user.click(within(dialog).getByRole('button', { name: /大模型知识工程/ }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(
-      await screen.findByRole('heading', {
-        name: 'LLM / Agent 知识工程：知识抽取、构建、融合与验证',
-      }),
+      await screen.findByText('LLM / Agent 知识工程：知识抽取、构建、融合与验证'),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '论文工作台', level: 1 })).toBeInTheDocument()
+  })
+  it('applies reading and source filters from the drawer and retains them after closing it', async () => {
+    const user = mount()
+    await signIn(user)
+    await screen.findByTestId('filters-ready')
+    await user.click(screen.getByRole('button', { name: '筛选' }))
+    const drawer = screen.getByRole('dialog', { name: '筛选论文' })
+    await user.click(within(drawer).getByRole('combobox', { name: '个人阅读状态' }))
+    await user.click(await screen.findByRole('option', { name: '在读' }))
+    await user.click(within(drawer).getByRole('combobox', { name: '采集来源' }))
+    await user.click(await screen.findByRole('option', { name: /mock-fixture/ }))
+    await user.click(within(drawer).getByRole('button', { name: '查看结果' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // 控件移入抽屉后仍向 API 发送同样的字段，而不是只改变按钮文字。
+    await waitFor(() => {
+      const latest = paths.filter((path) => path.startsWith('/api/v1/catalog/papers?')).at(-1)!
+      const query = new URL(latest, 'http://localhost').searchParams
+      expect(query.get('readStatus')).toBe('reading')
+      expect(query.get('source')).toBe('mock-fixture')
+    })
+    expect(screen.getByRole('button', { name: '移除 个人阅读：在读' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '移除 采集来源：mock-fixture' })).toBeInTheDocument()
   })
   it('signs out immediately and a delayed logout cannot close a new signed-in workspace', async () => {
     let finish!: (response: Response) => void

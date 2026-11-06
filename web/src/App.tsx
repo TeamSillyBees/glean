@@ -6,6 +6,7 @@ import {
   BookMarked,
   BookOpen,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
@@ -39,12 +40,19 @@ import {
 } from './lib/types'
 import { filterFacets, getFilterSpecs, restoreFilters } from './lib/filters'
 import { cn, number, readLabels, reviewLabels, topicLabels } from './lib/utils'
-import { Badge, Empty, ErrorState, Loading } from './components/common'
+import { Empty, ErrorState, Loading } from './components/common'
 import { Button } from './components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from './components/ui/dialog'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from './components/ui/dialog'
 import { Select } from './components/ui/select'
 import { FilterCombobox } from './components/ui/filter-combobox'
 import { Tooltip, TooltipProvider } from './components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover'
 import { PasswordChangeDialog } from './components/password-change'
 import { PaperCard, PaperDetail } from './components/papers'
 import { FreshnessStrip } from './components/freshness-strip'
@@ -84,11 +92,11 @@ const viewMeta: Record<View, { title: string; description: string }> = {
   topics: { title: '研究主题', description: '维护主题说明、纳入规则与后续检索。' },
   quarantine: {
     title: '隔离记录',
-    description: '追溯隔离原因，核验安全证据。',
+    description: '查看被隔离的来源记录及原因。',
   },
   papers: {
     title: '论文工作台',
-    description: '从海量研究中，找到值得认真阅读的下一篇。',
+    description: '检索主题文献，记录你的阅读进度。',
   },
   sources: {
     title: '采集状态',
@@ -96,7 +104,7 @@ const viewMeta: Record<View, { title: string; description: string }> = {
   },
   runs: {
     title: '扫描记录',
-    description: '采集、审核与目录投影，每一步都留下记录。',
+    description: '查看每次采集的进度、处理结果与失败原因。',
   },
   templates: {
     title: '检索方案',
@@ -104,9 +112,31 @@ const viewMeta: Record<View, { title: string; description: string }> = {
   },
   venues: {
     title: '期刊与会议',
-    description: '可追溯的指标，可核验的纳入依据。',
+    description: '查找期刊与会议，查看指标年份和来源。',
   },
 }
+const collectionScopes = [
+  {
+    value: 'curated',
+    label: '精选目录',
+    description: '已纳入当前主题的论文，包括原目录和人工纳入的记录。新发现须经审核后纳入。',
+  },
+  {
+    value: 'pending',
+    label: '待审核',
+    description: '新发现或手动转回待审核的记录，尚未完成审读。',
+  },
+  {
+    value: 'all',
+    label: '全部记录',
+    description: '当前主题的全部记录，包括精选、待核、背景和范围外资料。',
+  },
+  {
+    value: 'excluded',
+    label: '已移出主题',
+    description: '已从当前主题移出的记录。论文仍然保留，管理员可重新纳入。',
+  },
+] as const
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
@@ -152,7 +182,7 @@ function Login({
             <br />
             更早被看见。
           </h1>
-          <p>连接历史积累与新的发现。以清晰的主题、可追溯的来源和有序的阅读，保持研究的连续性。</p>
+          <p>按研究主题整理文献，查看论文来源，保存阅读进度。从已有积累中，继续发现。</p>
           <div className="login-topics">
             {Object.entries(topicLabels).map(([slug, name]) => {
               const Icon = Object.hasOwn(topicIcons, slug) ? topicIcons[slug] : Layers3
@@ -175,7 +205,7 @@ function Login({
           <div className="mb-8">
             <h2 className="text-2xl font-semibold tracking-tight">回到你的研究工作台</h2>
             <p className="mt-3 text-sm leading-7 text-muted-foreground">
-              使用后端账户登录，继续检索与阅读。
+              使用你的账号登录，继续检索与阅读。
             </p>
           </div>
           {passwordChanged && (
@@ -188,7 +218,7 @@ function Login({
               role="status"
               className="mb-5 rounded-lg bg-amber-50 p-3 text-xs leading-6 text-amber-800"
             >
-              会话已结束，请重新登录。你的阅读状态已保存在后端。
+              会话已结束，请重新登录。已保存的阅读记录不受影响。
             </p>
           )}
           <form
@@ -237,7 +267,7 @@ function Login({
               {mutation.isPending ? (
                 <>
                   <LoaderCircle className="animate-spin" />
-                  正在连接
+                  正在登录…
                 </>
               ) : (
                 <>
@@ -248,12 +278,12 @@ function Login({
             </Button>
           </form>
           <p className="mt-7 text-xs leading-6 text-muted-foreground">
-            访问令牌仅保留在本次页面内存中。此界面只连接 Glean 后端，不直接调用外部检索或模型服务。
+            刷新或关闭页面后需要重新登录，已保存的阅读记录会保留。
           </p>
           <div className="mt-10 border-t pt-5">
             <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
               <CircleHelp className="size-3.5" />
-              首次使用？请先完成后端本地账户初始化。
+              没有账号？请联系管理员。
             </span>
           </div>
         </div>
@@ -271,6 +301,7 @@ function FilterPanel({
   loading,
   failed,
   retry,
+  inDrawer = false,
 }: {
   filters: Filters
   facets?: Facets
@@ -281,27 +312,78 @@ function FilterPanel({
   loading: boolean
   failed: boolean
   retry: () => void
+  inDrawer?: boolean
 }) {
   const filterSpecs = getFilterSpecs(filters.topic)
+  const publicationSpecs = filterSpecs.filter((spec) => ['year', 'venue'].includes(spec.key))
+  const contentSpecs = filterSpecs.filter((spec) =>
+    ['method', 'direction', 'aiMethod', 'manualLabel'].includes(spec.key),
+  )
+  const additionalSpecs = filterSpecs.filter(
+    (spec) => !publicationSpecs.includes(spec) && !contentSpecs.includes(spec),
+  )
+  const additionalCount = additionalSpecs.filter((spec) => filters[spec.key]).length
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(additionalCount > 0)
+  function renderFilter(spec: (typeof filterSpecs)[number]) {
+    let values: Facet[] = filterFacets(facets, filters.topic, spec.key, spec.facet)
+    const selected = String(filters[spec.key])
+    const hasSelected = values.some((item) => item.value === selected)
+    if (selected && !hasSelected) values = [{ value: selected, count: 0 }, ...values]
+    return (
+      <div key={spec.key} className="filter-field">
+        <div className="filter-label">
+          <span>{spec.label}</span>
+          <Tooltip label={spec.help}>
+            <button type="button" aria-label={`${spec.label}说明`} className="filter-help">
+              <CircleHelp className="size-3.5" />
+            </button>
+          </Tooltip>
+        </div>
+        <FilterCombobox
+          disabled={loading || failed}
+          filterKey={spec.key}
+          label={spec.label}
+          value={selected}
+          onValueChange={(value) => onChange(spec.key, value)}
+          placeholder={
+            loading
+              ? '筛选项加载中'
+              : failed
+                ? '筛选项读取失败'
+                : values.length
+                  ? '全部'
+                  : '暂无此标签'
+          }
+          options={values.map((item) => ({
+            value: item.value,
+            label: item.value,
+            count: selected === item.value && !hasSelected ? undefined : item.count,
+          }))}
+        />
+      </div>
+    )
+  }
   return (
     <div
       data-testid={loading ? 'filters-loading' : failed ? 'filters-error' : 'filters-ready'}
       aria-busy={loading}
       className="filter-panel"
     >
-      <div className="flex items-center justify-between border-b px-4 py-3.5">
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <SlidersHorizontal className="size-4" />
-          筛选条件
-        </h2>
-        <button
-          type="button"
-          onClick={onReset}
-          className="rounded text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          重置
-        </button>
-      </div>
+      {!inDrawer && (
+        <div className="filter-panel-heading">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <SlidersHorizontal className="size-4" />
+            筛选条件
+          </h2>
+          <button
+            type="button"
+            onClick={onReset}
+            className="min-h-8 rounded px-1 text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            重置
+          </button>
+        </div>
+      )}
       {loading && (
         <p
           role="status"
@@ -319,64 +401,62 @@ function FilterPanel({
           </button>
         </div>
       )}
-      <div className="space-y-3.5 px-4 py-4">
-        {filterSpecs.map((spec) => {
-          let values: Facet[] = filterFacets(facets, filters.topic, spec.key, spec.facet)
-          if (spec.key === 'readStatus' && !values.length)
-            values = Object.keys(readLabels).map((value) => ({ value, count: 0 }))
-          const selected = String(filters[spec.key])
-          const hasSelected = values.some((item) => item.value === selected)
-          if (selected && !hasSelected) values = [{ value: selected, count: 0 }, ...values]
-          return (
-            <div key={spec.key}>
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <span>{spec.label}</span>
-                <Tooltip label={spec.help}>
-                  <button
-                    type="button"
-                    aria-label={`${spec.label}说明`}
-                    className="filter-help rounded text-muted-foreground hover:text-primary"
-                  >
-                    <CircleHelp className="size-3" />
-                  </button>
-                </Tooltip>
-              </div>
-              <FilterCombobox
-                disabled={loading || failed}
-                filterKey={spec.key}
-                label={spec.label}
-                value={selected}
-                onValueChange={(value) => onChange(spec.key, value)}
-                placeholder={
-                  loading
-                    ? '筛选项加载中'
-                    : failed
-                      ? '筛选项读取失败'
-                      : values.length
-                        ? '全部'
-                        : '当前目录暂无此标签'
-                }
-                options={values.map((item) => ({
-                  value: item.value,
-                  label:
-                    spec.key === 'readStatus'
-                      ? readLabels[item.value] || item.value
-                      : spec.key === 'reviewStatus'
-                        ? reviewLabels[item.value] || item.value
-                        : item.value,
-                  count: selected === item.value && !hasSelected ? undefined : item.count,
-                }))}
-              />
-            </div>
-          )
-        })}
+      <div className="filter-panel-body">
+        <fieldset className="filter-section">
+          <legend>阅读与来源</legend>
+          <div className="filter-field">
+            <span className="filter-label">个人阅读状态</span>
+            <Select
+              label="个人阅读状态"
+              value={filters.readStatus}
+              onValueChange={(value) => onChange('readStatus', value)}
+              placeholder="全部阅读状态"
+              options={Object.entries(readLabels).map(([value, label]) => ({ value, label }))}
+            />
+          </div>
+          <div className="filter-field">
+            <span className="filter-label">采集来源</span>
+            <FilterCombobox
+              disabled={loading || failed}
+              label="采集来源"
+              value={filters.source}
+              onValueChange={(value) => onChange('source', value)}
+              placeholder={loading ? '来源加载中' : failed ? '来源读取失败' : '全部来源'}
+              options={(facets?.sources || []).map((item) => ({ ...item, label: item.value }))}
+            />
+          </div>
+        </fieldset>
+        <fieldset className="filter-section">
+          <legend>发表信息</legend>
+          {publicationSpecs.map(renderFilter)}
+        </fieldset>
+        {!!contentSpecs.length && (
+          <fieldset className="filter-section">
+            <legend>研究内容</legend>
+            {contentSpecs.map(renderFilter)}
+          </fieldset>
+        )}
+        {!!additionalSpecs.length && (
+          <details
+            className="filter-advanced"
+            open={moreFiltersOpen}
+            onToggle={(event) => setMoreFiltersOpen(event.currentTarget.open)}
+          >
+            <summary>
+              更多筛选
+              {additionalCount > 0 && <span>已选 {additionalCount}</span>}
+              <ChevronDown className="ml-auto size-4" />
+            </summary>
+            <div className="filter-section">{additionalSpecs.map(renderFilter)}</div>
+          </details>
+        )}
       </div>
-      <div className="border-t p-4">
+      <div className="filter-panel-footer">
         <Button variant="outline" className="w-full" size="sm" onClick={onSave} disabled={saving}>
           {saving ? <LoaderCircle className="animate-spin" /> : <Save />}保存当前筛选
         </Button>
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          条件之间取交集 · 标签保留原目录含义
+          多个条件同时生效。保存后，下次登录自动恢复。
         </p>
       </div>
     </div>
@@ -444,6 +524,7 @@ function WorkspaceReady({
     retry: false,
   })
   const canManage = access.data?.canManage === true && !access.isError
+  const topicScoped = ['papers', 'sources', 'templates', 'venues'].includes(view)
   useEffect(() => {
     if (!message) return
     const timeout = setTimeout(() => setMessage(''), 4500)
@@ -573,6 +654,9 @@ function WorkspaceReady({
         >
           论文工作台
         </NavButton>
+        <NavButton icon={BookMarked} active={view === 'venues'} onClick={() => navigate('venues')}>
+          期刊与会议
+        </NavButton>
         <NavButton
           icon={EyeOff}
           active={view === 'papers' && filters.hidden === 'only'}
@@ -594,8 +678,8 @@ function WorkspaceReady({
               type="button"
               key={slug}
               onClick={() => chooseTopic(slug as TopicSlug)}
-              className={cn('topic-button', filters.topic === slug && 'active')}
-              aria-pressed={filters.topic === slug}
+              className={cn('topic-button', topicScoped && filters.topic === slug && 'active')}
+              aria-pressed={topicScoped && filters.topic === slug}
             >
               <span className="topic-icon">
                 <Icon className="size-4" />
@@ -606,7 +690,7 @@ function WorkspaceReady({
           )
         })}
       </div>
-      <div className="sidebar-section-label">监测与来源</div>
+      <div className="sidebar-section-label">检索与采集</div>
       <div className="space-y-1">
         <NavButton icon={Radio} active={view === 'sources'} onClick={() => navigate('sources')}>
           采集状态
@@ -630,9 +714,6 @@ function WorkspaceReady({
           onClick={() => navigate('templates')}
         >
           检索方案
-        </NavButton>
-        <NavButton icon={BookMarked} active={view === 'venues'} onClick={() => navigate('venues')}>
-          期刊与会议
         </NavButton>
       </div>
       {canManage && (
@@ -690,20 +771,28 @@ function WorkspaceReady({
           >
             <Menu />
           </Button>
-          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <span className="hidden sm:inline">研究空间</span>
-            <ChevronRight className="hidden size-3 sm:inline" />
-            <span className="truncate font-medium text-slate-600">
-              {activeTopic?.name || topicLabels[filters.topic] || filters.topic}
-            </span>
+          <div className="topbar-location">
+            <span className={cn(topicScoped && 'hidden sm:inline')}>{viewMeta[view].title}</span>
+            {topicScoped && (
+              <>
+                <ChevronRight className="hidden size-3 shrink-0 sm:inline" />
+                <span className="truncate font-medium text-foreground">
+                  {activeTopic?.name || topicLabels[filters.topic] || filters.topic}
+                </span>
+              </>
+            )}
           </div>
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            已登录
+          <span className="ml-auto hidden max-w-32 truncate text-xs text-muted-foreground sm:block">
+            {user.nickname || user.username}
           </span>
-          <div className="ml-2 h-4 w-px bg-border" />
           <Tooltip label="刷新当前视图">
-            <Button variant="ghost" size="icon" onClick={refresh} aria-label="刷新当前视图">
+            <Button
+              className="ml-auto sm:ml-0"
+              variant="ghost"
+              size="icon"
+              onClick={refresh}
+              aria-label="刷新当前视图"
+            >
               <RotateCcw
                 className={cn(
                   (paperQuery.isFetching || topics.isFetching || access.isFetching) &&
@@ -737,24 +826,24 @@ function WorkspaceReady({
             </div>
           )}
           <div className="workspace-heading">
-            <div>
+            <div className="workspace-title">
               <h1>
                 {view === 'papers' && filters.hidden === 'only'
                   ? '已隐藏的论文'
                   : viewMeta[view].title}
               </h1>
-              <p>
-                {view === 'papers' && filters.hidden === 'only'
-                  ? '这里保存你在所有主题中隐藏的论文，随时可以恢复。'
-                  : viewMeta[view].description}
-              </p>
+              {view === 'papers' && <TopicIntro topic={activeTopic} loading={topics.isLoading} />}
             </div>
+            <p>
+              {view === 'papers' && filters.hidden === 'only'
+                ? '当前主题中由你隐藏的论文，可随时恢复显示。'
+                : view === 'papers'
+                  ? activeTopic?.description || viewMeta.papers.description
+                  : viewMeta[view].description}
+            </p>
           </div>
           {view === 'papers' && (
-            <>
-              <TopicIntro topic={activeTopic} loading={topics.isLoading} />
-              <FreshnessStrip topic={filters.topic} onOpen={() => navigate('sources')} />
-            </>
+            <FreshnessStrip topic={filters.topic} onOpen={() => navigate('sources')} />
           )}
           {(view === 'papers' || view === 'venues') && (
             <form id="catalog-search" role="search" onSubmit={submitSearch} className="search-bar">
@@ -825,76 +914,9 @@ function WorkspaceReady({
                 className="min-w-0 scroll-mt-5"
                 aria-busy={paperQuery.isFetching}
               >
-                <div className="results-toolbar">
-                  <h2 data-testid="results-count" className="text-sm font-medium text-slate-600">
-                    找到{' '}
-                    <strong className="mx-1 text-base text-slate-900">
-                      {number(paperQuery.data?.total)}
-                    </strong>{' '}
-                    篇论文
-                  </h2>
-                  {paperQuery.isFetching && (
-                    <LoaderCircle
-                      aria-label="正在刷新"
-                      className="size-3.5 animate-spin text-primary"
-                    />
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto xl:hidden"
-                    onClick={() => setMobileFilters(true)}
-                  >
-                    <SlidersHorizontal />
-                    筛选{activeCount > 0 && <Badge tone="violet">{activeCount}</Badge>}
-                  </Button>
-                  <div className="results-controls flex gap-2">
-                    <div className="w-28">
-                      <Select
-                        label="个人阅读状态"
-                        value={filters.readStatus}
-                        onValueChange={(value) => change('readStatus', value)}
-                        placeholder="全部阅读"
-                        options={Object.entries(readLabels).map(([value, label]) => ({
-                          value,
-                          label,
-                        }))}
-                      />
-                    </div>
-                    <div className="w-40">
-                      <Select
-                        label="排序方式"
-                        value={filters.sort}
-                        onValueChange={(value) => change('sort', value || 'newest')}
-                        placeholder="排序方式"
-                        options={[
-                          { value: 'newest', label: '最新发表优先' },
-                          { value: 'model-priority', label: '模型阅读优先级' },
-                          { value: 'observed', label: '最近来源变化' },
-                          { value: 'source-updated', label: '来源最近更新' },
-                          { value: 'oldest', label: '最早发表优先' },
-                          { value: 'title', label: '标题顺序' },
-                        ]}
-                      />
-                    </div>
-                  </div>
-                </div>
-                {filters.sort === 'model-priority' && (
-                  <p className="mb-3 text-xs leading-5 text-muted-foreground">
-                    按当前主题最新来源版本的 Jev
-                    相关分降序排列，未处理或未知分数后置；这是阅读优先级，不是科学纳入判定。
-                  </p>
-                )}
                 <div className="collection-toolbar">
                   <div role="group" aria-label="目录范围" className="collection-tabs">
-                    {(
-                      [
-                        { value: 'curated', label: '精选目录' },
-                        { value: 'pending', label: '待审核' },
-                        { value: 'all', label: '全部记录' },
-                        { value: 'excluded', label: '已移出主题' },
-                      ] as const
-                    ).map((scope) => (
+                    {collectionScopes.map((scope) => (
                       <button
                         key={scope.value}
                         type="button"
@@ -918,35 +940,74 @@ function WorkspaceReady({
                       </button>
                     ))}
                   </div>
-                  <div className="collection-source">
-                    <FilterCombobox
-                      disabled={facetQuery.isPending || facetQuery.isError}
-                      label="采集来源"
-                      value={filters.source}
-                      onValueChange={(value) => change('source', value)}
-                      placeholder={
-                        facetQuery.isPending
-                          ? '来源加载中'
-                          : facetQuery.isError
-                            ? '来源读取失败'
-                            : '全部来源'
-                      }
-                      options={(facetQuery.data?.sources || []).map((item) => ({
-                        ...item,
-                        label: item.value,
-                      }))}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="collection-help"
+                        aria-label="当前目录范围说明"
+                      >
+                        <CircleHelp className="size-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="end"
+                      aria-label="目录范围说明"
+                      className="w-72 max-w-[calc(100vw-32px)] p-4"
+                    >
+                      <p className="text-sm leading-6">
+                        {
+                          collectionScopes.find((scope) => scope.value === filters.collectionScope)!
+                            .description
+                        }
+                      </p>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="results-toolbar">
+                  <h2 data-testid="results-count" className="results-count">
+                    共 <strong>{number(paperQuery.data?.total)}</strong> 篇
+                  </h2>
+                  {paperQuery.isFetching && (
+                    <LoaderCircle
+                      aria-label="正在刷新"
+                      className="size-3.5 animate-spin text-primary"
                     />
+                  )}
+                  <div className="results-controls">
+                    <div className="results-sort">
+                      <Select
+                        label="排序方式"
+                        value={filters.sort}
+                        onValueChange={(value) => change('sort', value || 'newest')}
+                        placeholder="排序方式"
+                        options={[
+                          { value: 'newest', label: '最新发表优先' },
+                          { value: 'model-priority', label: '模型阅读优先级' },
+                          { value: 'observed', label: '最近来源变化' },
+                          { value: 'source-updated', label: '来源最近更新' },
+                          { value: 'oldest', label: '最早发表优先' },
+                          { value: 'title', label: '标题顺序' },
+                        ]}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="xl:hidden"
+                      onClick={() => setMobileFilters(true)}
+                    >
+                      <SlidersHorizontal />
+                      筛选{activeCount > 0 && <span>{activeCount}</span>}
+                    </Button>
                   </div>
                 </div>
-                <p className="mb-3 text-xs leading-5 text-muted-foreground">
-                  {filters.collectionScope === 'curated'
-                    ? '正式纳入范围包含原目录与人工纳入；不会自动纳入新发现。'
-                    : filters.collectionScope === 'pending'
-                      ? '包括新发现及手动转回待审核的记录，尚未完成科学审读。'
-                      : filters.collectionScope === 'excluded'
-                        ? '人工移出当前主题的记录；可在论文管理中重新纳入，不会删除论文。'
-                        : '全部记录包含精选、待核、背景与范围外资料。'}
-                </p>
+                {filters.sort === 'model-priority' && (
+                  <p className="mb-3 text-xs leading-5 text-muted-foreground">
+                    按当前主题最新来源版本的 Jev
+                    相关分降序排列，未处理或未知分数后置；这是阅读优先级，不是科学纳入判定。
+                  </p>
+                )}
                 {activeCount > 0 && (
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     {filters.q && (
@@ -1193,10 +1254,6 @@ function WorkspaceReady({
           ) : (
             <VenuesView topic={filters.topic} q={venueQuery} />
           )}
-          <footer className="workspace-footer">
-            <span>Glean · 为认真阅读留出空间</span>
-            <span className="ml-auto">目录与指标均由独立后端提供</span>
-          </footer>
         </main>
       </div>
       <PaperDetail
@@ -1220,24 +1277,43 @@ function WorkspaceReady({
         </DialogContent>
       </Dialog>
       <Dialog open={mobileFilters} onOpenChange={setMobileFilters}>
-        <DialogContent drawer className="max-w-sm p-5">
-          <DialogTitle className="mb-5 text-lg font-semibold">筛选论文</DialogTitle>
+        <DialogContent
+          drawer
+          showCloseButton={false}
+          className="filter-drawer flex max-w-sm flex-col overflow-hidden"
+        >
+          <div className="flex shrink-0 items-center justify-between border-b px-5 py-3">
+            <DialogTitle className="text-lg font-semibold">筛选论文</DialogTitle>
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="size-11" aria-label="关闭">
+                <X />
+              </Button>
+            </DialogClose>
+          </div>
           <DialogDescription className="sr-only">按主题分类、来源和阅读状态筛选</DialogDescription>
-          <FilterPanel
-            filters={filters}
-            facets={facetQuery.data}
-            loading={facetQuery.isPending}
-            failed={facetQuery.isError}
-            retry={() => facetQuery.refetch()}
-            onChange={change}
-            onReset={reset}
-            onSave={() => savePrefs.mutate()}
-            saving={savePrefs.isPending}
-          />
-          <Button className="mt-5 w-full" onClick={() => setMobileFilters(false)}>
-            查看结果
-            <ArrowRight />
-          </Button>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <FilterPanel
+              inDrawer
+              filters={filters}
+              facets={facetQuery.data}
+              loading={facetQuery.isPending}
+              failed={facetQuery.isError}
+              retry={() => facetQuery.refetch()}
+              onChange={change}
+              onReset={reset}
+              onSave={() => savePrefs.mutate()}
+              saving={savePrefs.isPending}
+            />
+          </div>
+          <div className="filter-drawer-actions">
+            <Button variant="outline" onClick={reset}>
+              重置
+            </Button>
+            <Button className="flex-1" onClick={() => setMobileFilters(false)}>
+              查看结果
+              <ArrowRight />
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog open={settings} onOpenChange={setSettings}>
@@ -1329,27 +1405,37 @@ function WorkspaceReady({
 }
 function TopicIntro({ topic, loading }: { topic?: Topic; loading: boolean }) {
   return (
-    <section className="topic-intro" aria-label="主题范围与统计">
-      <div className="topic-rule">
-        <h2 className="font-medium text-foreground">{topic?.description || '主题目录'}</h2>
-        <p>
-          {topic?.rule ||
-            (loading ? '正在读取主题纳入规则…' : '纳入规则以独立后端的主题配置为准。')}
-        </p>
-      </div>
-      <div className="topic-statistics">
-        <span>
-          主题共 <strong>{number(topic?.membershipCount)}</strong> 条记录
-        </span>
-        {topic?.curatedCount != null && (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className="topic-info-trigger" aria-label="查看主题信息">
+          主题信息
+          <ChevronDown className="size-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        aria-label="主题范围与统计"
+        className="w-80 max-w-[calc(100vw-32px)] p-5"
+      >
+        <h2 className="text-sm font-semibold">{topic?.name || '主题信息'}</h2>
+        <div className="topic-statistics">
           <span>
-            精选 <strong>{number(topic.curatedCount)}</strong> 篇
+            主题共 <strong>{number(topic?.membershipCount)}</strong> 条记录
           </span>
-        )}
-        {topic?.historicalCount != null && <span>历史 {number(topic.historicalCount)}</span>}
-        {topic?.candidateCount != null && <span>待审核 {number(topic.candidateCount)}</span>}
-      </div>
-    </section>
+          {topic?.curatedCount != null && (
+            <span>
+              精选 <strong>{number(topic.curatedCount)}</strong> 篇
+            </span>
+          )}
+          {topic?.historicalCount != null && <span>历史 {number(topic.historicalCount)}</span>}
+          {topic?.candidateCount != null && <span>待审核 {number(topic.candidateCount)}</span>}
+        </div>
+        <h3 className="mt-4 border-t pt-4 text-xs font-medium">纳入规则</h3>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {topic?.rule || (loading ? '正在读取主题纳入规则…' : '当前主题尚未填写纳入规则。')}
+        </p>
+      </PopoverContent>
+    </Popover>
   )
 }
 function NavButton({

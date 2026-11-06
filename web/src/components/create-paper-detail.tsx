@@ -43,21 +43,22 @@ export function createPaperDetail(load: () => Promise<{ default: ComponentType<P
         >
           <div
             data-testid="paper-detail-header"
-            className="sticky top-0 z-10 flex items-start gap-3 border-b bg-card px-5 py-4 sm:px-8"
+            className="sticky top-0 z-10 flex items-center gap-3 border-b bg-card px-5 py-3 sm:px-8"
           >
             <div className="min-w-0 flex-1">
               <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
                 <BookOpen className="size-4 text-primary" aria-hidden="true" />
                 论文详情
               </DialogTitle>
-              <DialogDescription className="mt-1 text-xs text-muted-foreground">
-                原始证据与个人阅读状态分开保存。
+              <DialogDescription className="sr-only">
+                阅读摘要、查看来源，记录你的阅读进度。
               </DialogDescription>
             </div>
             {id !== null && validPaperId(id) && (
               <Button
                 variant="ghost"
                 size="icon"
+                className="size-11"
                 aria-label="复制论文链接"
                 onClick={async () => {
                   try {

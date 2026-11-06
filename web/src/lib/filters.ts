@@ -118,7 +118,7 @@ export function getFilterSpecs(topic: TopicSlug): FilterSpec[] {
       key: 'method',
       label: '论文类型',
       facet: 'methods',
-      help: '按原目录中的论文类型筛选，不在前端重新分类。',
+      help: '按来源目录记录的论文类型筛选。',
     },
     {
       key: 'direction',
@@ -129,7 +129,7 @@ export function getFilterSpecs(topic: TopicSlug): FilterSpec[] {
             ? '生物医学方向'
             : '研究尺度',
       facet: 'directions',
-      help: '保留该主题已有的方向或尺度标签。',
+      help: '按本主题已记录的研究方向或尺度筛选。',
     },
     ...(topic === 'biomed-ai'
       ? [
@@ -137,7 +137,7 @@ export function getFilterSpecs(topic: TopicSlug): FilterSpec[] {
             key: 'aiMethod' as const,
             label: 'AI方法',
             facet: 'methods' as const,
-            help: '原目录中的 AI 方法，与生物医学方向和任务分别筛选。',
+            help: '按已记录的 AI 方法筛选，可与研究方向、技术任务组合使用。',
           },
         ]
       : []),
@@ -145,13 +145,13 @@ export function getFilterSpecs(topic: TopicSlug): FilterSpec[] {
       key: 'tier',
       label: '期刊/会议范围',
       facet: 'tiers',
-      help: '期刊影响因子与 CCF 会议评级是来源门槛，不替代单篇资格核验。',
+      help: '按期刊影响因子或 CCF 会议评级范围筛选，单篇论文的审核结果另行记录。',
     },
     {
       key: 'task',
       label: '技术任务',
       facet: 'tasks',
-      help: '同一篇论文可以带有多个已记录任务；选择一个精确标签。',
+      help: '按已记录的技术任务筛选，一篇论文可对应多个任务。',
     },
     {
       key: 'role',
@@ -162,25 +162,25 @@ export function getFilterSpecs(topic: TopicSlug): FilterSpec[] {
             ? 'AI的作用'
             : '世界模型的作用',
       facet: 'roles',
-      help: '使用原目录的作用标签，不将资料获取视为方法审读。',
+      help: '按目录记录的作用筛选，与论文的审读状态分开。',
     },
     {
       key: 'year',
       label: '发表年份',
       facet: 'years',
-      help: '原始年份；正式在线发表和卷期日期在详情中分别展示。',
+      help: '按目录中的发表年份筛选，具体在线发表和卷期日期见论文详情。',
     },
     {
       key: 'status',
       label: '收录状态',
       facet: 'tiers',
-      help: '历史纳入、待核或范围外等状态，与个人已读/未读分开。',
+      help: '原目录中的纳入、待核或范围外状态，与个人阅读状态无关。',
     },
     {
       key: 'venue',
       label: '具体期刊/会议',
       facet: 'venues',
-      help: '可输入名称快速找到来源，结果与其他筛选条件取交集。',
+      help: '输入名称查找具体期刊或会议，可与其他条件组合筛选。',
     },
   ]
   if (!Object.hasOwn(topicDimensions, topic))

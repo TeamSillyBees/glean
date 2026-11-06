@@ -74,6 +74,7 @@ export const paper: Paper = {
   ],
 }
 export const facets: Facets = {
+  sources: [{ value: 'mock-fixture', count: 1 }],
   years: [{ value: '2026', count: 1 }],
   venues: [{ value: 'Mock Research Journal', count: 1 }],
   publicationTypes: [{ value: '研究论文', count: 1 }],

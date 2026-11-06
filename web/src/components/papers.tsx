@@ -34,20 +34,15 @@ export function PaperCard({
   const snippet = readingSnippet(paper, membership)
   const reviewStatus = membership?.dimensions?.display_review_status?.[0]
   return (
-    <article
-      data-testid="paper-card"
-      data-paper-id={paper.id}
-      className="paper-card group relative min-w-0 border-b bg-card px-4 py-5 transition-colors last:border-b-0 hover:bg-accent/25 [overflow-wrap:anywhere] sm:px-6"
-    >
-      <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
-        <span className="font-medium text-muted-foreground">{paper.venue || '来源待核验'}</span>
-        {paper.year > 0 && <span className="text-muted-foreground">· {paper.year}</span>}
-        {membership?.tier && (
-          <Badge tone="violet">
-            {membership.manualReview ? `原目录：${membership.tier}` : membership.tier}
-          </Badge>
-        )}
-        <span className="ml-auto flex items-center gap-2">
+    <article data-testid="paper-card" data-paper-id={paper.id} className="paper-card group">
+      <div className="paper-card-meta">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate" title={paper.venue || undefined}>
+            {paper.venue || '期刊 / 会议待补充'}
+          </span>
+          {paper.year > 0 && <span className="shrink-0 tabular-nums">{paper.year}</span>}
+        </div>
+        <span className="flex shrink-0 items-center gap-2">
           {membership?.manualReview && (
             <Badge>{manualReviewLabels[membership.manualReview.status]}</Badge>
           )}
@@ -79,7 +74,7 @@ export function PaperCard({
         onClick={onOpen}
         className="block min-h-11 w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <h3 className="text-[17px] font-semibold leading-[1.6] text-foreground transition-colors group-hover:text-primary sm:text-lg">
+        <h3 className="paper-card-title text-foreground transition-colors group-hover:text-primary">
           {paper.titleZh || paper.title}
         </h3>
         {paper.titleZh && paper.title !== paper.titleZh && (
@@ -94,23 +89,30 @@ export function PaperCard({
           {snippet.text}
         </p>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
-        {paper.review?.pipeline && <PipelineBadge pipeline={paper.review.pipeline} />}
-        {tags.map((tag) => (
-          <Badge key={tag}>{tag}</Badge>
-        ))}
-        {reviewStatus && (
-          <span className="text-xs text-muted-foreground">
-            {membership?.manualReview && '原核验：'}
-            {reviewLabels[reviewStatus] || reviewStatus}
-          </span>
-        )}
-        {paper.publicationType &&
-          !['其他', '待核', '其他/待核', '其他／待核', 'unknown', '未分类'].includes(
-            paper.publicationType.trim(),
-          ) && <span className="text-xs text-muted-foreground">{paper.publicationType}</span>}
-        <span className="ml-auto flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <Tooltip label="只展示正式在线发表 日期；不以接收或索引日期代替">
+      <div className="paper-card-footer">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {membership?.tier && (
+            <Badge tone="violet">
+              {membership.manualReview ? `原目录：${membership.tier}` : membership.tier}
+            </Badge>
+          )}
+          {paper.review?.pipeline && <PipelineBadge pipeline={paper.review.pipeline} />}
+          {tags.map((tag) => (
+            <Badge key={tag}>{tag}</Badge>
+          ))}
+          {reviewStatus && (
+            <span>
+              {membership?.manualReview && '原核验：'}
+              {reviewLabels[reviewStatus] || reviewStatus}
+            </span>
+          )}
+          {paper.publicationType &&
+            !['其他', '待核', '其他/待核', '其他／待核', 'unknown', '未分类'].includes(
+              paper.publicationType.trim(),
+            ) && <span>{paper.publicationType}</span>}
+        </div>
+        <span className="paper-card-actions">
+          <Tooltip label="正式在线发表日期，不以接收或索引日期代替">
             <span className="inline-flex items-center gap-1.5">
               <CalendarDays className="size-3.5" />
               {paper.formalOnlineDate ? date(paper.formalOnlineDate) : '正式日期待核验'}
