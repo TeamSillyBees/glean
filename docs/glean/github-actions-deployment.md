@@ -8,7 +8,7 @@
 | `publish-images.yml` / **Glean image publication** | 构建前后端、推送 GHCR、在新 runner 拉取 digest 并验证 | 仅推送 job 有 `packages: write`；验证 job 只有 `packages: read`；不使用 `production` Environment 或服务器凭据 |
 | `deploy.yml` / **Glean production deployment** | 消费已验证的镜像清单，审批后执行服务器部署 | 不构建、不推送、不申请包写入权限；必须启用 `PRODUCTION_DEPLOY_ENABLED` |
 
-真实来源验收仍是另一个独立手动工作流。服务器部署开关保持 **`false`**；发布镜像不会修改它，也不会访问服务器。
+真实来源验收仍是另一个独立手动工作流。`47.104.200.154` 已直接部署到 [Glean](https://glean.starxy.cc)，使用一个主 `compose.yaml`，见[实际部署记录](server-47.104.200.154.md)。服务器部署开关保持 **`false`**；发布镜像不会修改它，也不会访问服务器。**本页 CD 工作流仍使用原 releases/state/ops.env 布局，尚未适配该主机的新布局，不能直接启用。**
 
 ## 先发布并验证镜像（不需要启用服务器部署）
 
