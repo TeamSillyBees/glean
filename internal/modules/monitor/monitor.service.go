@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/teamsillybees/glean/internal/data/ent"
@@ -47,6 +48,7 @@ func DefaultConfig() Config {
 
 // Service 协调采集、审核和目录投影，数据库状态通过修订号 CAS 防止并发覆盖。
 type Service struct {
+	connectionTestMu    *sync.Mutex
 	explicitPlanVersion string
 	pipeline            PipelineProcessor
 	materialProvider    MaterialProvider
@@ -156,7 +158,7 @@ func newService(client *ent.Client, memory *memoryState, ids *idgen.Generator, c
 	if _, mock := publisher.(MockPublisher); mock && liveSources {
 		return nil, bizerrors.BadRequest("real sources cannot use a mock catalog publisher")
 	}
-	return &Service{client: client, memory: memory, ids: ids, config: cfg, sources: sources, reviewer: reviewer, publisher: publisher, clock: time.Now, templates: defaultTemplateProvider{}}, nil
+	return &Service{connectionTestMu: &sync.Mutex{}, client: client, memory: memory, ids: ids, config: cfg, sources: sources, reviewer: reviewer, publisher: publisher, clock: time.Now, templates: defaultTemplateProvider{}}, nil
 }
 
 func isMockSource(s Source) bool { v, ok := s.(interface{ IsMock() bool }); return ok && v.IsMock() }

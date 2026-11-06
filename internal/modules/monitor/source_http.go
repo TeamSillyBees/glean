@@ -31,7 +31,7 @@ func SourceHTTPServices(contact string) map[string]httpclient.ServiceConfig {
 	return result
 }
 
-// NewHTTPSourceSet 只注入平台 Executor；网络请求在预算约束的 RunOnce/RunWindow 中发生。
+// NewHTTPSourceSet 只注入平台 Executor；网络请求仅由有界采集或显式连通性测试触发。
 func NewHTTPSourceSet(factory *httpclient.Factory, names []string) ([]Source, error) {
 	if factory == nil {
 		return nil, bizerrors.BadRequest("source HTTP factory is required")

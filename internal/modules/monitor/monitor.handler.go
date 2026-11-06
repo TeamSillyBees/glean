@@ -7,11 +7,19 @@ import (
 	"github.com/teamsillybees/glean/internal/platform/response"
 )
 
-// Handler 只暴露只读监控视图；前端不能启动采集或修改科学分类。
+// Handler 适配监控视图与显式管理操作；连通性测试不启动采集或修改科学分类。
 type Handler struct{ service *Service }
 
-// NewHandler 创建监控只读 HTTP 适配器。
+// NewHandler 创建监控 HTTP 适配器。
 func NewHandler(service *Service) *Handler { return &Handler{service: service} }
+
+func (h *Handler) testSourceConnections(ctx context.Context, _ *sourceConnectionsRequest) (*sourceConnectionsResponse, error) {
+	result, err := h.service.TestSourceConnections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &sourceConnectionsResponse{CacheControl: "no-store", Body: response.OK(ctx, result)}, nil
+}
 
 func (h *Handler) sources(ctx context.Context, _ *sourcesRequest) (*sourcesResponse, error) {
 	snapshot, err := h.service.Snapshot(ctx)

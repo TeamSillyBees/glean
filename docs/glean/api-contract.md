@@ -136,6 +136,16 @@ These predicates apply to both paper queries and facets. The immutable baseline 
 
 `GET /api/v1/monitor/sources` checkpoint `lastAcquiredAt` is the actual UTC time when all templates/pages for that source finished acquisition. It is persisted independently of the fixed `acquiredThrough` coverage watermark and is unchanged on partial failure, canceled requests, or idempotent replay. A missing/zero value in older persisted state means unknown; clients must not synthesize it from the coverage watermark. This does not assert publication, scientific review, or successful catalog projection. Source errors and quarantine counts remain separate diagnostics.
 
+### 手动来源连通性测试
+
+`POST /api/v1/monitor/sources/test` 无请求体，要求 `catalog:manage` 且当前身份为超级管理员。返回标准 envelope 的 `data.items`，每项包含 `source/status/message/statusCode?/elapsedMs/checkedAt/retryAt?`；响应使用 `Cache-Control: no-store`。
+
+检测从服务器向已配置的官方来源发起，每来源最多一个 GET，整轮最多 15 秒，不自动重试。同一服务实例拒绝重叠测试；复用采集 Executor 的官方 HTTPS 域名限制、同源串行限速和 Retry-After，不允许客户端提交 URL。Crossref 请求零条记录、PubMed 查询数据库信息、arXiv 使用 OAI Identify、bioRxiv/medRxiv 请求最近一篇、Europe PMC 请求一个 ID。仅收到有效 API envelope 才返回 `connected`，HTTP 200 错误网页不算成功。
+
+来源状态可为 `connected/timeout/network_error/blocked/rate_limited/unavailable/invalid_response/deferred/skipped`。部分失败仍返回 HTTP 200 和各来源结果；`deferred` 或已有访问封锁会明确说明本次没有发出请求。错误摘要不含原始上游正文、完整异常或凭据。未授权、会话失效和并发测试返回对应 4xx。
+
+测试不创建采集运行，不加载或保存采集快照、不写论文、不推进游标，不调用模型或启用调度；测试结果不冒充最近成功采集时间。进入页面、刷新状态及普通 CI 均不会触发外部检测。
+
 
 ## 论文处理档案与阶段重试
 
