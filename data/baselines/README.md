@@ -7,4 +7,4 @@ These are the complete three historical catalogs, not generated demo fixtures: *
 - `*.display-taxonomy.json.gz`: the delivered reader's display-only grouping table, not new scientific judgments.
 - `testdata/`: small real-record regression fixtures; not a substitute for the complete snapshots.
 
-Read [the baseline guide](../../docs/glean/baseline.md) for exact preservation boundaries and explicit, idempotent database import. Full unredacted source JSON is in a separate ignored private archive, not Git. Run `go run ./tools/importbaseline -mode verify` from the repository root to validate the complete baseline without touching a database.
+Read [the baseline guide](../../docs/guides/baseline.md) for exact preservation boundaries and explicit, idempotent database import. Full unredacted source JSON is in a separate ignored private archive, not Git. Run `go run ./tools/importbaseline -mode verify` from the repository root to validate the complete baseline without touching a database.

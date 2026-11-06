@@ -1,14 +1,14 @@
-# GitHub Actions 镜像发布与手动生产部署
+# GitHub Actions：镜像发布与部署
 
 镜像发布与服务器部署是两个独立的手动工作流，均只接受 `workflow_dispatch`，不会因 push、PR、CI 完成或定时任务自动触发：
 
-| 工作流 | 职责 | 权限与边界 |
-| --- | --- | --- |
-| `ci.yml` / **Glean CI** | 隔离测试、构建和容器 HTTP 验证 | 不发布镜像，不访问生产 |
+| 工作流                                             | 职责                                                  | 权限与边界                                                                                                    |
+| -------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `ci.yml` / **Glean CI**                            | 隔离测试、构建和容器 HTTP 验证                        | 不发布镜像，不访问生产                                                                                        |
 | `publish-images.yml` / **Glean image publication** | 构建前后端、推送 GHCR、在新 runner 拉取 digest 并验证 | 仅推送 job 有 `packages: write`；验证 job 只有 `packages: read`；不使用 `production` Environment 或服务器凭据 |
-| `deploy.yml` / **Glean production deployment** | 消费已验证的镜像清单，审批后执行服务器部署 | 不构建、不推送、不申请包写入权限；必须启用 `PRODUCTION_DEPLOY_ENABLED` |
+| `deploy.yml` / **Glean production deployment**     | 消费已验证的镜像清单，审批后执行服务器部署            | 不构建、不推送、不申请包写入权限；必须启用 `PRODUCTION_DEPLOY_ENABLED`                                        |
 
-真实来源验收仍是另一个独立手动工作流。`47.104.200.154` 已直接部署到 [Glean](https://glean.starxy.cc)，使用一个主 `compose.yaml`，见[实际部署记录](server-47.104.200.154.md)。服务器部署开关保持 **`false`**；发布镜像不会修改它，也不会访问服务器。**本页 CD 工作流仍使用原 releases/state/ops.env 布局，尚未适配该主机的新布局，不能直接启用。**
+真实来源验收仍是另一个独立手动工作流。`47.104.200.154` 已直接部署到 [Glean](https://glean.starxy.cc)，使用一个主 `compose.yaml`，见[实际部署记录](current-instance.md)。服务器部署开关保持 **`false`**；发布镜像不会修改它，也不会访问服务器。**本页 CD 工作流仍使用原 releases/state/ops.env 布局，尚未适配该主机的新布局，不能直接启用。**
 
 ## 先发布并验证镜像（不需要启用服务器部署）
 
@@ -23,28 +23,30 @@
 
 ## 服务器部署前：管理员必须完成
 
-1. 按[生产部署与恢复手册](production.md)准备服务器、数据库 TLS、备份与恢复演练、Atlas、Docker Compose、服务器本地配置和运行权限。工作流不会自动创建数据库、账号、管理员 seed 或外部基础设施。
+1. 按[生产部署与恢复手册](release-tools.md)准备服务器、数据库 TLS、备份与恢复演练、Atlas、Docker Compose、服务器本地配置和运行权限。工作流不会自动创建数据库、账号、管理员 seed 或外部基础设施。
 2. 在 GitHub `Settings → Environments` 创建 **`production`**，设置 required reviewers、禁止自己批准、禁止管理员绕过，并将允许部署的 **branch 限为 `main`**（不是同名 tag）。保护 main，要求代码审查和 `Glean CI` 成功。GitHub 的套餐 / 仓库可见性可能限制 required reviewers；若当前套餐无法提供审批保护，不要启用本工作流，应先配置支持的审批机制。仅写 `environment: production` **不会自动创建人工审批规则**。
 3. 在这个 Environment（不要放到普通仓库级）设置以下值；经过上述准备后才将开关设为 `true`：
 
-   | 类型 | 名称 | 内容 |
-   | --- | --- | --- |
-   | Variable | `PRODUCTION_DEPLOY_ENABLED` | 默认缺省即拒绝；完成准备后显式设为 `true` |
-   | Variable | `PRODUCTION_BASE_DIR` | 必填，无默认；服务器应用专用绝对目录，如 `/srv/glean`（仅示例） |
-   | Variable | `PRODUCTION_SSH_HOST` | IPv4 或 DNS 主机名；此基线不接受 IPv6 字面量 |
-   | Variable | `PRODUCTION_SSH_USER` | 已存在的专用部署账号 |
-   | Variable | `PRODUCTION_SSH_PORT` | SSH 端口，缺省 `22` |
-   | Secret | `PRODUCTION_SSH_KEY` | 已授权部署账号的私钥；不由工作流生成 |
+   | 类型     | 名称                        | 内容                                                            |
+   | -------- | --------------------------- | --------------------------------------------------------------- |
+   | Variable | `PRODUCTION_DEPLOY_ENABLED` | 默认缺省即拒绝；完成准备后显式设为 `true`                       |
+   | Variable | `PRODUCTION_BASE_DIR`       | 必填，无默认；服务器应用专用绝对目录，如 `/srv/glean`（仅示例） |
+   | Variable | `PRODUCTION_SSH_HOST`       | IPv4 或 DNS 主机名；此基线不接受 IPv6 字面量                    |
+   | Variable | `PRODUCTION_SSH_USER`       | 已存在的专用部署账号                                            |
+   | Variable | `PRODUCTION_SSH_PORT`       | SSH 端口，缺省 `22`                                             |
+   | Secret   | `PRODUCTION_SSH_KEY`        | 已授权部署账号的私钥；不由工作流生成                            |
 
    按本项目选择，SSH / SCP **不检查服务器主机密钥**，无需配置 known_hosts Secret，也没有可选严格模式。连接仍用部署账号私钥认证且禁止交互密码；这不等于认证了服务器身份，错误 DNS、被冒充的主机或中间人可能接收发布内容并干预部署。此取舍不改变数据库 TLS、私钥保密或数据完整性要求。
 
    base 仅允许由 ASCII 字母、数字、`_`、`-`、`.` 组成的路径段；禁止根目录、空格、引号、控制字符、`.` / `..` 段、重复或末尾斜杠、符号链接组件。详细布局与迁移方法见生产手册。
+
 4. 按生产手册在服务器预建 `$PRODUCTION_BASE_DIR` 及其固定子目录，允许该账号在 `$PRODUCTION_BASE_DIR/releases` 建立发布目录；保护 base 及父目录不被其他用户改写。base 本身及 `config/`、`releases/`、`backups/`、`state/`、`recovery/` 各控制目录须为该部署账号所有、`0700`，不是常见的 `0755`；具体准备示例及容器数据目录权限见生产手册。工作流不调用 sudo，也不安装软件。账号需要运行部署脚本所需的 Docker / Atlas / 备份权限；Docker socket 权限实际上接近主机 root，应用专用主机和受限部署账号控制风险。SSH 服务端需提供 POSIX shell，部署脚本需要 Bash。
 5. 服务器 `$PRODUCTION_BASE_DIR/config/ops.env`、数据库 / Redis / JWT 密钥、证书、备份目录和部署状态均留在服务器；不上传 GitHub，不进入构建参数或制品。服务器必须已经能拉取这两个 GHCR 包：
    - `ghcr.io/teamsillybees/glean-backend`
    - `ghcr.io/teamsillybees/glean-web`
 
    私有包需要**独立授权的既有服务器只读 registry 身份**；公开包可以匿名拉取。首次创建的 GHCR 包未必公开。工作流不自动改包可见性、不创建 PAT、不将发布 token 传给服务器；尚无合适拉取权限时应停在准备阶段。GitHub Actions 必须被允许使用 `packages: write`，既有包也须允许本仓库 Actions 访问。
+
 6. 发布工作流构建 Linux amd64 镜像，服务器架构应一致；需要 ARM / 多平台时应先扩展构建和验收。
 
 ## 再手动部署服务器

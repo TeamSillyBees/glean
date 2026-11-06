@@ -1,4 +1,4 @@
-# 主题多路线检索与覆盖审计
+# 检索方案与覆盖审计
 
 本功能把研究协议映射为可保存、可执行和可审计的主题路线配置。当前执行 Crossref、PubMed、Europe PMC、arXiv OAI、bioRxiv、medRxiv 六源子集；其他来源和引文计划完整保留为 planned。保存、预览和导出不会启动采集或模型。
 
@@ -24,7 +24,10 @@
     "name": "主题宽召回",
     "sources": ["pubmed", "europepmc"],
     "fieldMode": "title_abstract",
-    "termGroups": [["large language model", "LLM"], ["knowledge graph", "ontology"]],
+    "termGroups": [
+      ["large language model", "LLM"],
+      ["knowledge graph", "ontology"]
+    ],
     "backfillFrom": "2020-01-01T00:00:00Z"
   },
   {
@@ -32,13 +35,16 @@
     "name": "题录补充",
     "sources": ["crossref"],
     "fieldMode": "default",
-    "termGroups": [["large language model", "LLM"], ["knowledge graph", "ontology"]],
+    "termGroups": [
+      ["large language model", "LLM"],
+      ["knowledge graph", "ontology"]
+    ],
     "backfillFrom": "2020-01-01T00:00:00Z"
   }
 ]
 ```
 
-示例用于说明结构，不代表已验证全面性的研究策略。保存不会发送上游请求。保存后在“检索模板”页或 `GET /api/v1/monitor/templates` 检查各来源编译预览。预览明确标识尚未执行、来源是否启用、回溯起点和能力限制。
+示例用于说明结构，不代表已验证全面性的研究策略。保存不会发送上游请求。保存后在「检索方案」或 `GET /api/v1/monitor/templates` 检查各来源编译预览。预览明确标识尚未执行、来源是否启用、回溯起点和能力限制。
 
 旧 `termGroups` 继续兼容。非空 `searchRoutes` 取代该主题普通发现词组，核心期刊补查仍保留原独立语义。旧客户端省略或传 null 不清空已有路线，显式 `[]` 才清除并回到传统词组配置。自定义主题启用检索时至少有词组或路线。
 
@@ -107,14 +113,14 @@ go run ./cmd/glean-monitor --new-plan \
 
 “扫描记录”可以读取更早的归档、逐页查看请求账本、下载完整审计 ZIP。以下接口要求登录；目录个人状态取当前用户，而非采集操作员：
 
-| 接口 | 用途 |
-| --- | --- |
-| `GET /api/v1/monitor/archive/runs?before=&limit=50` | 长期运行，稳定倒序 ID 游标 |
-| `GET /api/v1/monitor/runs/{id}/requests?after=&limit=100` | 每次请求、失败和恢复点 |
-| `GET /api/v1/monitor/runs/{id}/occurrences?after=&limit=100` | 全部来源出现，重复出现不丢失 |
-| `GET /api/v1/monitor/runs/{id}/catalog?after=&limit=100` | 当前目录、全部发现路径、共享修改历史、个人状态 |
-| `GET /api/v1/monitor/runs/{id}/export` | 完整有界 ZIP |
-| `GET /api/v1/monitor/model-budget` | 全数据库累计模型配额和使用量 |
+| 接口                                                         | 用途                                           |
+| ------------------------------------------------------------ | ---------------------------------------------- |
+| `GET /api/v1/monitor/archive/runs?before=&limit=50`          | 长期运行，稳定倒序 ID 游标                     |
+| `GET /api/v1/monitor/runs/{id}/requests?after=&limit=100`    | 每次请求、失败和恢复点                         |
+| `GET /api/v1/monitor/runs/{id}/occurrences?after=&limit=100` | 全部来源出现，重复出现不丢失                   |
+| `GET /api/v1/monitor/runs/{id}/catalog?after=&limit=100`     | 当前目录、全部发现路径、共享修改历史、个人状态 |
+| `GET /api/v1/monitor/runs/{id}/export`                       | 完整有界 ZIP                                   |
+| `GET /api/v1/monitor/model-budget`                           | 全数据库累计模型配额和使用量                   |
 
 ZIP 含 protocol.json、concepts.json、query-plan.json、requests.jsonl、occurrences.jsonl、records.jsonl、identity-edges.jsonl、screening.jsonl、coverage.json、report.md，另有 manifest.json 核对各文件字节数和 SHA256，并验证 ZIP CRC。`complete_export` 仅指账本完整导出，不代表检索或科学审读完成。
 
@@ -140,4 +146,4 @@ ZIP 含 protocol.json、concepts.json、query-plan.json、requests.jsonl、occur
 
 PgBouncer 等事务池不能依赖会话级 `SET search_path`。跨进程测试已改为每 phase 显式事务、`SET LOCAL`、schema断言与真实提交；其他数据库测试也应使用唯一隔离 schema，不要裸跑生产迁移来验收。浏览器测试原有 loopback/专用数据库防护继续保留，不能把外部测试库硬塞入受保护的本地 seed 流程。
 
-本次实际验收与剩余缺口见 [2026-11-06 验收记录](retrieval-acceptance-20261106.md)。仍待后续阶段：OpenAlex/DBLP 等新源、官方目录与引文图、共享 feed、任意 AST、自动抽样校准、完整勘误/撤稿关系图、按许可保存原始响应文件、供应商金额硬上限。启用模型前仍需确认历史范围和成本。
+已交付变化与关键验证见 [Changelog](../../CHANGELOG.md#2026-11-06)，剩余工作统一维护在 [Roadmap](../roadmap.md)。启用模型前检查历史范围、待处理队列和预算。

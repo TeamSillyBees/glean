@@ -51,15 +51,15 @@ dispatched `.github/workflows/live-source-acceptance.yml` requests one EuropePMC
 record through the real source adapter and persists it through the
 actual monitor/catalog pipeline. The resulting committed IDs drive a second
 desktop/mobile browser check: real login and search, real detail HTTP, immutable
-source evidence, the official record link, and an explicitly separate mock LLM
-review. No paper title or source response is fabricated for this phase. Upstream
+source evidence, the official record link, and model stages awaiting configuration
+with zero model or extra material requests. No paper title or source response is fabricated for this phase. Upstream
 unavailability fails this live check honestly; there is no fixture fallback.
 The manual job creates isolated accounts without importing the historical catalog.
 The historical and live reports/screenshots use separate directories and artifacts.
 
 `npm run test:e2e:list` and `npx tsc -p tsconfig.e2e.json` validate discovery/types
-without launching a browser. Actual browser execution is performed on the
-sanctioned GitHub Actions runner, not by retrying a denied local browser path.
+without launching a browser. Run actual browser acceptance against the isolated
+dependencies and disposable accounts described above.
 
 Passing both phases verifies the full historical catalog and one actual live
 EuropePMC response through PostgreSQL and the authenticated UI. It does **not**

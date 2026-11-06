@@ -1,8 +1,8 @@
-# 生产部署、备份与恢复
+# 发布工具：releases 布局
 
-这是**待运维配置并在目标环境演练的单机部署工具**，不是已部署声明。仓库不附带生产凭据，不会自动开通服务器、创建账号、改密码、初始化管理员、导入基线或启用采集。GitHub Actions 入口见 [手动部署工作流](github-actions-deployment.md)。
+本文说明仓库 `scripts/production` 的发布、备份、恢复和回退工具，适用于 `releases/state/ops.env` 布局。工具不负责创建外部基础设施、管理员、历史基线或启用采集。GitHub Actions 入口见[手动部署工作流](github-actions.md)。
 
-`47.104.200.154` 已按用户要求改用单个 `compose.yaml` 管理数据库、Redis、后端和 HTTPS Web，见[实际部署记录](server-47.104.200.154.md)。下面的工具仍使用原 releases/state/ops.env 布局；适配前不要直接对该主机运行发布或恢复脚本。
+`47.104.200.154` 已按用户要求改用单个 `compose.yaml` 管理数据库、Redis、后端和 HTTPS Web，见[实际部署记录](current-instance.md)。下面的工具仍使用原 releases/state/ops.env 布局；适配前不要直接对该主机运行发布或恢复脚本。
 
 ## 架构与前置条件
 
@@ -25,17 +25,17 @@ export PRODUCTION_BASE_DIR=/srv/glean  # 仅示例，可选其他位置；没有
 
 应用宿主文件固定按下表派生，不再分别选择 `GLEAN_*` 路径：
 
-| 相对于 `PRODUCTION_BASE_DIR` | 内容 |
-| --- | --- |
-| `releases/<immutable-release>` | 不可变发布代码、脚本与迁移 |
-| `config/ops.env` | 仅操作用户可读写的数据库与运维配置 |
-| `config/backend.env` | 后端环境配置与既有密钥 |
-| `config/configs/` | 应用 YAML、RBAC 模型及 `db-ca.crt` |
-| `data/` | 容器 `/app/var` 的持久应用数据 |
-| `originals/` | 用户原始私有档案 |
-| `backups/` | 数据库、应用数据、原始档案备份及私有诊断日志 |
-| `state/` | 操作锁与 `current.json` / `previous.json` 发布状态 |
-| `recovery/<new-id>/` | 隔离恢复文件；每次使用全新目录 |
+| 相对于 `PRODUCTION_BASE_DIR`   | 内容                                               |
+| ------------------------------ | -------------------------------------------------- |
+| `releases/<immutable-release>` | 不可变发布代码、脚本与迁移                         |
+| `config/ops.env`               | 仅操作用户可读写的数据库与运维配置                 |
+| `config/backend.env`           | 后端环境配置与既有密钥                             |
+| `config/configs/`              | 应用 YAML、RBAC 模型及 `db-ca.crt`                 |
+| `data/`                        | 容器 `/app/var` 的持久应用数据                     |
+| `originals/`                   | 用户原始私有档案                                   |
+| `backups/`                     | 数据库、应用数据、原始档案备份及私有诊断日志       |
+| `state/`                       | 操作锁与 `current.json` / `previous.json` 发布状态 |
+| `recovery/<new-id>/`           | 隔离恢复文件；每次使用全新目录                     |
 
 `PRODUCTION_BASE_DIR` 由调用方显式传入，不能在 `ops.env` 中改写；旧的 `GLEAN_OPS_ENV`、`GLEAN_DATA_DIR` 等独立路径不能用于切换到别处。脚本拒绝冲突配置、目录重叠和符号链接逃逸。运维需预建 base、`releases/`、`config/configs/`、`data/`、`originals/` 及 `recovery/`，按下节授予最小权限；发布不会自动搬迁旧数据。
 

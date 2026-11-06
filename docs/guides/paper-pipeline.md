@@ -1,17 +1,17 @@
 # 论文处理流程与模型配置
 
-真实来源记录先写入 PostgreSQL 与目录，再执行模型处理。未配置模型不妨碍保存和查询新论文，也不生成占位总结。当前已实现真实 HTTP adapter；2026-11-06 以一条真实 Europe PMC 公开摘要完成 Jev 分类、gpt-6.1-terra 总结/独立复审、Jev 证据检查四次实服调用。程序证据检查仍保留一项缺口，没有因此标记科学核验通过。详见[验收记录](retrieval-acceptance-20261106.md)。
+真实来源记录先写入 PostgreSQL 与目录，再执行模型处理。未配置模型不妨碍保存和查询新论文，也不生成占位总结。模型默认关闭；当前已实现 Jev 和生成式 LLM 的真实 HTTP adapter。
 
 ## 一篇新论文如何处理
 
-| 阶段 | 作用与边界 |
-| --- | --- |
-| `material` | 获取并保存实际供模型读取的材料、来源 URL、材料块和 SHA-256。无法取得正文时明确降级，不冒称全文。 |
-| `classification` | Jev 对召回的各主题分别分类（相关 / 范围外 / 不确定）和给出 0–1 优先分；不是科学质量评分或人工纳入决定。 |
-| `summary` | 生成式 LLM 仅根据实际材料生成中文总结及带材料块 ID、原文引句、数值和引用标识的声明。 |
-| `independent_review` | 同一生成式服务发起独立请求，重新读取原材料并审查总结/声明，不只检查前次模型意见；不代表独立机构或不同模型的复核。 |
-| `program_validation` | 程序检查证据块、连续原文引句、数值与引用标识是否存在；不能证明语义正确或研究结论成立。 |
-| `evidence_check` | Jev 逐条检查声明是否受到材料支持，记录支持分与问题。任何机器检查均不替代人工科学审核。 |
+| 阶段                 | 作用与边界                                                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `material`           | 获取并保存实际供模型读取的材料、来源 URL、材料块和 SHA-256。无法取得正文时明确降级，不冒称全文。                                    |
+| `classification`     | Jev 对记录已关联的发现主题分别分类（相关 / 范围外 / 不确定）和给出 0–1 优先分；不自动遍历全部主题，也不代替科学质量评分或人工纳入。 |
+| `summary`            | 生成式 LLM 仅根据实际材料生成中文总结及带材料块 ID、原文引句、数值和引用标识的声明。                                                |
+| `independent_review` | 同一生成式服务发起独立请求，重新读取原材料并审查总结/声明，不只检查前次模型意见；不代表独立机构或不同模型的复核。                   |
+| `program_validation` | 程序检查证据块、连续原文引句、数值与引用标识是否存在；不能证明语义正确或研究结论成立。                                              |
+| `evidence_check`     | Jev 逐条检查声明是否受到材料支持，记录支持分与问题。任何机器检查均不替代人工科学审核。                                              |
 
 完成后默认是 `needs_human_review`。`ready_for_display` 仅表示机器结果可展示，**不等于精选纳入或科学核验**；`monitor.models.auto_display` 默认 false，显式启用也不会变更人工纳入。`scientificReviewed` 不因自动处理变为 true。分类不相关也不会删除真实来源证据。
 
@@ -28,17 +28,17 @@
 
 服务配置位于 `monitor.models.{jev,generative}`，各有 `endpoint`、`model`、`api_key_env`、`timeout`。`monitor.models.enabled` 默认 false，endpoint/model 默认空，不暗中选定付费服务。环境覆盖分别为 `INITRA_MONITOR_MODELS_ENABLED`、`INITRA_MONITOR_MODELS_AUTO_DISPLAY`（机器展示开关，默认 false）。
 
-| 配置 | Jev | 生成式 LLM |
-| --- | --- | --- |
-| endpoint 环境覆盖 | `INITRA_MONITOR_MODELS_JEV_ENDPOINT` | `INITRA_MONITOR_MODELS_GENERATIVE_ENDPOINT` |
-| model 环境覆盖 | `INITRA_MONITOR_MODELS_JEV_MODEL` | `INITRA_MONITOR_MODELS_GENERATIVE_MODEL` |
+| 配置               | Jev                                     | 生成式 LLM                                     |
+| ------------------ | --------------------------------------- | ---------------------------------------------- |
+| endpoint 环境覆盖  | `INITRA_MONITOR_MODELS_JEV_ENDPOINT`    | `INITRA_MONITOR_MODELS_GENERATIVE_ENDPOINT`    |
+| model 环境覆盖     | `INITRA_MONITOR_MODELS_JEV_MODEL`       | `INITRA_MONITOR_MODELS_GENERATIVE_MODEL`       |
 | key 环境变量名覆盖 | `INITRA_MONITOR_MODELS_JEV_API_KEY_ENV` | `INITRA_MONITOR_MODELS_GENERATIVE_API_KEY_ENV` |
-| 默认实际密钥变量 | `INITRA_JEV_API_KEY` | `INITRA_GENERATIVE_API_KEY` |
-| timeout 环境覆盖 | `INITRA_MONITOR_MODELS_JEV_TIMEOUT` | `INITRA_MONITOR_MODELS_GENERATIVE_TIMEOUT` |
+| 默认实际密钥变量   | `INITRA_JEV_API_KEY`                    | `INITRA_GENERATIVE_API_KEY`                    |
+| timeout 环境覆盖   | `INITRA_MONITOR_MODELS_JEV_TIMEOUT`     | `INITRA_MONITOR_MODELS_GENERATIVE_TIMEOUT`     |
 
 `endpoint` 是**完整 POST URL**，不是域名或 base URL；Jev 使用 System One 问答协议，生成式端使用 OpenAI 兼容的非流式 chat completions 协议，不是任意 LLM 接口。`model` 使用供应商实际提供的标识，建议固定版本。`api_key_env` 填环境变量的名字，不能填 key 本身。timeout 默认 `60s`，上限 `120s`；请求还受外层任务预算限制，剩余预算不足配置 timeout 加 3 秒时不开始下一次付费调用，也不增加尝试次数。后台任务与真实 CLI 的单次总预算均为 3 分钟；更短的父请求期限仍优先。远端要求 HTTPS，拒绝带凭据、query 或 fragment 的 URL，以及重定向；本机开发例外仅用于显式回环 HTTP。
 
-生产单 base 布局中，在服务器的 **`$PRODUCTION_BASE_DIR/config/backend.env`** 私密设置上述环境变量及实际 key；保留现有数据库和账号配置，按[生产指南](production.md)重建/重启后端使配置生效。不要把密钥贴在聊天、日志、截图、命令行参数或提交到仓库。CLI 从同名环境变量读取配置，不自动读取服务器 env 文件。
+生产配置在对应实例的 **`config/backend.env`** 私密设置上述环境变量及实际 key；按[部署说明](../deployment/README.md)选择正确布局，并重建后端容器加载环境变量，单纯 restart 不会重新读取 env_file。密钥不进入聊天、日志、截图、命令行参数或 Git。CLI 从同名环境变量读取配置，不自动读取服务器 env 文件。
 
 显式设 `INITRA_MONITOR_MODELS_ENABLED=true` 且两个模型配置齐备后，启用已有调度器（`INITRA_MONITOR_SCHEDULER_ENABLED=true`，并配置已有操作员）或再次运行真实 monitor CLI。之前处于 `awaiting_configuration` 的**新候选会自动继续**，无需逐篇点击。调度器的一分钟唤醒检查处理进度，不是每分钟全量采集。禁用或缺配置时不发模型请求，也不额外请求正文、不消耗失败尝试预算；真实来源采集仍继续。
 
@@ -57,4 +57,4 @@
 
 费用控制的当前边界是 `monitor.models.enabled` 总开关、单个 `processPipelines` 处理片段最多 8 个阶段、单次运行 3 分钟时限，以及退避/有限重试；真实 CLI 一次运行可能推进多个片段，不能把 8 个阶段视为每任务调用上限。另有同一数据库共享的累计调用数与保守 token 预留配额，发送前持久扣预留，失败、中断和重启不自动退款；默认 100 次调用、1,000,000 预留 token，单次输入 128 KiB、输出 4096 token。通过 `monitor.models.budget` 及对应 `INITRA_MONITOR_MODELS_BUDGET_*` 环境变量配置，`GET /api/v1/monitor/model-budget` 查询使用量。调整配置不重置累计值。Jev 不提供同等输出 token 限制，因此配额不是供应商金额硬上限；尚未提供自动周期重置或金额结算。启用前请检查来源回溯范围、待处理队列与供应商费用。
 
-接口字段与权限见 [API 契约](api-contract.md#论文处理档案与阶段重试)。本说明描述实现边界，不是所有论文均取得全文、模型实服可用或科学结论已验证的声明。
+接口字段与权限见 [API 契约](../reference/api.md#论文处理档案与阶段重试)。本说明描述实现边界，不是所有论文均取得全文、模型实服可用或科学结论已验证的声明。
