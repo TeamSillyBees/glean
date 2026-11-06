@@ -22,6 +22,7 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservationmatch"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
 	"github.com/teamsillybees/glean/internal/data/ent/predicate"
 	"github.com/teamsillybees/glean/internal/data/ent/sysuser"
 	"github.com/teamsillybees/glean/internal/modules/bizerrors"
@@ -30,6 +31,16 @@ import (
 
 func normalizeObservation(in *ObservationInput, knownTopics ...string) (string, error) {
 	in.EventType = ""
+	if len(in.Discoveries) > 1000 {
+		return "", bizerrors.BadRequest("too many search discoveries")
+	}
+	// 合法50词×300字节经Unicode转义与双字段展开可超过64KiB，保留128KiB而不截断查询。
+	for _, hit := range in.Discoveries {
+		if hit.RunID <= 0 || hit.Source != in.Source || hit.DiscoveredAt.IsZero() || hit.QueryID == "" || hit.QueryVersion == "" || hit.PlanVersion == "" || hit.Mode == "" || len(hit.QueryID) > 300 || len(hit.QueryVersion) > 300 || len(hit.PlanVersion) > 300 || len(hit.Mode) > 100 || len(hit.Query) > 128*1024 || strings.ContainsRune(hit.Query, 0) {
+			return "", bizerrors.BadRequest("invalid search discovery provenance")
+		}
+	}
+
 	if in.RunID <= 0 || strings.TrimSpace(in.Source) == "" || strings.TrimSpace(in.SourceID) == "" || strings.TrimSpace(in.Title) == "" || in.ObservedAt.IsZero() {
 		return "", bizerrors.BadRequest("source observation requires run, source, sourceId, title and observedAt")
 	}
@@ -92,6 +103,7 @@ func normalizeObservation(in *ObservationInput, knownTopics ...string) (string, 
 	in.ISSNs = uniqueSorted(in.ISSNs)
 	// 内容散列不含采集时间、运行编号、查询主题和 LLM 输出；重试不制造新来源版本。
 	canonical := *in
+	canonical.Discoveries = nil
 	canonical.RunID = 0
 	canonical.ObservedAt = time.Time{}
 	canonical.Topics = nil
@@ -250,7 +262,9 @@ func (s *Service) IngestObservation(ctx context.Context, input ObservationInput)
 				} else if !ent.IsNotFound(previousErr) {
 					return previousErr
 				}
-				metadata, marshalErr := json.Marshal(input)
+				metadataInput := input
+				metadataInput.Discoveries = nil
+				metadata, marshalErr := json.Marshal(metadataInput)
 				if marshalErr != nil {
 					return marshalErr
 				}
@@ -284,6 +298,18 @@ func (s *Service) IngestObservation(ctx context.Context, input ObservationInput)
 				}
 			}
 			result.PaperID = paper.ID
+			// 论文行锁串行化重放，命中与证据在同一事务内提交。
+			for _, hit := range input.Discoveries {
+				exists, err := c.GleanSearchHit.Query().Where(gleansearchhit.ObservationID(observation.ID), gleansearchhit.RunID(hit.RunID), gleansearchhit.QueryID(hit.QueryID), gleansearchhit.QueryVersion(hit.QueryVersion)).Exist(ctx)
+				if err != nil {
+					return err
+				}
+				if !exists {
+					if _, err := c.GleanSearchHit.Create().SetObservationID(observation.ID).SetRunID(hit.RunID).SetQueryID(hit.QueryID).SetQueryVersion(hit.QueryVersion).SetPlanVersion(hit.PlanVersion).SetSource(hit.Source).SetQueryText(hit.Query).SetMode(hit.Mode).SetDiscoveredAt(hit.DiscoveredAt).Save(ctx); err != nil {
+						return err
+					}
+				}
+			}
 			result.ObservationID = observation.ID
 			for _, topic := range input.Topics {
 				match, err := c.GleanObservationMatch.Query().Where(gleanobservationmatch.ObservationID(observation.ID), gleanobservationmatch.Topic(topic)).Exist(ctx)

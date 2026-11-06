@@ -10,8 +10,10 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservationmatch"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
 	"github.com/teamsillybees/glean/internal/modules/bizerrors"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 func (s *Service) attachObservations(ctx context.Context, items []PaperVO, detail bool) error {
@@ -107,7 +109,20 @@ func (s *Service) attachObservations(ctx context.Context, items []PaperVO, detai
 			metadata.Review = review
 			metadata.Pipeline = review.Pipeline
 			metadata.Topics = uniqueSorted(matched[o.ID])
-			observation := SourceObservationVO{ObservationInput: metadata, ID: o.ID, ContentHash: o.ContentHash}
+			// 单个来源版本只返回100条发现路径，显式标记截断。
+			hits, err := s.client.GleanSearchHit.Query().Where(gleansearchhit.ObservationID(o.ID)).Order(ent.Desc(gleansearchhit.FieldDiscoveredAt), ent.Desc(gleansearchhit.FieldID)).Limit(101).All(ctx)
+			if err != nil {
+				return bizerrors.WrapDBContext(ctx, err, "load search discovery paths failed")
+			}
+			hasMore := len(hits) > 100
+			if hasMore {
+				hits = hits[:100]
+			}
+			metadata.Discoveries = make([]retrieval.Hit, 0, len(hits))
+			for _, hit := range hits {
+				metadata.Discoveries = append(metadata.Discoveries, retrieval.Hit{RunID: hit.RunID, QueryID: hit.QueryID, QueryVersion: hit.QueryVersion, PlanVersion: hit.PlanVersion, Source: hit.Source, Query: hit.QueryText, Mode: hit.Mode, DiscoveredAt: hit.DiscoveredAt})
+			}
+			observation := SourceObservationVO{ObservationInput: metadata, ID: o.ID, ContentHash: o.ContentHash, DiscoveriesHasMore: hasMore}
 			item.Observations = append(item.Observations, observation)
 			if item.AbstractEnrichment == nil {
 				if selected := selectedStoredHistoricalAbstract(o, metadata); selected != nil && item.DOI == selected.DOI {

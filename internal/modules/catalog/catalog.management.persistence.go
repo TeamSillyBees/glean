@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/teamsillybees/glean/internal/data"
 	"github.com/teamsillybees/glean/internal/data/ent"
@@ -18,6 +19,7 @@ import (
 	"github.com/teamsillybees/glean/internal/modules/bizerrors"
 	platformauth "github.com/teamsillybees/glean/internal/platform/auth"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 func canManage(ctx context.Context) bool {
@@ -205,7 +207,9 @@ func managementError(ctx context.Context, err error) error {
 
 var topicSlugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,79}$`)
 
-func normalizeTopic(input *TopicBody) error {
+func normalizeTopic(input *TopicBody) error { return normalizeTopicInput(input, true) }
+
+func normalizeTopicInput(input *TopicBody, requireSearch bool) error {
 	for _, value := range []string{input.Name, input.Description, input.Rule} {
 		if strings.ContainsRune(value, 0) {
 			return bizerrors.BadRequest("topic text cannot contain NUL")
@@ -240,8 +244,15 @@ func normalizeTopic(input *TopicBody) error {
 		}
 		input.TermGroups[i] = uniqueSorted(input.TermGroups[i])
 	}
-	if len(input.TermGroups) == 0 && !validTopic(input.Slug) && input.SearchEnabled {
-		return bizerrors.BadRequest("enabled custom topic requires keywords")
+	if input.SearchRoutes != nil {
+		if err := retrieval.ValidateRoutes(*input.SearchRoutes, time.Now()); err != nil {
+			return bizerrors.BadRequest(err.Error())
+		}
+		routes := retrieval.NormalizeRoutes(*input.SearchRoutes)
+		input.SearchRoutes = &routes
+	}
+	if requireSearch && len(input.TermGroups) == 0 && (input.SearchRoutes == nil || len(*input.SearchRoutes) == 0) && !validTopic(input.Slug) && input.SearchEnabled {
+		return bizerrors.BadRequest("enabled custom topic requires keywords or search routes")
 	}
 	if input.TermGroups == nil {
 		input.TermGroups = [][]string{}
@@ -249,7 +260,7 @@ func normalizeTopic(input *TopicBody) error {
 	return nil
 }
 func topicVO(t *ent.GleanTopic) TopicVO {
-	return TopicVO{Slug: t.Slug, Name: t.Name, Description: t.Description, Rule: t.Rule, SearchEnabled: t.SearchEnabled, TermGroups: t.TermGroups, Version: t.Version}
+	return TopicVO{Slug: t.Slug, Name: t.Name, Description: t.Description, Rule: t.Rule, SearchEnabled: t.SearchEnabled, TermGroups: t.TermGroups, SearchRoutes: t.SearchRoutes, Version: t.Version}
 }
 func (s *Service) topicConfigs(ctx context.Context) ([]TopicVO, error) {
 	result := append([]TopicVO(nil), topics...)
@@ -286,7 +297,7 @@ func (s *Service) SearchTopicConfigs(ctx context.Context) ([]SearchTopicConfig, 
 	}
 	result := make([]SearchTopicConfig, 0, len(configs))
 	for _, v := range configs {
-		result = append(result, SearchTopicConfig{Slug: v.Slug, SearchEnabled: v.SearchEnabled, TermGroups: v.TermGroups, Version: v.Version})
+		result = append(result, SearchTopicConfig{Slug: v.Slug, SearchEnabled: v.SearchEnabled, TermGroups: v.TermGroups, SearchRoutes: v.SearchRoutes, Version: v.Version})
 	}
 	return result, nil
 }
@@ -303,7 +314,7 @@ func (s *Service) SaveTopic(ctx context.Context, path string, input TopicBody, c
 		}
 		input.Slug = path
 	}
-	if err = normalizeTopic(&input); err != nil {
+	if err = normalizeTopicInput(&input, create); err != nil {
 		return TopicVO{}, err
 	}
 	var result TopicVO
@@ -335,13 +346,27 @@ func (s *Service) SaveTopic(ctx context.Context, path string, input TopicBody, c
 					}
 				}
 			}
-			record, err = c.GleanTopic.Create().SetSlug(input.Slug).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetCreatedBy(uid).SetUpdatedBy(uid).Save(ctx)
+			if err := normalizeTopic(&input); err != nil {
+				return err
+			}
+			routes := []retrieval.Route{}
+			if input.SearchRoutes != nil {
+				routes = *input.SearchRoutes
+			}
+			record, err = c.GleanTopic.Create().SetSlug(input.Slug).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetSearchRoutes(routes).SetCreatedBy(uid).SetUpdatedBy(uid).Save(ctx)
 		} else if err == nil {
 			if create || previous.Version != input.ExpectedVersion {
 				return bizerrors.CatalogConflict()
 			}
 			before = topicVO(previous)
-			record, err = c.GleanTopic.UpdateOneID(previous.ID).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetVersion(previous.Version + 1).SetUpdatedBy(uid).Save(ctx)
+			if input.SearchRoutes == nil {
+				routes := previous.SearchRoutes
+				input.SearchRoutes = &routes
+			}
+			if err := normalizeTopic(&input); err != nil {
+				return err
+			}
+			record, err = c.GleanTopic.UpdateOneID(previous.ID).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetSearchRoutes(*input.SearchRoutes).SetVersion(previous.Version + 1).SetUpdatedBy(uid).Save(ctx)
 		}
 		if err != nil {
 			return err

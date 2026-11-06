@@ -4,22 +4,24 @@ import (
 	"encoding/json"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 	"github.com/teamsillybees/glean/internal/platform/response"
+	"github.com/teamsillybees/glean/internal/retrieval"
 	"time"
 )
 
 // TopicVO 表示兼容内置主题的动态研究方向及真实目录数量。
 type TopicVO struct {
-	SearchEnabled   bool       `json:"searchEnabled"`
-	TermGroups      [][]string `json:"termGroups"`
-	Version         int        `json:"version"`
-	Slug            string     `json:"slug"`
-	Name            string     `json:"name"`
-	Description     string     `json:"description"`
-	Rule            string     `json:"rule"`
-	MembershipCount int        `json:"membershipCount"`
-	HistoricalCount int        `json:"historicalCount"`
-	CandidateCount  int        `json:"candidateCount"`
-	CuratedCount    int        `json:"curatedCount"`
+	SearchEnabled   bool              `json:"searchEnabled"`
+	TermGroups      [][]string        `json:"termGroups"`
+	SearchRoutes    []retrieval.Route `json:"searchRoutes,omitempty"`
+	Version         int               `json:"version"`
+	Slug            string            `json:"slug"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	Rule            string            `json:"rule"`
+	MembershipCount int               `json:"membershipCount"`
+	HistoricalCount int               `json:"historicalCount"`
+	CandidateCount  int               `json:"candidateCount"`
+	CuratedCount    int               `json:"curatedCount"`
 }
 
 // SourceEvidence 保存来源及原始证据，不把接收日期冒充正式发表日期。
@@ -260,6 +262,7 @@ type PublicationEventVO struct {
 
 // ObservationInput 是真实来源向目录提交的版本化证据，不等于科学纳入批准。
 type ObservationInput struct {
+	Discoveries       []retrieval.Hit      `json:"discoveries,omitempty"`
 	Pipeline          json.RawMessage      `json:"pipeline,omitempty"`
 	Kind              string               `json:"kind,omitempty"`
 	AbstractEvidence  *AbstractEvidenceVO  `json:"abstractEvidence,omitempty"`
@@ -314,6 +317,7 @@ type AbstractEnrichmentVO struct {
 
 // SourceObservationVO 是不可覆盖的来源版本及独立审核标记。
 type SourceObservationVO struct {
+	DiscoveriesHasMore bool `json:"discoveriesHasMore"`
 	ObservationInput
 	ID          idgen.ID `json:"id"`
 	ContentHash string   `json:"contentHash"`

@@ -183,6 +183,7 @@ func TestPipelineDTOUsesLatestReviewProjection(t *testing.T) {
 	completed := `{"pipeline":{"status":"needs_human_review"},"summary":"已阅读真实摘要","scientificReviewed":false}`
 	mock.ExpectQuery(`SELECT .*FROM "glean_observation"`).WillReturnRows(sqlmock.NewRows([]string{"id", "paper_id", "observed_at", "metadata", "review"}).AddRow(12, 11, time.Now(), pending, completed))
 	mock.ExpectQuery(`SELECT .*FROM "glean_observation_match"`).WillReturnRows(sqlmock.NewRows([]string{"id", "observation_id", "topic"}).AddRow(13, 12, "biomed-ai"))
+	mock.ExpectQuery(`SELECT .*FROM "glean_search_hit"`).WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	items := []PaperVO{{ID: 11}}
 	require.NoError(t, service.attachObservations(context.Background(), items, true))
 	require.JSONEq(t, `{"status":"needs_human_review"}`, string(items[0].Review.Pipeline))

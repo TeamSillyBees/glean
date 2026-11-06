@@ -21,6 +21,7 @@ import (
 	"github.com/teamsillybees/glean/internal/platform/entx"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 	"github.com/teamsillybees/glean/internal/platform/requestctx"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // TestCatalogManagementPostgres 验证真实数据库的覆盖层、主题、审计、隔离、版本以及来源不变性。
@@ -157,6 +158,31 @@ func TestCatalogManagementPostgres(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, configs, 4)
 	require.Equal(t, "custom-topic", configs[3].Slug)
+
+	routes := []retrieval.Route{{ID: "main", Sources: []string{"pubmed"}, TermGroups: [][]string{{"alpha"}}}}
+	topic, err = service.SaveTopic(manager, "custom-topic", TopicBody{Name: "Routes only", SearchEnabled: true, SearchRoutes: &routes, ExpectedVersion: 1}, false)
+	require.NoError(t, err)
+	require.Equal(t, routes, topic.SearchRoutes)
+	topic, err = service.SaveTopic(manager, "custom-topic", TopicBody{Name: "Legacy client", SearchEnabled: true, ExpectedVersion: 2}, false)
+	require.NoError(t, err)
+	require.Equal(t, routes, topic.SearchRoutes)
+	emptyRoutes := []retrieval.Route{}
+	_, err = service.SaveTopic(manager, "custom-topic", TopicBody{Name: "Invalid clear", SearchEnabled: true, SearchRoutes: &emptyRoutes, ExpectedVersion: 3}, false)
+	require.Equal(t, 400, bizerrors.StatusOf(err))
+	topic, err = service.SaveTopic(manager, "custom-topic", TopicBody{Name: "Legacy keywords", SearchEnabled: true, SearchRoutes: &emptyRoutes, TermGroups: [][]string{{"keyword"}}, ExpectedVersion: 3}, false)
+	require.NoError(t, err)
+	require.Empty(t, topic.SearchRoutes)
+	changes, err := client.GleanCatalogChange.Query().All(ctx)
+	require.NoError(t, err)
+	foundRoutesAudit := false
+	for _, change := range changes {
+		if change.Topic == "custom-topic" && change.After["name"] == "Legacy client" {
+			require.NotEmpty(t, change.Before["searchRoutes"])
+			require.NotEmpty(t, change.After["searchRoutes"])
+			foundRoutesAudit = true
+		}
+	}
+	require.True(t, foundRoutesAudit)
 	page, err = service.Papers(viewer, PaperQuery{Topic: "custom-topic"})
 	require.NoError(t, err)
 	require.Zero(t, page.Total)

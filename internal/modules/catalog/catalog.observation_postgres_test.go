@@ -20,6 +20,7 @@ import (
 	"github.com/teamsillybees/glean/internal/platform/entx"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 	"github.com/teamsillybees/glean/internal/platform/requestctx"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // TestCatalogLiveObservationPostgres 验证真实来源事件持久化、版本重试、历史保护及 mock 审核隔离。
@@ -73,6 +74,40 @@ func TestCatalogLiveObservationPostgres(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, second.Created)
 	require.Equal(t, first.ObservationID, second.ObservationID)
+
+	input.Discoveries = []retrieval.Hit{{RunID: input.RunID, QueryID: "main", QueryVersion: "v1", PlanVersion: "plan1", Source: input.Source, Query: "alpha", Mode: "boolean", DiscoveredAt: input.ObservedAt}}
+	for i := 0; i < 2; i++ {
+		replay, err := service.IngestObservation(operator, input)
+		require.NoError(t, err)
+		require.False(t, replay.Created)
+		require.Equal(t, first.ObservationID, replay.ObservationID)
+	}
+	hits, err := client.GleanSearchHit.Query().All(ctx)
+	require.NoError(t, err)
+	require.Len(t, hits, 1)
+	require.Equal(t, first.ObservationID, hits[0].ObservationID)
+	require.Equal(t, "alpha", hits[0].QueryText)
+	input.Discoveries[0].QueryID = "alternative"
+	_, err = service.IngestObservation(operator, input)
+	require.NoError(t, err)
+	hitCount, err := client.GleanSearchHit.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, hitCount)
+	savedObservation, err := client.GleanObservation.Get(ctx, first.ObservationID)
+	require.NoError(t, err)
+	require.NotContains(t, string(savedObservation.Metadata), "discoveries")
+	discoveryView, err := service.Paper(requestctx.WithUserID(ctx, "7"), first.PaperID)
+	require.NoError(t, err)
+	foundHits := false
+	for _, observation := range discoveryView.Observations {
+		if observation.ID == first.ObservationID {
+			require.Len(t, observation.Discoveries, 2)
+			require.False(t, observation.DiscoveriesHasMore)
+			foundHits = true
+		}
+	}
+	require.True(t, foundHits)
+	input.Discoveries = nil
 	input.Version = "v2"
 	input.Title = "New corrected title from source"
 	input.Raw = json.RawMessage(`{"title":"New corrected title from source","version":2}`)

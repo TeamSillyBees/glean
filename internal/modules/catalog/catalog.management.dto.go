@@ -5,6 +5,7 @@ import (
 
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 	"github.com/teamsillybees/glean/internal/platform/response"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // ManualReviewVO 为主题内人工决定，不覆盖原始分类。
@@ -53,13 +54,14 @@ type CorrectionVO struct {
 
 // TopicBody 保存简单主题配置；组内 OR、组间 AND。
 type TopicBody struct {
-	Slug            string     `json:"slug,omitempty" maxLength:"80"`
-	Name            string     `json:"name" minLength:"1" maxLength:"100"`
-	Description     string     `json:"description" maxLength:"2000"`
-	Rule            string     `json:"rule" maxLength:"4000"`
-	SearchEnabled   bool       `json:"searchEnabled"`
-	TermGroups      [][]string `json:"termGroups" maxItems:"10"`
-	ExpectedVersion int        `json:"expectedVersion" minimum:"0"`
+	Slug            string             `json:"slug,omitempty" maxLength:"80"`
+	Name            string             `json:"name" minLength:"1" maxLength:"100"`
+	Description     string             `json:"description" maxLength:"2000"`
+	Rule            string             `json:"rule" maxLength:"4000"`
+	SearchEnabled   bool               `json:"searchEnabled"`
+	TermGroups      [][]string         `json:"termGroups" maxItems:"10"`
+	SearchRoutes    *[]retrieval.Route `json:"searchRoutes,omitempty"`
+	ExpectedVersion int                `json:"expectedVersion" minimum:"0"`
 }
 
 // SearchTopicConfig 是给采集装配层的主题快照；内置主题空词组表示默认模板。
@@ -67,6 +69,7 @@ type SearchTopicConfig struct {
 	Slug          string
 	SearchEnabled bool
 	TermGroups    [][]string
+	SearchRoutes  []retrieval.Route `json:"searchRoutes,omitempty"`
 	Version       int
 }
 
