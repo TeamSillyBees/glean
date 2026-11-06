@@ -163,6 +163,29 @@ async function signIn(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole('heading', { name: /^(论文工作台|已隐藏的论文)$/, level: 1 })
 }
 describe('Glean query workspace', () => {
+  it('separates sign-in credentials from ordinary navigation and search', async () => {
+    const user = mount()
+    const login = screen.getByLabelText('密码').closest('form')!
+    expect(login).toHaveAttribute('method', 'post')
+    expect(screen.getByLabelText('用户名')).toHaveAttribute('name', 'username')
+    expect(screen.getByLabelText('密码')).toHaveAttribute('name', 'password')
+    await signIn(user)
+    expect(login).not.toBeInTheDocument()
+    expect(document.querySelector('input[type="password"]')).toBeNull()
+    const search = screen.getByRole('searchbox', { name: '搜索论文或来源' })
+    expect(search).toHaveAttribute('data-1p-ignore')
+    for (const button of within(
+      screen.getByRole('complementary', { name: '工作台导航' }),
+    ).getAllByRole('button')) {
+      expect(button).toHaveAttribute('type', 'button')
+    }
+    await user.click(screen.getByRole('button', { name: '来源健康', exact: true }))
+    await screen.findByRole('heading', { name: '来源健康', level: 1 })
+    await user.click(screen.getByRole('button', { name: '论文工作台', exact: true }))
+    expect(document.querySelector('input[type="password"]')).toBeNull()
+    expect(paths.filter((p) => p === '/api/v1/auth/login')).toHaveLength(1)
+    expect(paths).not.toContain('/api/v1/auth/password')
+  })
   it.each([true, false])(
     'explains a confirmed empty topic without inferring scan history (enabled: %s)',
     async (enabled) => {
@@ -489,7 +512,7 @@ describe('Glean query workspace', () => {
   it('queries literal search, shows an honest empty state, and clears it', async () => {
     const user = mount()
     await signIn(user)
-    const input = screen.getByRole('textbox', { name: '搜索论文或来源' })
+    const input = screen.getByRole('searchbox', { name: '搜索论文或来源' })
     fireEvent.change(input, { target: { value: '不存在' } })
     await user.click(screen.getByRole('button', { name: '搜索' }))
     expect(await screen.findByText('暂时没有匹配的论文')).toBeInTheDocument()
@@ -536,7 +559,7 @@ describe('Glean query workspace', () => {
     await waitFor(() => expect(screen.queryByTestId('paper-card')).not.toBeInTheDocument())
     await user.click(within(dialog).getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveFocus()
+    expect(screen.getByRole('searchbox', { name: '搜索论文或来源' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: '已隐藏' }))
     await user.click(
       await screen.findByRole('button', { name: new RegExp(`查看 ${paper.titleZh}`) }),
@@ -547,7 +570,7 @@ describe('Glean query workspace', () => {
     await waitFor(() => expect(screen.queryByTestId('paper-card')).not.toBeInTheDocument())
     await user.click(within(dialog).getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveFocus()
+    expect(screen.getByRole('searchbox', { name: '搜索论文或来源' })).toHaveFocus()
   })
   it('restores saved filters before its first paper request, and saves explicit preferences', async () => {
     saved = { topic: 'llm-agent', q: 'agent', hidden: 'exclude', year: '2026' }
@@ -646,7 +669,7 @@ describe('Glean query workspace', () => {
     const user = mount()
     await signIn(user)
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
-    expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveFocus()
+    expect(screen.getByRole('searchbox', { name: '搜索论文或来源' })).toHaveFocus()
   })
 })
 
@@ -759,7 +782,7 @@ describe('paper deep links', () => {
     listTotal = 41
     const user = mount()
     await signIn(user)
-    fireEvent.change(screen.getByRole('textbox', { name: '搜索论文或来源' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索论文或来源' }), {
       target: { value: 'private search' },
     })
     await user.click(screen.getByRole('button', { name: '搜索' }))
@@ -771,7 +794,7 @@ describe('paper deep links', () => {
     expect(window.location.search).toBe('?paper=123')
     act(() => window.history.back())
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('textbox', { name: '搜索论文或来源' })).toHaveValue('private search')
+    expect(screen.getByRole('searchbox', { name: '搜索论文或来源' })).toHaveValue('private search')
     expect(screen.getByText('2 / 3')).toBeInTheDocument()
     act(() => window.history.forward())
     const dialog = await screen.findByRole('dialog', { name: '论文详情' })

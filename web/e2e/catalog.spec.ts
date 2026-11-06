@@ -48,7 +48,7 @@ async function navigate(page: Page, name: string) {
 }
 
 async function search(page: Page, query: string) {
-  await page.getByRole('textbox', { name: '搜索论文或来源' }).fill(query)
+  await page.getByRole('searchbox', { name: '搜索论文或来源' }).fill(query)
   const response = catalogResponse(page, 'papers', { q: query })
   await page.getByRole('button', { name: '搜索', exact: true }).click()
   return data<PaperPage>(await response)
@@ -127,7 +127,7 @@ async function responsiveCatalog(page: Page, info: TestInfo) {
       await page.setViewportSize({ width, height: 1000 })
       await page.evaluate(() => window.scrollTo(0, 0))
       await noHorizontalOverflow(page)
-      const search = page.getByRole('textbox', { name: '搜索论文或来源' })
+      const search = page.getByRole('searchbox', { name: '搜索论文或来源' })
       const paper = page.getByTestId('paper-card').first()
       for (const element of [search, paper]) {
         await expect(element).toBeVisible()
@@ -273,7 +273,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await page.goBack()
   await expect(drawer).toBeHidden()
   expect(new URL(page.url()).searchParams.has('paper')).toBe(false)
-  await expect(page.getByRole('textbox', { name: '搜索论文或来源' })).toHaveValue(query)
+  await expect(page.getByRole('searchbox', { name: '搜索论文或来源' })).toHaveValue(query)
   await expect(page.getByTestId('paper-card')).toHaveCount(found.items.length)
   await page.goForward()
   await expect(drawer).toBeVisible()
@@ -327,7 +327,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   ).toBeHidden()
   await drawer.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(drawer).toBeHidden()
-  await expect(page.getByRole('textbox', { name: '搜索论文或来源' })).toBeFocused()
+  await expect(page.getByRole('searchbox', { name: '搜索论文或来源' })).toBeFocused()
   // A copied link survives a fresh login/reload and reads hidden personal state
   // without automatically restoring it. No list filter is needed to reach it.
   const linkedPage = await page.context().newPage()
@@ -374,7 +374,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   ).toBeHidden()
   await drawer.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(drawer).toBeHidden()
-  await expect(page.getByRole('textbox', { name: '搜索论文或来源' })).toBeFocused()
+  await expect(page.getByRole('searchbox', { name: '搜索论文或来源' })).toBeFocused()
 
   // Tokens are memory-only: a reload requires real login, but PostgreSQL keeps read state.
   await page.reload()
@@ -519,7 +519,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   expect(venues.items.length).toBeGreaterThan(0)
   const venue = venues.items[0]
   const venueSearchResponse = catalogResponse(page, 'venues', { q: venue.name })
-  await page.getByRole('textbox', { name: '搜索期刊或会议', exact: true }).fill(venue.name)
+  await page.getByRole('searchbox', { name: '搜索期刊或会议', exact: true }).fill(venue.name)
   await page.getByRole('button', { name: '搜索', exact: true }).click()
   expect(
     (await data<{ items: Venue[] }>(await venueSearchResponse)).items.some(

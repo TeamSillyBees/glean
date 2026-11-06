@@ -135,7 +135,6 @@ function Login({
   const mutation = useMutation({
     mutationFn: () => api.login(username.trim(), password),
     onSuccess: (user) => {
-      setPassword('')
       onLogin(user)
     },
   })
@@ -192,17 +191,26 @@ function Login({
               会话已结束，请重新登录。你的阅读状态已保存在后端。
             </p>
           )}
-          <form onSubmit={submit} className="space-y-5">
+          <form
+            id="glean-sign-in"
+            name="sign-in"
+            method="post"
+            action="/api/v1/auth/login"
+            onSubmit={submit}
+            className="space-y-5"
+          >
             <label className="block text-sm font-medium">
               用户名
               <input
                 className="form-input mt-2"
                 autoComplete="username"
+                id="sign-in-username"
+                name="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="输入你的用户名"
                 required
-                disabled={mutation.isPending}
+                readOnly={mutation.isPending}
               />
             </label>
             <label className="block text-sm font-medium">
@@ -211,11 +219,13 @@ function Login({
                 className="form-input mt-2"
                 type="password"
                 autoComplete="current-password"
+                id="sign-in-password"
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="输入账户密码"
                 required
-                disabled={mutation.isPending}
+                readOnly={mutation.isPending}
               />
             </label>
             {mutation.isError && (
@@ -285,6 +295,7 @@ function FilterPanel({
           筛选条件
         </h2>
         <button
+          type="button"
           onClick={onReset}
           className="rounded text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
@@ -303,7 +314,7 @@ function FilterPanel({
       {failed && (
         <div role="alert" className="px-5 pt-4 text-xs text-amber-800">
           筛选项读取失败。
-          <button onClick={retry} className="ml-2 rounded text-primary underline">
+          <button type="button" onClick={retry} className="ml-2 rounded text-primary underline">
             重新读取
           </button>
         </div>
@@ -580,6 +591,7 @@ function WorkspaceReady({
           const Icon = Object.hasOwn(topicIcons, slug) ? topicIcons[slug] : Layers3
           return (
             <button
+              type="button"
               key={slug}
               onClick={() => chooseTopic(slug as TopicSlug)}
               className={cn('topic-button', filters.topic === slug && 'active')}
@@ -638,6 +650,7 @@ function WorkspaceReady({
       )}
       <div className="sidebar-account">
         <button
+          type="button"
           onClick={() => {
             setSettings(true)
             setMobileNav(false)
@@ -744,10 +757,15 @@ function WorkspaceReady({
             </>
           )}
           {(view === 'papers' || view === 'venues') && (
-            <form onSubmit={submitSearch} className="search-bar">
+            <form id="catalog-search" role="search" onSubmit={submitSearch} className="search-bar">
               <Search className="size-[18px] shrink-0 text-muted-foreground" />
               <input
                 ref={searchRef}
+                type="search"
+                name="q"
+                id="catalog-search-query"
+                autoComplete="off"
+                data-1p-ignore
                 value={view === 'venues' ? venueSearch : search}
                 maxLength={300}
                 onChange={(event) =>
@@ -972,6 +990,7 @@ function WorkspaceReady({
                       />
                     ))}
                     <button
+                      type="button"
                       onClick={reset}
                       className="p-1 text-[11px] text-muted-foreground hover:text-primary"
                     >
@@ -982,7 +1001,11 @@ function WorkspaceReady({
                 {facetQuery.isError && (
                   <p role="alert" className="mb-3 text-xs text-amber-800">
                     分类选项暂时不可用。
-                    <button className="ml-2 underline" onClick={() => facetQuery.refetch()}>
+                    <button
+                      type="button"
+                      className="ml-2 underline"
+                      onClick={() => facetQuery.refetch()}
+                    >
                       重试
                     </button>
                   </p>
@@ -1264,6 +1287,7 @@ function WorkspaceReady({
       </Dialog>
       {passwordChange && (
         <PasswordChangeDialog
+          username={user.username}
           onClose={() => {
             setPasswordChange(false)
             setSettings(true)
@@ -1281,7 +1305,12 @@ function WorkspaceReady({
         >
           <Check className="size-4 shrink-0 text-emerald-200" />
           <span>{message}</span>
-          <button onClick={() => setMessage('')} aria-label="关闭提示" className="ml-2">
+          <button
+            type="button"
+            onClick={() => setMessage('')}
+            aria-label="关闭提示"
+            className="ml-2"
+          >
             <X className="size-3.5" />
           </button>
         </div>
@@ -1327,6 +1356,7 @@ function NavButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn('nav-button', active && 'active')}
       aria-current={active ? 'page' : undefined}
@@ -1342,6 +1372,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
     <span className="inline-flex max-w-full items-center gap-1.5 rounded border border-primary/20 bg-accent px-2.5 py-1 text-xs text-accent-foreground">
       <span className="truncate">{label}</span>
       <button
+        type="button"
         aria-label={`移除 ${label}`}
         onClick={onRemove}
         className="filter-chip-remove rounded p-0.5 hover:bg-primary/10"

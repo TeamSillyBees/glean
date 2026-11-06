@@ -6,9 +6,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dial
 export function PasswordChangeDialog({
   onClose,
   onChanged,
+  username,
 }: {
   onClose: () => void
   onChanged: () => void
+  username?: string
 }) {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -88,13 +90,32 @@ export function PasswordChangeDialog({
         <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
           修改后所有旧会话都会失效，需要使用新密码重新登录。新密码至少 8 个字符。
         </DialogDescription>
-        <form className="mt-6 space-y-4" onSubmit={submit} aria-busy={pending}>
+        <form
+          id="glean-change-password"
+          name="change-password"
+          method="post"
+          action="/api/v1/auth/password"
+          className="mt-6 space-y-4"
+          onSubmit={submit}
+          aria-busy={pending}
+        >
+          <input
+            type="text"
+            id="change-password-username"
+            name="username"
+            autoComplete="username"
+            value={username || ''}
+            readOnly
+            hidden
+          />
           <label className="block text-sm font-medium">
             当前密码
             <input
               className="form-input mt-2"
               type="password"
               autoComplete="current-password"
+              id="change-password-current"
+              name="current-password"
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
               required
@@ -107,6 +128,8 @@ export function PasswordChangeDialog({
               className="form-input mt-2"
               type="password"
               autoComplete="new-password"
+              id="change-password-new"
+              name="new-password"
               value={next}
               onChange={(e) => setNext(e.target.value)}
               required
@@ -119,6 +142,8 @@ export function PasswordChangeDialog({
               className="form-input mt-2"
               type="password"
               autoComplete="new-password"
+              id="change-password-confirm"
+              name="confirm-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               required
