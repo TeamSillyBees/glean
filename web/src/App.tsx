@@ -1155,7 +1155,7 @@ function WorkspaceReady({
           ) : view === 'quarantine' ? (
             <QuarantineView key={quarantineSource} initialSource={quarantineSource} />
           ) : view === 'runs' ? (
-            <RunsView />
+            <RunsView canManage={canManage} />
           ) : view === 'templates' ? (
             <TemplatesView topic={filters.topic} />
           ) : (

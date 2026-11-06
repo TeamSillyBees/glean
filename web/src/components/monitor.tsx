@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Activity, FileCode2, RefreshCw, ShieldCheck } from 'lucide-react'
 import { api, request } from '../lib/api'
 import { date, number, topicLabels } from '../lib/utils'
@@ -8,6 +9,7 @@ import { Button } from './ui/button'
 import type { Run } from './run-types'
 import { QueryCoverage } from './query-coverage'
 import { RunRecovery } from './run-recovery'
+import { RunAudit } from './run-audit'
 export { SourcesView } from './source-health'
 export { FreshnessStrip } from './freshness-strip'
 interface QueryPreview {
@@ -58,7 +60,19 @@ const statusLabels: Record<string, string> = {
   partial: '部分完成',
   paused: '已暂停',
 }
-export function RunsView() {
+export function RunsView({ canManage = false }: { canManage?: boolean }) {
+  const [showArchive, setShowArchive] = useState(false)
+  const archive = useInfiniteQuery({
+    queryKey: ['runs-archive'],
+    enabled: showArchive,
+    initialPageParam: '',
+    queryFn: ({ signal, pageParam }) =>
+      request<{ items: Run[]; nextBefore: string | null }>(
+        `/api/v1/monitor/archive/runs?limit=20${pageParam ? `&before=${encodeURIComponent(pageParam)}` : ''}`,
+        { signal },
+      ),
+    getNextPageParam: (page) => page.nextBefore ?? undefined,
+  })
   const query = useQuery({
     queryKey: ['runs'],
     queryFn: ({ signal }) => request<{ items: Run[] }>('/api/v1/monitor/runs', { signal }),
@@ -68,7 +82,9 @@ export function RunsView() {
   if (query.isLoading) return <Loading label="正在读取扫描记录…" />
   if (query.isError && !query.data)
     return <ErrorState error={query.error} retry={() => query.refetch()} />
-  const items = query.data?.items || []
+  const items = [...(query.data?.items || [])]
+  for (const page of archive.data?.pages ?? [])
+    for (const run of page.items) if (!items.some((item) => item.id === run.id)) items.push(run)
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -97,7 +113,7 @@ export function RunsView() {
         </div>
       )}
       <p className="text-sm leading-6 text-muted-foreground">
-        采集、模型占位与目录写入分开记录；模型阶段尚待真实模型接入，不代表科学审读。
+        采集、模型处理与目录写入分开记录；模型阶段状态不代表科学审读或正式纳入。
       </p>
       {!items.length ? (
         <Empty
@@ -137,6 +153,7 @@ export function RunsView() {
               </Badge>
               <Badge tone="violet">{run.mode === 'mock' ? '历史模拟运行' : '真实来源采集'}</Badge>
             </div>
+            <RunAudit run={run} canManage={canManage} />
             {run.status === 'completed_with_gaps' && (
               <p className="mt-4 text-sm leading-6 text-amber-800">
                 本次运行已结束，但部分计划路线未执行，不代表整个检索计划已覆盖。
@@ -200,7 +217,7 @@ export function RunsView() {
                       采集 {progress.acquired ? '✓' : '—'}
                     </Badge>
                     <Badge tone={progress.reviewed ? 'green' : 'neutral'}>
-                      模型占位 {progress.reviewed ? '✓' : '—'}
+                      初步审核 {progress.reviewed ? '✓' : '—'}
                     </Badge>
                     <Badge tone={progress.published ? 'green' : 'neutral'}>
                       目录写入 {progress.published ? '✓' : '—'}
@@ -221,6 +238,18 @@ export function RunsView() {
           </section>
         ))
       )}
+      {archive.isError && <ErrorState error={archive.error} retry={() => archive.refetch()} />}
+      <Button
+        variant="outline"
+        disabled={archive.isFetching || (showArchive && !archive.hasNextPage)}
+        onClick={() => (showArchive ? archive.fetchNextPage() : setShowArchive(true))}
+      >
+        {archive.isFetching
+          ? '正在读取归档…'
+          : showArchive && !archive.hasNextPage
+            ? '已显示全部归档'
+            : '读取更早的检索归档'}
+      </Button>
     </div>
   )
 }

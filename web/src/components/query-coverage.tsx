@@ -88,6 +88,11 @@ export function QueryCoverage({ queries }: { queries?: Record<string, QueryProgr
             {item.lastError && (
               <p className="break-words text-xs text-amber-800">最近查询错误：{item.lastError}</p>
             )}
+            {item.lastError?.startsWith('protocol_') && (
+              <p className="text-xs text-amber-800">
+                已达到采集预算，原查询和游标保留。队列排空后可恢复；管理员可在本运行下方提高操作额度，再按原命令续跑。
+              </p>
+            )}
             {item.warnings?.map((warning, index) => (
               <p key={index} className="break-words text-xs text-amber-800">
                 来源限制：{warning}

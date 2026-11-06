@@ -15,7 +15,24 @@ export interface Progress {
   lastError?: string
   window: { start: string; end: string }
 }
+export interface AcquisitionBudget {
+  max_requests: number
+  max_pages: number
+  max_records: number
+  max_queue: number
+  max_history_days: number
+}
 export interface Run {
+  searchTemplates?: { topic: string; protocol?: { budget: AcquisitionBudget } }[]
+  budgetChanges?: {
+    revision: number
+    topic: string
+    before: AcquisitionBudget
+    after: AcquisitionBudget
+    reason: string
+    operatorId: string
+    changedAt: string
+  }[]
   id: string
   retryOf?: string
   retriedBy?: string
