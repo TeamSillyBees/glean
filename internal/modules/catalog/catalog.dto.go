@@ -220,14 +220,28 @@ type paperRequest struct {
 }
 type paperResponse struct{ Body response.SuccessVO[PaperVO] }
 type facetsResponse struct{ Body response.SuccessVO[FacetsVO] }
-type venuesRequest struct {
-	Q     string `query:"q" maxLength:"300"`
-	Topic string `query:"topic" maxLength:"80"`
+
+// VenueQuery 定义期刊会议的服务端分页、筛选和指标排序。
+type VenueQuery struct {
+	Q        string `query:"q" maxLength:"300"`
+	Topic    string `query:"topic" maxLength:"80"`
+	Kind     string `query:"kind" enum:",journal,conference"`
+	Sort     string `query:"sort" default:"jif_desc" enum:"jif_desc,jif_asc,name"`
+	Page     int    `query:"page" default:"1" minimum:"1" maximum:"100000"`
+	PageSize int    `query:"pageSize" default:"20" minimum:"1" maximum:"100"`
 }
+
+// VenuePageVO 只返回当前页的版本化指标记录与筛选后的总数。
+type VenuePageVO struct {
+	Items    []VenueVO `json:"items"`
+	Total    int       `json:"total"`
+	Page     int       `json:"page"`
+	PageSize int       `json:"pageSize"`
+}
+
+type venuesRequest struct{ VenueQuery }
 type venuesResponse struct {
-	Body response.SuccessVO[struct {
-		Items []VenueVO `json:"items"`
-	}]
+	Body response.SuccessVO[VenuePageVO]
 }
 type preferenceRequest struct{ Body PreferenceVO }
 type preferenceResponse struct {

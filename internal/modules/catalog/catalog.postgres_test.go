@@ -128,9 +128,9 @@ func TestCatalogPostgresEndToEnd(t *testing.T) {
 	for _, version := range []string{"2025", "2026", "2026"} {
 		require.NoError(t, service.RegisterVenue(ctx, VenueVO{Name: "Evidence Journal", RegistryVersion: version, QualificationStatus: "pending"}))
 	}
-	venues, err := service.Venues(ctx, "Evidence", "")
+	venues, err := service.Venues(ctx, VenueQuery{Q: "Evidence"})
 	require.NoError(t, err)
-	require.Len(t, venues, 2)
+	require.Len(t, venues.Items, 2)
 
 	// 真实来源样本直接经过同一服务写入并重放，覆盖 DTO 与 PostgreSQL JSONB 数组筛选。
 	fixture := baselineFixtureRecords(t)

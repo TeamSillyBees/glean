@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Activity, FileCode2, RefreshCw, ShieldCheck } from 'lucide-react'
-import { api, request } from '../lib/api'
+import { request } from '../lib/api'
 import { date, number, topicLabels } from '../lib/utils'
 import type { TopicSlug } from '../lib/types'
 import { Badge, Empty, ErrorState, Loading } from './common'
@@ -41,11 +41,6 @@ interface SearchTemplate {
 }
 const validDate = (value?: string) =>
   value && !value.startsWith('0001-') ? date(value) : '尚未建立'
-const venueStatusLabels: Record<string, string> = {
-  verified: '已核验',
-  pending: '待核验',
-  'historical-curated-discovery': '历史精选发现目标 · 当前资格待核',
-}
 const statusLabels: Record<string, string> = {
   completed: '已完成',
   completed_with_gaps: '已结束 · 存在未执行路线',
@@ -381,110 +376,6 @@ export function TemplatesView({ topic }: { topic: TopicSlug }) {
           </section>
         ))
       )}
-    </div>
-  )
-}
-export function VenuesView({ topic, q }: { topic: TopicSlug; q: string }) {
-  const query = useQuery({
-    queryKey: ['venues', topic, q],
-    queryFn: ({ signal }) => api.venues(topic, q, signal),
-  })
-  if (query.isLoading) return <Loading />
-  if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />
-  const items = query.data?.items || []
-  return (
-    <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {number(items.length)} 条期刊 / 会议证据记录（含不同版本）
-        </p>
-        <Badge tone="violet">版本化注册表</Badge>
-      </div>
-      {!items.length ? (
-        <Empty
-          title="暂无匹配的期刊或会议"
-          description="已核验的来源与指标会显示在这里；历史分类不会被自动覆盖。"
-        />
-      ) : (
-        <>
-          <div className="space-y-3 md:hidden">
-            {items.map((venue) => (
-              <section key={venue.id} className="min-w-0 rounded-xl border bg-card p-4 sm:p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="text-sm font-semibold leading-6">{venue.name}</h2>
-                  <Badge>{venue.kind || '待核验'}</Badge>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {venue.jif != null && venue.jif > 0 && (
-                    <Badge tone="violet">期刊影响因子 {venue.jif}</Badge>
-                  )}
-                  {venue.ccf && <Badge tone="violet">CCF 会议评级 {venue.ccf}</Badge>}
-                  {!venue.jif && !venue.ccf && <Badge>指标待核验</Badge>}
-                  <Badge>
-                    {venue.metricYear ? `${venue.metricYear} 年指标` : '指标年份待核验'}
-                  </Badge>
-                </div>
-                <p className="mt-4 break-words text-sm leading-6 text-muted-foreground">
-                  {venue.source || '来源待补充'} · {venue.registryVersion || '版本待补充'}
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {venueStatusLabels[venue.qualificationStatus] ||
-                    venue.qualificationStatus ||
-                    '待核验'}
-                </p>
-              </section>
-            ))}
-          </div>
-          <div className="hidden overflow-x-auto rounded-xl border bg-card md:block">
-            <table className="w-full min-w-[660px] text-left">
-              <thead className="border-b bg-secondary/50 text-xs text-muted-foreground">
-                <tr>
-                  {[
-                    '期刊 / 会议',
-                    '类型',
-                    '期刊影响因子 / CCF 会议评级',
-                    '指标年份',
-                    '核验状态',
-                  ].map((label) => (
-                    <th key={label} className="px-5 py-4 font-medium">
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((venue) => (
-                  <tr key={venue.id} className="border-b last:border-0 hover:bg-secondary/30">
-                    <td className="max-w-80 break-words px-5 py-4">
-                      <div className="text-sm font-semibold">{venue.name}</div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {venue.source || '来源待补充'} · {venue.registryVersion || '版本待补充'}
-                      </p>
-                    </td>
-                    <td className="px-5 text-xs text-muted-foreground">{venue.kind || '待核验'}</td>
-                    <td className="px-5 text-sm font-medium tabular-nums">
-                      {venue.jif != null && venue.jif > 0 ? venue.jif : venue.ccf || '待核验'}
-                    </td>
-                    <td className="px-5 text-xs text-muted-foreground">
-                      {venue.metricYear || '—'}
-                    </td>
-                    <td className="px-5">
-                      <Badge tone={venue.qualificationStatus === 'verified' ? 'green' : 'neutral'}>
-                        {venueStatusLabels[venue.qualificationStatus] ||
-                          venue.qualificationStatus ||
-                          '待核验'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-      <p className="mt-4 text-sm leading-6 text-muted-foreground">
-        指标变化不会回写历史主题归属。缺失的期刊影响因子、CCF 会议评级和指标年份均保持待核验。
-      </p>
     </div>
   )
 }

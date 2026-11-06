@@ -41,13 +41,11 @@ func (h *Handler) facets(ctx context.Context, input *papersRequest) (*facetsResp
 	return &facetsResponse{Body: response.OK(ctx, result)}, nil
 }
 func (h *Handler) venues(ctx context.Context, input *venuesRequest) (*venuesResponse, error) {
-	items, err := h.service.Venues(ctx, input.Q, input.Topic)
+	page, err := h.service.Venues(ctx, input.VenueQuery)
 	if err != nil {
 		return nil, err
 	}
-	return &venuesResponse{Body: response.OK(ctx, struct {
-		Items []VenueVO `json:"items"`
-	}{Items: items})}, nil
+	return &venuesResponse{Body: response.OK(ctx, page)}, nil
 }
 func (h *Handler) preferences(ctx context.Context, _ *struct{}) (*preferenceResponse, error) {
 	result, err := h.service.Preferences(ctx)

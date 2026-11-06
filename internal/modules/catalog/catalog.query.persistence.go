@@ -364,29 +364,55 @@ func (s *Service) paperVOs(ctx context.Context, papers []*ent.GleanPaper, uid id
 	return result, nil
 }
 
-// Venues 返回已保存的版本化资格证据。
-func (s *Service) Venues(ctx context.Context, q, topic string) ([]VenueVO, error) {
-	if err := s.topicExists(ctx, topic); err != nil {
-		return nil, err
+// Venues 分页返回已保存的资格证据，默认影响因子降序，缺失指标始终排在最后。
+func (s *Service) Venues(ctx context.Context, q VenueQuery) (VenuePageVO, error) {
+	if q.Page == 0 {
+		q.Page = 1
+	}
+	if q.PageSize == 0 {
+		q.PageSize = 20
+	}
+	if q.Sort == "" {
+		q.Sort = "jif_desc"
+	}
+	if q.Page < 1 || q.Page > 100000 || q.PageSize < 1 || q.PageSize > 100 || (q.Sort != "jif_desc" && q.Sort != "jif_asc" && q.Sort != "name") || (q.Kind != "" && q.Kind != "journal" && q.Kind != "conference") {
+		return VenuePageVO{}, bizerrors.BadRequest("invalid venue pagination or sort")
+	}
+	if err := s.topicExists(ctx, q.Topic); err != nil {
+		return VenuePageVO{}, err
 	}
 	query := s.client.GleanVenue.Query()
-	if q != "" {
-		query.Where(gleanvenue.NameContainsFold(q))
+	if q.Q != "" {
+		query.Where(gleanvenue.NameContainsFold(strings.TrimSpace(q.Q)))
 	}
-	if topic != "" {
+	if q.Kind != "" {
+		query.Where(gleanvenue.KindEQ(q.Kind))
+	}
+	if q.Topic != "" {
 		query.Where(func(sel *sql.Selector) {
-			sel.Where(sql.Or(sqljson.ValueContains(sel.C(gleanvenue.FieldEligibleTopics), topic), sqljson.ValueContains(sel.C(gleanvenue.FieldEvidence), map[string][]string{"sourceTopics": {topic}})))
+			sel.Where(sql.Or(sqljson.ValueContains(sel.C(gleanvenue.FieldEligibleTopics), q.Topic), sqljson.ValueContains(sel.C(gleanvenue.FieldEvidence), map[string][]string{"sourceTopics": {q.Topic}})))
 		})
 	}
-	records, err := query.Order(ent.Asc(gleanvenue.FieldName), ent.Desc(gleanvenue.FieldMetricYear), ent.Desc(gleanvenue.FieldRegistryVersion)).All(ctx)
+	total, err := query.Clone().Count(ctx)
 	if err != nil {
-		return nil, bizerrors.WrapDBContext(ctx, err, "load venue registry failed")
+		return VenuePageVO{}, bizerrors.WrapDBContext(ctx, err, "count venue registry failed")
+	}
+	if q.Sort == "jif_desc" {
+		query.Order(gleanvenue.ByJif(sql.OrderDesc(), sql.OrderNullsLast()))
+	}
+	if q.Sort == "jif_asc" {
+		query.Order(gleanvenue.ByJif(sql.OrderAsc(), sql.OrderNullsLast()))
+	}
+	// ID 作为最终排序键，保证相同指标与版本跨页时不会重复或遗漏。
+	records, err := query.Order(ent.Asc(gleanvenue.FieldName), ent.Desc(gleanvenue.FieldMetricYear), ent.Desc(gleanvenue.FieldRegistryVersion), ent.Desc(gleanvenue.FieldID)).Limit(q.PageSize).Offset((q.Page - 1) * q.PageSize).All(ctx)
+	if err != nil {
+		return VenuePageVO{}, bizerrors.WrapDBContext(ctx, err, "load venue registry failed")
 	}
 	result := make([]VenueVO, 0, len(records))
 	for _, v := range records {
 		result = append(result, VenueVO{ISSNs: v.Issns, Aliases: v.Aliases, ID: v.ID, Name: v.Name, Kind: v.Kind, JIF: v.Jif, CCF: v.Ccf, MetricYear: v.MetricYear, RegistryVersion: v.RegistryVersion, Source: v.Source, Evidence: v.Evidence, EligibleTopics: v.EligibleTopics, QualificationStatus: v.QualificationStatus})
 	}
-	return result, nil
+	return VenuePageVO{Items: result, Total: total, Page: q.Page, PageSize: q.PageSize}, nil
 }
 
 // Facets 在数据库过滤后的集合上聚合，每个值按全局论文标识去重。

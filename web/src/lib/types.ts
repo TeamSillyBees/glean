@@ -170,6 +170,20 @@ export interface Venue {
   eligibleTopics: TopicSlug[]
   qualificationStatus: string
 }
+export interface VenueQuery {
+  topic: string
+  q: string
+  page: number
+  pageSize: number
+  kind: '' | 'journal' | 'conference'
+  sort: 'jif_desc' | 'jif_asc' | 'name'
+}
+export interface VenuePage {
+  items: Venue[]
+  total: number
+  page: number
+  pageSize: number
+}
 export interface Filters {
   topic: TopicSlug
   collectionScope: 'curated' | 'pending' | 'excluded' | 'all'

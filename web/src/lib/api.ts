@@ -13,7 +13,8 @@ import type {
   Preferences,
   ReadStatus,
   Topic,
-  Venue,
+  VenueQuery,
+  VenuePage,
 } from './types'
 import { encodeFilters } from './filters'
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
@@ -238,8 +239,8 @@ export const api = {
     request<Paper>(`/api/v1/catalog/papers/${encodeURIComponent(id)}`, { signal }),
   facets: (filters: Filters, signal?: AbortSignal) =>
     request<Facets>(`/api/v1/catalog/facets?${queryString(filters)}`, { signal }),
-  venues: (topic: string, q: string, signal?: AbortSignal) =>
-    request<{ items: Venue[] }>(`/api/v1/catalog/venues?${queryString({ topic, q })}`, { signal }),
+  venues: (query: VenueQuery, signal?: AbortSignal) =>
+    request<VenuePage>(`/api/v1/catalog/venues?${queryString({ ...query })}`, { signal }),
   preferences: (signal?: AbortSignal) =>
     request<Preferences>('/api/v1/catalog/preferences', { signal }),
   savePreferences: (filters: Record<string, unknown>) =>

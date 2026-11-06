@@ -69,7 +69,7 @@ const TemplatesView = deferredView(async () => ({
   default: (await import('./components/monitor')).TemplatesView,
 }))
 const VenuesView = deferredView(async () => ({
-  default: (await import('./components/monitor')).VenuesView,
+  default: (await import('./components/venues')).VenuesView,
 }))
 
 type View =

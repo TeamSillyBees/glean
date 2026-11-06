@@ -6,7 +6,7 @@ import { PaperCard } from './papers'
 import { TooltipProvider } from './ui/tooltip'
 import { PaperOverview, PaperEvidence } from './paper-content'
 import { SourcesView, type SourcesData } from './source-health'
-import { VenuesView } from './monitor'
+import { VenuesView } from './venues'
 import { FilterCombobox } from './ui/filter-combobox'
 import { paper } from '../test/fixtures'
 import type { Paper } from '../lib/types'
@@ -33,27 +33,33 @@ const actualRecord = (): Paper => ({
 describe('historical venue discovery is not current qualification', () => {
   it('labels discovery-only venues without inventing a metric year or verified status', () => {
     const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
-    client.setQueryData(['venues', 'llm-agent', ''], {
-      items: [
-        {
-          id: 'historical-discovery',
-          name: 'Historical discovery journal',
-          kind: 'journal',
-          jif: 14,
-          ccf: '',
-          metricYear: 0,
-          source: 'Historical evidence',
-          registryVersion: 'v3',
-          qualificationStatus: 'historical-curated-discovery',
-        },
-      ],
-    })
+    client.setQueryData(
+      ['venues', { topic: 'llm-agent', q: '', page: 1, pageSize: 20, kind: '', sort: 'jif_desc' }],
+      {
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        items: [
+          {
+            id: 'historical-discovery',
+            name: 'Historical discovery journal',
+            kind: 'journal',
+            jif: 14,
+            ccf: '',
+            metricYear: 0,
+            source: 'Historical evidence',
+            registryVersion: 'v3',
+            qualificationStatus: 'historical-curated-discovery',
+          },
+        ],
+      },
+    )
     render(
       <QueryClientProvider client={client}>
         <VenuesView topic="llm-agent" q="" />
       </QueryClientProvider>,
     )
-    expect(screen.getByText('1 条期刊 / 会议证据记录（含不同版本）')).toBeInTheDocument()
+    expect(screen.getByText('1 条指标记录')).toBeInTheDocument()
     const statuses = screen.getAllByText('历史精选发现目标 · 当前资格待核')
     expect(statuses).toHaveLength(2)
     expect(statuses.every((status) => !status.classList.contains('bg-emerald-50'))).toBe(true)

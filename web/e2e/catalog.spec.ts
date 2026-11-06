@@ -515,10 +515,26 @@ test('real historical catalog: login, filters, detail, durable personal state an
 
   const venuesResponse = catalogResponse(page, 'venues')
   await navigate(page, '期刊与会议')
-  const venues = await data<{ items: Venue[] }>(await venuesResponse)
-  expect(venues.items.length).toBeGreaterThan(0)
+  const venues = await data<{ items: Venue[]; total: number; page: number; pageSize: number }>(
+    await venuesResponse,
+  )
+  expect(venues.items.length).toBe(20)
+  expect(venues).toMatchObject({ page: 1, pageSize: 20 })
+  expect(venues.total).toBeGreaterThan(20)
+  const metrics = venues.items.map((item) => item.jif ?? -Infinity)
+  expect(metrics).toEqual([...metrics].sort((a, b) => b - a))
+  await expect(page.getByRole('combobox', { name: '期刊会议排序' })).toHaveValue('jif_desc')
+  await noHorizontalOverflow(page)
+  await screenshot(page, info, 'venues-page-one')
+  const pageTwo = catalogResponse(page, 'venues', { page: '2', pageSize: '20', sort: 'jif_desc' })
+  await page.getByRole('button', { name: '下一页', exact: true }).click()
+  const second = await data<{ items: Venue[] }>(await pageTwo)
+  expect(second.items).toHaveLength(20)
+  expect(second.items.some((item) => venues.items.some((first) => first.id === item.id))).toBe(
+    false,
+  )
   const venue = venues.items[0]
-  const venueSearchResponse = catalogResponse(page, 'venues', { q: venue.name })
+  const venueSearchResponse = catalogResponse(page, 'venues', { q: venue.name, page: '1' })
   await page.getByRole('searchbox', { name: '搜索期刊或会议', exact: true }).fill(venue.name)
   await page.getByRole('button', { name: '搜索', exact: true }).click()
   expect(

@@ -179,9 +179,9 @@ describe('Glean query workspace', () => {
     ).getAllByRole('button')) {
       expect(button).toHaveAttribute('type', 'button')
     }
-    await user.click(screen.getByRole('button', { name: '来源健康', exact: true }))
+    await user.click(screen.getByRole('button', { name: '来源健康' }))
     await screen.findByRole('heading', { name: '来源健康', level: 1 })
-    await user.click(screen.getByRole('button', { name: '论文工作台', exact: true }))
+    await user.click(screen.getByRole('button', { name: '论文工作台' }))
     expect(document.querySelector('input[type="password"]')).toBeNull()
     expect(paths.filter((p) => p === '/api/v1/auth/login')).toHaveLength(1)
     expect(paths).not.toContain('/api/v1/auth/password')
