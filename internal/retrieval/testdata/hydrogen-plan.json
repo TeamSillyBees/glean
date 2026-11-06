@@ -1,0 +1,378 @@
+{
+  "schema_version": "1.0",
+  "mode": "plan",
+  "profile": {
+    "profile_id": "example-hydrogen-catalysis",
+    "profile_version": "1",
+    "topic": "电催化水分解制氢",
+    "mode": "plan",
+    "date_range": {
+      "from": "2020-01-01",
+      "to": "2026-11-05",
+      "semantics": "source discovery date; publication eligibility verified separately"
+    },
+    "languages": [
+      "undetermined; no English-only restriction"
+    ],
+    "sources": [
+      "openalex",
+      "crossref",
+      "semantic-scholar",
+      "arxiv"
+    ],
+    "concepts": [
+      {
+        "id": "process",
+        "terms": [
+          "water splitting",
+          "hydrogen evolution"
+        ],
+        "term_source": "illustrative vocabulary; validate against topic seeds before execution"
+      },
+      {
+        "id": "method",
+        "terms": [
+          "electrocatalysis",
+          "electrocatalytic"
+        ],
+        "term_source": "illustrative vocabulary; not asserted exhaustive synonyms"
+      }
+    ],
+    "variants": [
+      {
+        "id": "main",
+        "concept_ids": [
+          "process",
+          "method"
+        ],
+        "purpose": "Main process and method intersection"
+      },
+      {
+        "id": "relaxed",
+        "concept_ids": [
+          "process"
+        ],
+        "purpose": "Discover papers lacking explicit method term; screen locally"
+      }
+    ],
+    "max_combinations_per_variant": 64,
+    "notes": "Example only. Add discipline-specific journals, conference/volume routes, citation and multilingual discovery; no API calls have run."
+  },
+  "generated_at": "2026-11-05T03:33:50.031992+00:00",
+  "execution_performed": false,
+  "scope_note": "Only selected topic requests compiled. Venue enumeration, citations, web, controlled vocabulary and runtime tests must be added by the agent.",
+  "requests": [
+    {
+      "query_id": "q-f88c9518aa2b55a7",
+      "source": "openalex",
+      "route": "topic",
+      "variant_id": "main",
+      "purpose": "Main process and method intersection",
+      "query_version": "1",
+      "native_query": "(\"water splitting\" OR \"hydrogen evolution\") AND (\"electrocatalysis\" OR \"electrocatalytic\")",
+      "method": "GET",
+      "endpoint": "https://api.openalex.org/works",
+      "params": {
+        "search.title_and_abstract": "(\"water splitting\" OR \"hydrogen evolution\") AND (\"electrocatalysis\" OR \"electrocatalytic\")",
+        "filter": "from_publication_date:2020-01-01,to_publication_date:2026-11-05",
+        "per_page": 100,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.openalex.org/works?search.title_and_abstract=%28%22water+splitting%22+OR+%22hydrogen+evolution%22%29+AND+%28%22electrocatalysis%22+OR+%22electrocatalytic%22%29&filter=from_publication_date%3A2020-01-01%2Cto_publication_date%3A2026-11-05&per_page=100&cursor=%2A",
+      "paging": "Follow meta.next_cursor; API key required beyond first cursor page; terminal proof required",
+      "caveat": "Title/abstract route only; add broader keyword/fulltext route when appropriate. Verify current costs and authentication.",
+      "syntax_reference": "https://help.openalex.org/api/searching/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-763eb6577ccc71b3",
+      "source": "crossref",
+      "route": "topic",
+      "variant_id": "main",
+      "purpose": "Main process and method intersection",
+      "query_version": "1",
+      "native_query": "water splitting electrocatalysis",
+      "method": "GET",
+      "endpoint": "https://api.crossref.org/works",
+      "params": {
+        "query.bibliographic": "water splitting electrocatalysis",
+        "filter": "from-pub-date:2020-01-01,until-pub-date:2026-11-05",
+        "rows": 1000,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.crossref.org/works?query.bibliographic=water+splitting+electrocatalysis&filter=from-pub-date%3A2020-01-01%2Cuntil-pub-date%3A2026-11-05&rows=1000&cursor=%2A",
+      "paging": "Follow message.next-cursor; current docs use items shorter than rows as terminal proof",
+      "caveat": "Ranked bibliographic matching, NOT Boolean equivalence. Union combinations and verify relevance; journal enumeration remains separate.",
+      "syntax_reference": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-80995812c66e6799",
+      "source": "crossref",
+      "route": "topic",
+      "variant_id": "main",
+      "purpose": "Main process and method intersection",
+      "query_version": "1",
+      "native_query": "water splitting electrocatalytic",
+      "method": "GET",
+      "endpoint": "https://api.crossref.org/works",
+      "params": {
+        "query.bibliographic": "water splitting electrocatalytic",
+        "filter": "from-pub-date:2020-01-01,until-pub-date:2026-11-05",
+        "rows": 1000,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.crossref.org/works?query.bibliographic=water+splitting+electrocatalytic&filter=from-pub-date%3A2020-01-01%2Cuntil-pub-date%3A2026-11-05&rows=1000&cursor=%2A",
+      "paging": "Follow message.next-cursor; current docs use items shorter than rows as terminal proof",
+      "caveat": "Ranked bibliographic matching, NOT Boolean equivalence. Union combinations and verify relevance; journal enumeration remains separate.",
+      "syntax_reference": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-6a8ae1de44f3c150",
+      "source": "crossref",
+      "route": "topic",
+      "variant_id": "main",
+      "purpose": "Main process and method intersection",
+      "query_version": "1",
+      "native_query": "hydrogen evolution electrocatalysis",
+      "method": "GET",
+      "endpoint": "https://api.crossref.org/works",
+      "params": {
+        "query.bibliographic": "hydrogen evolution electrocatalysis",
+        "filter": "from-pub-date:2020-01-01,until-pub-date:2026-11-05",
+        "rows": 1000,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.crossref.org/works?query.bibliographic=hydrogen+evolution+electrocatalysis&filter=from-pub-date%3A2020-01-01%2Cuntil-pub-date%3A2026-11-05&rows=1000&cursor=%2A",
+      "paging": "Follow message.next-cursor; current docs use items shorter than rows as terminal proof",
+      "caveat": "Ranked bibliographic matching, NOT Boolean equivalence. Union combinations and verify relevance; journal enumeration remains separate.",
+      "syntax_reference": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-5612fc0e03ef5ab3",
+      "source": "crossref",
+      "route": "topic",
+      "variant_id": "main",
+      "purpose": "Main process and method intersection",
+      "query_version": "1",
+      "native_query": "hydrogen evolution electrocatalytic",
+      "method": "GET",
+      "endpoint": "https://api.crossref.org/works",
+      "params": {
+        "query.bibliographic": "hydrogen evolution electrocatalytic",
+        "filter": "from-pub-date:2020-01-01,until-pub-date:2026-11-05",
+        "rows": 1000,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.crossref.org/works?query.bibliographic=hydrogen+evolution+electrocatalytic&filter=from-pub-date%3A2020-01-01%2Cuntil-pub-date%3A2026-11-05&rows=1000&cursor=%2A",
+      "paging": "Follow message.next-cursor; current docs use items shorter than rows as terminal proof",
+      "caveat": "Ranked bibliographic matching, NOT Boolean equivalence. Union combinations and verify relevance; journal enumeration remains separate.",
+      "syntax_reference": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-5e73e6cdcde1dff0",
+      "source": "semantic-scholar",
+      "route": "topic",
+      "variant_id": "main",
+      "purpose": "Main process and method intersection",
+      "query_version": "1",
+      "native_query": "(\"water splitting\" | \"hydrogen evolution\") + (\"electrocatalysis\" | \"electrocatalytic\")",
+      "method": "GET",
+      "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+      "params": {
+        "query": "(\"water splitting\" | \"hydrogen evolution\") + (\"electrocatalysis\" | \"electrocatalytic\")",
+        "fields": "title,abstract,year,publicationDate,externalIds,url,venue",
+        "year": "2020-2026"
+      },
+      "url_without_credentials": "https://api.semanticscholar.org/graph/v1/paper/search/bulk?query=%28%22water+splitting%22+%7C+%22hydrogen+evolution%22%29+%2B+%28%22electrocatalysis%22+%7C+%22electrocatalytic%22%29&fields=title%2Cabstract%2Cyear%2CpublicationDate%2CexternalIds%2Curl%2Cvenue&year=2020-2026",
+      "paging": "Add response token to subsequent requests; retain estimated total and terminal token state",
+      "caveat": "Bulk syntax only; do not send to ordinary relevance endpoint. Exact dates require local review; unknown dates stay pending.",
+      "syntax_reference": "https://webflow.semanticscholar.org/product/api/tutorial",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-810c7ef4a4f13365",
+      "source": "arxiv",
+      "route": "topic",
+      "variant_id": "main",
+      "purpose": "Main process and method intersection",
+      "query_version": "1",
+      "native_query": "((ti:\"water splitting\" OR abs:\"water splitting\") OR (ti:\"hydrogen evolution\" OR abs:\"hydrogen evolution\")) AND ((ti:\"electrocatalysis\" OR abs:\"electrocatalysis\") OR (ti:\"electrocatalytic\" OR abs:\"electrocatalytic\")) AND submittedDate:[202001010000 TO 202611052359]",
+      "method": "GET",
+      "endpoint": "https://export.arxiv.org/api/query",
+      "params": {
+        "search_query": "((ti:\"water splitting\" OR abs:\"water splitting\") OR (ti:\"hydrogen evolution\" OR abs:\"hydrogen evolution\")) AND ((ti:\"electrocatalysis\" OR abs:\"electrocatalysis\") OR (ti:\"electrocatalytic\" OR abs:\"electrocatalytic\")) AND submittedDate:[202001010000 TO 202611052359]",
+        "start": 0,
+        "max_results": 100,
+        "sortBy": "submittedDate",
+        "sortOrder": "ascending"
+      },
+      "url_without_credentials": "https://export.arxiv.org/api/query?search_query=%28%28ti%3A%22water+splitting%22+OR+abs%3A%22water+splitting%22%29+OR+%28ti%3A%22hydrogen+evolution%22+OR+abs%3A%22hydrogen+evolution%22%29%29+AND+%28%28ti%3A%22electrocatalysis%22+OR+abs%3A%22electrocatalysis%22%29+OR+%28ti%3A%22electrocatalytic%22+OR+abs%3A%22electrocatalytic%22%29%29+AND+submittedDate%3A%5B202001010000+TO+202611052359%5D&start=0&max_results=100&sortBy=submittedDate&sortOrder=ascending",
+      "paging": "Atom totalResults/startIndex; increment by actual entries, verify terminal state; split large date windows",
+      "caveat": "Submission date is GMT and not formal publication. Space requests by at least 3 seconds. No start means cutoff checked locally.",
+      "syntax_reference": "https://info.arxiv.org/help/api/user-manual.html",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-44e06425e41aabc4",
+      "source": "openalex",
+      "route": "topic",
+      "variant_id": "relaxed",
+      "purpose": "Discover papers lacking explicit method term; screen locally",
+      "query_version": "1",
+      "native_query": "(\"water splitting\" OR \"hydrogen evolution\")",
+      "method": "GET",
+      "endpoint": "https://api.openalex.org/works",
+      "params": {
+        "search.title_and_abstract": "(\"water splitting\" OR \"hydrogen evolution\")",
+        "filter": "from_publication_date:2020-01-01,to_publication_date:2026-11-05",
+        "per_page": 100,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.openalex.org/works?search.title_and_abstract=%28%22water+splitting%22+OR+%22hydrogen+evolution%22%29&filter=from_publication_date%3A2020-01-01%2Cto_publication_date%3A2026-11-05&per_page=100&cursor=%2A",
+      "paging": "Follow meta.next_cursor; API key required beyond first cursor page; terminal proof required",
+      "caveat": "Title/abstract route only; add broader keyword/fulltext route when appropriate. Verify current costs and authentication.",
+      "syntax_reference": "https://help.openalex.org/api/searching/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-52d129713e3d16eb",
+      "source": "crossref",
+      "route": "topic",
+      "variant_id": "relaxed",
+      "purpose": "Discover papers lacking explicit method term; screen locally",
+      "query_version": "1",
+      "native_query": "water splitting",
+      "method": "GET",
+      "endpoint": "https://api.crossref.org/works",
+      "params": {
+        "query.bibliographic": "water splitting",
+        "filter": "from-pub-date:2020-01-01,until-pub-date:2026-11-05",
+        "rows": 1000,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.crossref.org/works?query.bibliographic=water+splitting&filter=from-pub-date%3A2020-01-01%2Cuntil-pub-date%3A2026-11-05&rows=1000&cursor=%2A",
+      "paging": "Follow message.next-cursor; current docs use items shorter than rows as terminal proof",
+      "caveat": "Ranked bibliographic matching, NOT Boolean equivalence. Union combinations and verify relevance; journal enumeration remains separate.",
+      "syntax_reference": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-2c90fabd8b8614cd",
+      "source": "crossref",
+      "route": "topic",
+      "variant_id": "relaxed",
+      "purpose": "Discover papers lacking explicit method term; screen locally",
+      "query_version": "1",
+      "native_query": "hydrogen evolution",
+      "method": "GET",
+      "endpoint": "https://api.crossref.org/works",
+      "params": {
+        "query.bibliographic": "hydrogen evolution",
+        "filter": "from-pub-date:2020-01-01,until-pub-date:2026-11-05",
+        "rows": 1000,
+        "cursor": "*"
+      },
+      "url_without_credentials": "https://api.crossref.org/works?query.bibliographic=hydrogen+evolution&filter=from-pub-date%3A2020-01-01%2Cuntil-pub-date%3A2026-11-05&rows=1000&cursor=%2A",
+      "paging": "Follow message.next-cursor; current docs use items shorter than rows as terminal proof",
+      "caveat": "Ranked bibliographic matching, NOT Boolean equivalence. Union combinations and verify relevance; journal enumeration remains separate.",
+      "syntax_reference": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-d692b04587b17bf6",
+      "source": "semantic-scholar",
+      "route": "topic",
+      "variant_id": "relaxed",
+      "purpose": "Discover papers lacking explicit method term; screen locally",
+      "query_version": "1",
+      "native_query": "(\"water splitting\" | \"hydrogen evolution\")",
+      "method": "GET",
+      "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+      "params": {
+        "query": "(\"water splitting\" | \"hydrogen evolution\")",
+        "fields": "title,abstract,year,publicationDate,externalIds,url,venue",
+        "year": "2020-2026"
+      },
+      "url_without_credentials": "https://api.semanticscholar.org/graph/v1/paper/search/bulk?query=%28%22water+splitting%22+%7C+%22hydrogen+evolution%22%29&fields=title%2Cabstract%2Cyear%2CpublicationDate%2CexternalIds%2Curl%2Cvenue&year=2020-2026",
+      "paging": "Add response token to subsequent requests; retain estimated total and terminal token state",
+      "caveat": "Bulk syntax only; do not send to ordinary relevance endpoint. Exact dates require local review; unknown dates stay pending.",
+      "syntax_reference": "https://webflow.semanticscholar.org/product/api/tutorial",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    },
+    {
+      "query_id": "q-ac7dcdad40cb8ac1",
+      "source": "arxiv",
+      "route": "topic",
+      "variant_id": "relaxed",
+      "purpose": "Discover papers lacking explicit method term; screen locally",
+      "query_version": "1",
+      "native_query": "((ti:\"water splitting\" OR abs:\"water splitting\") OR (ti:\"hydrogen evolution\" OR abs:\"hydrogen evolution\")) AND submittedDate:[202001010000 TO 202611052359]",
+      "method": "GET",
+      "endpoint": "https://export.arxiv.org/api/query",
+      "params": {
+        "search_query": "((ti:\"water splitting\" OR abs:\"water splitting\") OR (ti:\"hydrogen evolution\" OR abs:\"hydrogen evolution\")) AND submittedDate:[202001010000 TO 202611052359]",
+        "start": 0,
+        "max_results": 100,
+        "sortBy": "submittedDate",
+        "sortOrder": "ascending"
+      },
+      "url_without_credentials": "https://export.arxiv.org/api/query?search_query=%28%28ti%3A%22water+splitting%22+OR+abs%3A%22water+splitting%22%29+OR+%28ti%3A%22hydrogen+evolution%22+OR+abs%3A%22hydrogen+evolution%22%29%29+AND+submittedDate%3A%5B202001010000+TO+202611052359%5D&start=0&max_results=100&sortBy=submittedDate&sortOrder=ascending",
+      "paging": "Atom totalResults/startIndex; increment by actual entries, verify terminal state; split large date windows",
+      "caveat": "Submission date is GMT and not formal publication. Space requests by at least 3 seconds. No start means cutoff checked locally.",
+      "syntax_reference": "https://info.arxiv.org/help/api/user-manual.html",
+      "syntax_checked_on": "2026-11-05",
+      "verification": "documentation_based_runtime_validation_required",
+      "status": "planned",
+      "reported_hits": null,
+      "fetched_count": null
+    }
+  ]
+}
