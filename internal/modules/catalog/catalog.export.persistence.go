@@ -9,6 +9,7 @@ import (
 	"entgo.io/ent/dialect"
 	sql "entgo.io/ent/dialect/sql"
 	"github.com/teamsillybees/glean/internal/data/ent"
+	"github.com/teamsillybees/glean/internal/data/ent/gleancatalogchange"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanobservation"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaper"
 	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
@@ -83,7 +84,67 @@ func (s *Service) RetrievalExportPage(ctx context.Context, runID, after idgen.ID
 			}
 		}
 		r.Record["field_sources"] = fields
+		observationIDs := make([]idgen.ID, 0, len(byPaper[v.ID]))
+		for _, o := range byPaper[v.ID] {
+			observationIDs = append(observationIDs, o.ID)
+		}
+		hits := []map[string]any{}
+		for afterHit := idgen.ID(0); ; {
+			rows, err := s.client.GleanSearchHit.Query().Where(gleansearchhit.RunID(runID), gleansearchhit.ObservationIDIn(observationIDs...), gleansearchhit.IDGT(afterHit)).Order(ent.Asc(gleansearchhit.FieldID)).Limit(500).All(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, hit := range rows {
+				afterHit = hit.ID
+				hits = append(hits, map[string]any{"hit_id": hit.ID, "observation_id": hit.ObservationID, "run_id": hit.RunID, "query_id": hit.QueryID, "query_version": hit.QueryVersion, "plan_version": hit.PlanVersion, "source": hit.Source, "native_query": hit.QueryText, "mode": hit.Mode, "discovered_at": hit.DiscoveredAt})
+			}
+			if len(rows) < 500 {
+				break
+			}
+		}
+		r.Record["discovery_paths"] = hits
+		changes := []map[string]any{}
+		for afterChange := idgen.ID(0); ; {
+			rows, err := s.client.GleanCatalogChange.Query().Where(gleancatalogchange.PaperID(v.ID), gleancatalogchange.IDGT(afterChange)).Order(ent.Asc(gleancatalogchange.FieldID)).Limit(500).All(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, change := range rows {
+				afterChange = change.ID
+				changes = append(changes, map[string]any{"change_id": change.ID, "kind": change.Kind, "profile_id": change.Topic, "before": auditMetadataOnly(change.Before), "after": auditMetadataOnly(change.After), "actor_id": change.CreatedBy, "created_at": change.CreatedAt})
+			}
+			if len(rows) < 500 {
+				break
+			}
+		}
+		r.Record["catalog_changes"] = changes
 		result = append(result, r)
 	}
 	return result, nil
+}
+
+// auditMetadataOnly 保留修改历史和内容哈希，不能通过纠错历史绕过正文再分发边界。
+func auditMetadataOnly(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(v))
+		for key, item := range v {
+			if key == "abstract" || key == "fulltext" || key == "raw" {
+				b, _ := json.Marshal(item)
+				h := sha256.Sum256(b)
+				result[key+"_omitted"] = map[string]any{"sha256": hex.EncodeToString(h[:]), "reason": "content redistribution not authorized"}
+			} else {
+				result[key] = auditMetadataOnly(item)
+			}
+		}
+		return result
+	case []any:
+		result := make([]any, len(v))
+		for i := range v {
+			result[i] = auditMetadataOnly(v[i])
+		}
+		return result
+	default:
+		return value
+	}
 }

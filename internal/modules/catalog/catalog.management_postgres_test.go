@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,9 +235,15 @@ func TestCatalogManagementPostgres(t *testing.T) {
 	require.Empty(t, after[0].TermGroups)
 	// 导出不经过界面隐藏/纳入筛选；同论文三个 profile 的不同决定必须全部保留。
 	input.Topics = []string{"custom-topic", "llm-agent", "biomed-worldmodel"}
+	for i := 0; i < 501; i++ {
+		input.Discoveries = append(input.Discoveries, retrieval.Hit{RunID: input.RunID, Source: input.Source, QueryID: fmt.Sprintf("query-%d", i), QueryVersion: "test-v1", PlanVersion: "test-plan", Mode: "fixture", Query: "transaction fixture", DiscoveredAt: input.ObservedAt})
+	}
 	_, err = service.IngestObservation(entx.WithOperatorID(ctx, 7), input)
 	require.NoError(t, err)
 	_, err = service.SaveReview(manager, observation.PaperID, "llm-agent", ReviewBody{Status: "excluded", Note: "transaction-only explicit exclusion", Evidence: screeningFixture("llm-agent", "excluded")})
+	require.NoError(t, err)
+	exportAbstract := "Correction body must not escape via the audit history"
+	_, err = service.SaveCorrection(manager, observation.PaperID, CorrectionBody{Fields: CorrectionFields{Abstract: &exportAbstract}, Reason: "export boundary fixture"})
 	require.NoError(t, err)
 	exported, err := service.RetrievalExportPage(manager, input.RunID, 0, 1)
 	require.NoError(t, err)
@@ -250,6 +257,16 @@ func TestCatalogManagementPostgres(t *testing.T) {
 	require.NotEmpty(t, exported[0].Record["field_sources"])
 	require.NotEmpty(t, exported[0].IdentityEdges)
 	require.NotContains(t, exported[0].Record, "abstract")
+	require.Len(t, exported[0].Record["discovery_paths"], 501, "export must page beyond both the 100-hit UI and 500-hit database batches")
+	require.Len(t, exported[0].Record["catalog_changes"], 3)
+	exportJSON, err := json.Marshal(exported)
+	require.NoError(t, err)
+	require.NotContains(t, string(exportJSON), exportAbstract)
+	require.Contains(t, string(exportJSON), "abstract_omitted")
+	limitedDetail, err := service.Paper(viewer, observation.PaperID)
+	require.NoError(t, err)
+	require.Len(t, limitedDetail.Observations[0].Discoveries, 100)
+	require.True(t, limitedDetail.Observations[0].DiscoveriesHasMore)
 	next, err := service.RetrievalExportPage(manager, input.RunID, exported[0].ID, 1)
 	require.NoError(t, err)
 	require.Empty(t, next, "stable ID cursor must not repeat the previous record")
