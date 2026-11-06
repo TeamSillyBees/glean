@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
 import { exampleSearchRoutes, parseSearchRoutes } from '../lib/search-routes'
-import type { Topic, TopicInput } from '../lib/types'
+import type { Topic, TopicInput, ProtocolPreview } from '../lib/types'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
 import { ErrorState, Loading } from './common'
@@ -101,6 +101,31 @@ function TopicEditor({
     topic?.termGroups?.map((group) => group.join(' | ')).join('\n') || '',
   )
   const [routes, setRoutes] = useState(JSON.stringify(topic?.searchRoutes || [], null, 2))
+  const initialProtocol = topic?.searchProtocol ? JSON.stringify(topic.searchProtocol, null, 2) : ''
+  const [protocolText, setProtocolText] = useState(initialProtocol)
+  const [protocolPreview, setProtocolPreview] = useState<ProtocolPreview | null>(null)
+  const [protocolAccepted, setProtocolAccepted] = useState(false)
+  const [protocolError, setProtocolError] = useState('')
+  const [previewing, setPreviewing] = useState(false)
+  const protocolDirty = protocolText !== initialProtocol
+  const protocolBlocked = previewing || (protocolDirty && (!protocolPreview || !protocolAccepted))
+  async function previewProtocol() {
+    setPreviewing(true)
+    setProtocolError('')
+    setProtocolPreview(null)
+    setProtocolAccepted(false)
+    try {
+      const preview = await api.previewProtocol(JSON.parse(protocolText))
+      if (!mounted.current) return
+      setProtocolPreview(preview)
+      setRoutes(JSON.stringify(preview.searchRoutes, null, 2))
+      if (!preview.executable) setEnabled(false)
+    } catch (error) {
+      if (mounted.current) setProtocolError((error as Error).message)
+    } finally {
+      if (mounted.current) setPreviewing(false)
+    }
+  }
   let routesError = ''
   let parsedRoutes: ReturnType<typeof parseSearchRoutes> = []
   try {
@@ -130,7 +155,8 @@ function TopicEditor({
   })
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (client.isMutating({ mutationKey: ['topic-write'] }) || routesError) return
+    if (client.isMutating({ mutationKey: ['topic-write'] }) || routesError || protocolBlocked)
+      return
     mutation.mutate({
       original: client.getQueryCache().find({ queryKey: ['topics'], exact: true }),
       input: {
@@ -148,6 +174,8 @@ function TopicEditor({
           )
           .filter((group) => group.length),
         searchRoutes: parsedRoutes,
+        searchProtocol: protocolPreview?.protocol ?? topic?.searchProtocol,
+        protocolAcknowledgement: protocolAccepted ? protocolPreview?.acknowledgement : undefined,
         expectedVersion: topic?.version ?? 0,
       },
     })
@@ -159,7 +187,70 @@ function TopicEditor({
         每行是一组必须满足的检索词，同组使用 |
         分隔同义词。内置主题留空保留默认检索模板；新主题启用检索时需填写词组或检索路线。
       </DialogDescription>
-      <fieldset disabled={pending} className="space-y-4">
+      <fieldset disabled={pending || previewing} className="space-y-4">
+        <details className="rounded-lg border p-3" open={!!topic?.searchProtocol || undefined}>
+          <summary className="cursor-pointer text-sm font-medium">导入完整检索协议</summary>
+          <p className="my-3 text-xs leading-6 text-muted-foreground">
+            粘贴 protocol 或需求包的 profile/requests
+            JSON。预览不会联网；未支持的来源、目录与引文计划会完整保留。
+            协议管理检索路线；更改已有协议时必须提高 profile_version。计划模式只能保存计划。
+          </p>
+          <label className="block text-sm">
+            检索协议 JSON
+            <textarea
+              aria-label="检索协议 JSON"
+              className={`${managementField} font-mono text-xs`}
+              rows={8}
+              maxLength={262144}
+              value={protocolText}
+              spellCheck={false}
+              onChange={(e) => {
+                setProtocolText(e.target.value)
+                setProtocolPreview(null)
+                setProtocolAccepted(false)
+              }}
+            />
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-3"
+            disabled={!protocolText.trim()}
+            onClick={previewProtocol}
+          >
+            {previewing ? '预览中…' : '预览协议与语义差异'}
+          </Button>
+          {protocolError && (
+            <p role="alert" className="mt-2 text-sm text-red-700">
+              {protocolError}
+            </p>
+          )}
+          {protocolPreview && (
+            <div className="mt-3 space-y-2 text-sm" aria-label="协议映射预览">
+              <p>
+                {protocolPreview.protocol.profile_id} · {protocolPreview.protocol.profile_version} ·{' '}
+                {protocolPreview.executable ? '可执行子集' : '仅保存计划'}
+              </p>
+              <p>
+                {protocolPreview.searchRoutes.length} 条本地路线；外部保留：
+                {protocolPreview.externalSources.join('、') || '无'}
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                {protocolPreview.warnings.map((warning, i) => (
+                  <li key={i}>{warning}</li>
+                ))}
+              </ul>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={protocolAccepted}
+                  onChange={(e) => setProtocolAccepted(e.target.checked)}
+                />
+                已核对来源、日期和语义差异
+              </label>
+            </div>
+          )}
+        </details>
         <label className="block text-sm">
           主题名称
           <input
@@ -202,6 +293,7 @@ function TopicEditor({
             rows={4}
             className={managementField}
             value={terms}
+            disabled={!!(topic?.searchProtocol || protocolPreview)}
             onChange={(e) => setTerms(e.target.value)}
             placeholder={'cancer | tumor\nartificial intelligence | machine learning'}
           />
@@ -231,6 +323,7 @@ function TopicEditor({
               rows={12}
               className={`${managementField} font-mono text-xs`}
               value={routes}
+              disabled={!!(topic?.searchProtocol || protocolPreview)}
               onChange={(event) => setRoutes(event.target.value)}
               spellCheck={false}
             />
@@ -253,7 +346,15 @@ function TopicEditor({
           </details>
         </details>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={
+              protocolPreview?.executable === false ||
+              (!protocolPreview && topic?.searchProtocol?.mode === 'plan')
+            }
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
           参与后续扫描
         </label>
         {mutation.error && (
@@ -279,7 +380,7 @@ function TopicEditor({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <Button type="submit" disabled={!!routesError}>
+          <Button type="submit" disabled={!!routesError || protocolBlocked}>
             {pending ? '保存中…' : '保存主题'}
           </Button>
         </div>

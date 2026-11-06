@@ -4,6 +4,7 @@ import type {
   CorrectionFields,
   ManualReview,
   TopicInput,
+  ProtocolPreview,
   Facets,
   Filters,
   Identity,
@@ -67,6 +68,7 @@ export async function request<T>(
   path: string,
   init: RequestInit = {},
   canRefresh = true,
+  binary = false,
 ): Promise<T> {
   const epoch = sessionEpoch
   let response: Response
@@ -96,7 +98,7 @@ export async function request<T>(
     }
     const refreshed = await refreshPromise.promise
     if (epoch !== sessionEpoch) throw new ApiError('会话已切换，已忽略旧请求。', 401)
-    if (refreshed) return request<T>(path, init, false)
+    if (refreshed) return request<T>(path, init, false, binary)
     clearSession()
     onExpired?.()
     throw new ApiError('登录已过期，请重新登录。', 401)
@@ -105,6 +107,13 @@ export async function request<T>(
     clearSession()
     onExpired?.()
     throw new ApiError('登录已过期，请重新登录。', 401)
+  }
+  if (response.ok && binary) {
+    if (!response.headers.get('Content-Type')?.includes('application/zip'))
+      throw new ApiError('后端未返回审计压缩包。', response.status)
+    const blob = await response.blob()
+    if (epoch !== sessionEpoch) throw new ApiError('会话已切换，已忽略旧下载。', 401)
+    return blob as T
   }
   let body: Envelope<T> | { detail?: string; message?: string }
   try {
@@ -134,6 +143,13 @@ export function queryString(filters: Partial<Filters> | Record<string, unknown>)
   return params.toString()
 }
 export const api = {
+  previewProtocol: (document: unknown) =>
+    request<ProtocolPreview>('/api/v1/catalog/topics/protocol-preview', {
+      method: 'POST',
+      body: JSON.stringify({ document }),
+    }),
+  downloadAudit: (id: string) =>
+    request<Blob>(`/api/v1/monitor/runs/${encodeURIComponent(id)}/export`, {}, true, true),
   catalogAccess: (signal?: AbortSignal) =>
     request<{ canManage: boolean }>('/api/v1/catalog/access', { signal }),
   saveTopic: (input: TopicInput, slug?: string) =>
@@ -144,7 +160,9 @@ export const api = {
   review: (
     id: string,
     topic: string,
-    input: Pick<ManualReview, 'status' | 'note' | 'labels'> & { expectedVersion: number },
+    input: Pick<ManualReview, 'status' | 'note' | 'labels' | 'evidence'> & {
+      expectedVersion: number
+    },
   ) =>
     request<ManualReview>(
       `/api/v1/catalog/papers/${encodeURIComponent(id)}/topics/${encodeURIComponent(topic)}/review`,

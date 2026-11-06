@@ -1,5 +1,38 @@
 export type TopicSlug = string
 export type ReadStatus = 'unread' | 'reading' | 'read'
+export interface SearchProtocol {
+  profile_id: string
+  profile_version: string
+  topic: string
+  mode: string
+  [key: string]: unknown
+}
+export interface ProtocolPreview {
+  protocol: SearchProtocol
+  searchRoutes: SearchRoute[]
+  warnings: string[]
+  externalSources: string[]
+  semanticVersion: string
+  acknowledgement: string
+  executable: boolean
+}
+export interface CriterionEvidence {
+  decision: 'pass' | 'fail' | 'unknown' | 'not_applicable'
+  evidence: string
+  source_url: string
+  location: string
+}
+export interface ScreeningEvidence {
+  profile_id: string
+  profile_version: string
+  reading_level: string
+  requires_fulltext: boolean
+  identity_basis: string
+  research_object: string
+  method_role: string
+  topic_role: string
+  criteria: Record<string, CriterionEvidence>
+}
 export interface SearchRoute {
   id: string
   name?: string
@@ -9,6 +42,7 @@ export interface SearchRoute {
   backfillFrom?: string
 }
 export interface Topic {
+  searchProtocol?: SearchProtocol
   slug: TopicSlug
   name: string
   description: string
@@ -308,6 +342,7 @@ export interface SourceObservation {
 }
 
 export interface ManualReview {
+  evidence?: ScreeningEvidence
   status: 'pending' | 'included' | 'excluded'
   note: string
   labels: string[]
@@ -335,6 +370,8 @@ export interface CatalogHistory {
   createdAt: string
 }
 export interface TopicInput {
+  searchProtocol?: SearchProtocol
+  protocolAcknowledgement?: string
   slug?: string
   name: string
   description: string

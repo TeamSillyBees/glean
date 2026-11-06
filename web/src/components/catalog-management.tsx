@@ -1,7 +1,15 @@
 import { useId, useState, type FormEvent } from 'react'
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
-import type { CorrectionFields, ManualReview, Membership, Paper, Topic } from '../lib/types'
+import type {
+  CorrectionFields,
+  ManualReview,
+  Membership,
+  Paper,
+  Topic,
+  ScreeningEvidence,
+} from '../lib/types'
+import { ScreeningEditor } from './screening-evidence'
 import { date, topicLabels } from '../lib/utils'
 import { Button } from './ui/button'
 import { ErrorState, Loading } from './common'
@@ -91,6 +99,7 @@ export function CatalogManagement({
             key={`${membership.topic}-${membership.manualReview?.version ?? 0}`}
             paperId={paper.id}
             membership={membership}
+            topic={topics.find((topic) => topic.slug === membership.topic)}
             topicName={
               topics.find((topic) => topic.slug === membership.topic)?.name ||
               topicLabels[membership.topic] ||
@@ -112,11 +121,13 @@ export function CatalogManagement({
 function ReviewEditor({
   paperId,
   membership,
+  topic,
   topicName,
   notify,
 }: {
   paperId: string
   membership: Membership
+  topic?: Topic
   topicName: string
   notify: (message: string) => void
 }) {
@@ -125,6 +136,19 @@ function ReviewEditor({
   const [status, setStatus] = useState<ManualReview['status'] | ''>(review?.status ?? '')
   const [note, setNote] = useState(review?.note || '')
   const [labels, setLabels] = useState(review?.labels.join('，') || '')
+  const [evidence, setEvidence] = useState<ScreeningEvidence>(
+    review?.evidence ?? {
+      profile_id: topic?.searchProtocol?.profile_id || membership.topic,
+      profile_version: topic?.searchProtocol?.profile_version || String(topic?.version ?? 1),
+      reading_level: 'metadata',
+      requires_fulltext: false,
+      identity_basis: '',
+      research_object: '',
+      method_role: '',
+      topic_role: '',
+      criteria: {},
+    },
+  )
   const write = useCatalogWrite(paperId, notify)
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -132,6 +156,7 @@ function ReviewEditor({
     write.save(() =>
       api.review(paperId, membership.topic, {
         status,
+        evidence,
         note: note.trim(),
         labels: labels
           .split(/[,，\n]/)
@@ -173,6 +198,7 @@ function ReviewEditor({
             aria-labelledby={`${reviewStatusId}-note`}
             className={managementField}
             value={note}
+            required={status === 'included' || status === 'excluded'}
             onChange={(e) => setNote(e.target.value)}
           />
         </label>
@@ -185,6 +211,7 @@ function ReviewEditor({
             placeholder="用逗号分隔"
           />
         </label>
+        <ScreeningEditor value={evidence} onChange={setEvidence} />
         <WriteError error={write.error} refresh={write.refresh} />
         <Button type="submit" size="sm">
           保存审核

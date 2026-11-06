@@ -133,6 +133,12 @@ describe('shared paper management separate from personal state', () => {
     fireEvent.change(form.getByLabelText('审核结论'), { target: { value: 'excluded' } })
     fireEvent.change(form.getByLabelText('审核备注'), { target: { value: '与该主题无关' } })
     fireEvent.change(form.getByLabelText('手动标签'), { target: { value: '复核，方法' } })
+    fireEvent.change(form.getByLabelText('主题结论'), { target: { value: 'fail' } })
+    fireEvent.change(form.getByLabelText('主题短证据'), { target: { value: '测试明确范围不符' } })
+    fireEvent.change(form.getByLabelText('主题主源链接'), {
+      target: { value: 'https://example.org/test' },
+    })
+    fireEvent.change(form.getByLabelText('主题证据定位'), { target: { value: '摘要第1句' } })
     fireEvent.click(form.getByRole('button', { name: '保存审核' }))
     await waitFor(() =>
       expect(api.review).toHaveBeenCalledWith('123', 'llm-agent', {
@@ -140,6 +146,18 @@ describe('shared paper management separate from personal state', () => {
         note: '与该主题无关',
         labels: ['复核', '方法'],
         expectedVersion: 3,
+        evidence: expect.objectContaining({
+          profile_id: 'llm-agent',
+          reading_level: 'metadata',
+          criteria: {
+            topic: {
+              decision: 'fail',
+              evidence: '测试明确范围不符',
+              source_url: 'https://example.org/test',
+              location: '摘要第1句',
+            },
+          },
+        }),
       }),
     )
     await waitFor(() => expect(current.memberships[1].manualReview?.version).toBe(4))
@@ -189,7 +207,7 @@ describe('shared paper management separate from personal state', () => {
     mount()
     await openManagement()
     const form = within(screen.getByRole('form', { name: '审核 大模型知识工程' }))
-    fireEvent.change(form.getByLabelText('审核结论'), { target: { value: 'included' } })
+    fireEvent.change(form.getByLabelText('审核结论'), { target: { value: 'pending' } })
     fireEvent.click(form.getByRole('button', { name: '保存审核' }))
     fireEvent.click(await screen.findByRole('button', { name: '重新读取管理记录' }))
     await waitFor(() => expect(api.paper).toHaveBeenCalledTimes(2))
@@ -206,7 +224,7 @@ describe('shared paper management separate from personal state', () => {
     await openManagement()
     fireEvent.change(
       within(screen.getByRole('form', { name: '审核 大模型知识工程' })).getByLabelText('审核结论'),
-      { target: { value: 'included' } },
+      { target: { value: 'pending' } },
     )
     fireEvent.click(
       within(screen.getByRole('form', { name: '审核 大模型知识工程' })).getByRole('button', {
@@ -242,7 +260,7 @@ describe('shared paper management separate from personal state', () => {
     await openManagement()
     fireEvent.change(
       within(screen.getByRole('form', { name: '审核 大模型知识工程' })).getByLabelText('审核结论'),
-      { target: { value: 'included' } },
+      { target: { value: 'pending' } },
     )
     fireEvent.click(
       within(screen.getByRole('form', { name: '审核 大模型知识工程' })).getByRole('button', {
