@@ -141,7 +141,7 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   await expect(userDialog.getByLabel('用户类型', { exact: true })).toBeDisabled()
   await expect(userDialog.getByLabel('启用账号', { exact: true })).toBeDisabled()
   await userDialog.getByRole('button', { name: '取消', exact: true }).click()
-  const username = 'glean-management-reader'
+  const username = `glean-mgr-${Date.now()}`
   await page.getByRole('button', { name: '新增用户', exact: true }).click()
   const create = page.getByRole('dialog', { name: '新增用户', exact: true })
   await create.getByLabel('用户名', { exact: true }).fill(username)
@@ -198,7 +198,7 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   await navigate(page, '研究主题')
   await page.getByRole('button', { name: '新增研究主题', exact: true }).click()
   const topicDialog = page.getByRole('dialog', { name: '新增研究主题', exact: true })
-  const topicName = '管理验收：胶质瘤世界模型'
+  const topicName = `管理验收：胶质瘤世界模型 ${Date.now()}`
   await topicDialog.getByLabel('主题名称', { exact: true }).fill(topicName)
   await topicDialog
     .getByLabel('主题说明', { exact: true })
@@ -300,8 +300,10 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   expect(updatedTopic.searchRoutes).toEqual(routes)
   await expect(editTopic).toBeHidden()
   await page.screenshot({ path: info.outputPath('management-topics-mobile.png') })
-  const emptyResult = response(page, '/api/v1/catalog/papers', 'GET', { topic: topic.slug })
   await navigate(page, new RegExp(`^${topicName}`))
+  // 重返已打开主题时可以命中客户端缓存；显式刷新后再验证真实服务器空结果。
+  const emptyResult = response(page, '/api/v1/catalog/papers', 'GET', { topic: topic.slug })
+  await page.getByRole('button', { name: '刷新当前视图', exact: true }).click()
   const empty = await data<PaperPage>(await emptyResult)
   expect(empty.total).toBe(0)
   expect(empty.items).toEqual([])
@@ -336,6 +338,23 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
     await review.getByLabel('审核结论', { exact: true }).selectOption(status)
     await review.getByLabel('审核备注', { exact: true }).fill(`真实浏览器验收：${status}`)
     await review.getByLabel('手动标签', { exact: true }).fill('人工核验，浏览器验收')
+    // 此处仅验证一次性测试库的表单和证据持久化，不将测试输入作为论文科学结论。
+    await review.getByLabel('实际阅读层级', { exact: true }).selectOption('abstract_reviewed')
+    for (const label of ['身份依据', '研究对象', '方法角色']) {
+      await review.getByLabel(label, { exact: true }).fill('隔离浏览器测试输入，不是科学评审')
+    }
+    for (const label of ['身份', '主题', '方法', '日期', '载体', '文类', '版本']) {
+      await review
+        .getByLabel(`${label}结论`, { exact: true })
+        .selectOption(status === 'excluded' && label === '主题' ? 'fail' : 'pass')
+      await review
+        .getByLabel(`${label}短证据`, { exact: true })
+        .fill('隔离数据库表单验收，非真实纳排证据')
+      await review
+        .getByLabel(`${label}主源链接`, { exact: true })
+        .fill(original.url || `https://doi.org/${original.doi}`)
+      await review.getByLabel(`${label}证据定位`, { exact: true }).fill('浏览器测试记录')
+    }
     const put = response(page, reviewPath, 'PUT')
     const refreshed = response(page, `/api/v1/catalog/papers/${selected.id}`)
     await review.getByRole('button', { name: '保存审核', exact: true }).click()

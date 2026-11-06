@@ -108,6 +108,7 @@ test('one official EuropePMC observation reaches real PostgreSQL, API and browse
   expect(observed!.sourceId).toBe(committed.sourceId)
   expect(observed!.sourceUrl).toBe(committed.sourceUrl)
   expect(observed!.runId).toBe(committed.runId)
+  expect(observed!.discoveries?.some((hit) => hit.runId === committed.runId)).toBe(true)
   expect(observed!.review).toMatchObject({
     isMock: false,
     scientificReviewed: false,
@@ -145,5 +146,29 @@ test('one official EuropePMC observation reaches real PostgreSQL, API and browse
     path: info.outputPath(`${info.project.name}-live-europepmc.png`),
     fullPage: true,
   })
+  await page.keyboard.press('Escape')
+  const navToggle = page.getByRole('button', { name: '打开导航', exact: true })
+  if (await navToggle.isVisible()) await navToggle.click()
+  const navDrawer = page.getByRole('dialog', { name: '导航', exact: true })
+  const nav = (await navDrawer.isVisible()) ? navDrawer : page.locator('.desktop-sidebar')
+  await nav.getByRole('button', { name: '扫描记录', exact: true }).click()
+  const run = page.getByRole('region', { name: `运行 ${committed.runId}`, exact: true })
+  const attemptsResponse = response(page, `/api/v1/monitor/runs/${committed.runId}/requests`)
+  await run.getByRole('button', { name: '查看请求账本', exact: true }).click()
+  const attempts = await data<{
+    items: { status: string; cumulative_unique: number; raw_sha256: string }[]
+  }>(await attemptsResponse)
+  expect(attempts.items).toHaveLength(1)
+  expect(attempts.items[0].status).toBe('success')
+  expect(attempts.items[0].cumulative_unique).toBe(1)
+  expect(attempts.items[0].raw_sha256).toMatch(/^[a-f0-9]{64}$/)
+  const downloaded = page.waitForEvent('download')
+  await run.getByRole('button', { name: '下载完整审计 ZIP', exact: true }).click()
+  const download = await downloaded
+  expect(await download.failure()).toBeNull()
+  const zipPath = info.outputPath(`${info.project.name}-live-audit.zip`)
+  await download.saveAs(zipPath)
+  expect([...readFileSync(zipPath).subarray(0, 4)]).toEqual([80, 75, 3, 4])
+  await page.screenshot({ path: info.outputPath(`${info.project.name}-live-audit.png`) })
   expect(errors).toEqual([])
 })
