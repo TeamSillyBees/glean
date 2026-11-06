@@ -10,18 +10,19 @@ import (
 
 // TopicVO 表示兼容内置主题的动态研究方向及真实目录数量。
 type TopicVO struct {
-	SearchEnabled   bool              `json:"searchEnabled"`
-	TermGroups      [][]string        `json:"termGroups"`
-	SearchRoutes    []retrieval.Route `json:"searchRoutes,omitempty"`
-	Version         int               `json:"version"`
-	Slug            string            `json:"slug"`
-	Name            string            `json:"name"`
-	Description     string            `json:"description"`
-	Rule            string            `json:"rule"`
-	MembershipCount int               `json:"membershipCount"`
-	HistoricalCount int               `json:"historicalCount"`
-	CandidateCount  int               `json:"candidateCount"`
-	CuratedCount    int               `json:"curatedCount"`
+	SearchProtocol  *retrieval.Protocol `json:"searchProtocol,omitempty"`
+	SearchEnabled   bool                `json:"searchEnabled"`
+	TermGroups      [][]string          `json:"termGroups"`
+	SearchRoutes    []retrieval.Route   `json:"searchRoutes,omitempty"`
+	Version         int                 `json:"version"`
+	Slug            string              `json:"slug"`
+	Name            string              `json:"name"`
+	Description     string              `json:"description"`
+	Rule            string              `json:"rule"`
+	MembershipCount int                 `json:"membershipCount"`
+	HistoricalCount int                 `json:"historicalCount"`
+	CandidateCount  int                 `json:"candidateCount"`
+	CuratedCount    int                 `json:"curatedCount"`
 }
 
 // SourceEvidence 保存来源及原始证据，不把接收日期冒充正式发表日期。

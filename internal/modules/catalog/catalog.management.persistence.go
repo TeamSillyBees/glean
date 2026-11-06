@@ -53,7 +53,7 @@ func recordChange(ctx context.Context, c *ent.Client, uid, paperID idgen.ID, top
 	return c.GleanCatalogChange.Create().SetPaperID(paperID).SetTopic(topic).SetKind(kind).SetBefore(object(before)).SetAfter(object(after)).SetCreatedBy(uid).SetUpdatedBy(uid).Exec(ctx)
 }
 func reviewVO(r *ent.GleanPaperReview) ManualReviewVO {
-	return ManualReviewVO{Status: string(r.Status), Note: r.Note, Labels: r.Labels, Version: r.Version, UpdatedAt: r.UpdatedAt, UpdatedBy: r.UpdatedBy}
+	return ManualReviewVO{Status: string(r.Status), Note: r.Note, Labels: r.Labels, Version: r.Version, UpdatedAt: r.UpdatedAt, UpdatedBy: r.UpdatedBy, Evidence: r.Evidence}
 }
 func correctionVO(r *ent.GleanPaperCorrection) CorrectionVO {
 	var fields CorrectionFields
@@ -70,6 +70,9 @@ func (s *Service) SaveReview(ctx context.Context, paperID idgen.ID, topic string
 	}
 	if input.Status != "pending" && input.Status != "included" && input.Status != "excluded" {
 		return ManualReviewVO{}, bizerrors.BadRequest("invalid review status")
+	}
+	if err := retrieval.ValidateScreening(input.Status, input.Note, input.Evidence); err != nil {
+		return ManualReviewVO{}, bizerrors.BadRequest(err.Error())
 	}
 	if input.ExpectedVersion < 0 || len(input.Note) > 16000 || strings.ContainsRune(input.Note, 0) || len(input.Labels) > 30 {
 		return ManualReviewVO{}, bizerrors.BadRequest("invalid review fields")
@@ -100,6 +103,20 @@ func (s *Service) SaveReview(ctx context.Context, paperID idgen.ID, topic string
 		if !exists {
 			return bizerrors.BadRequest("paper does not belong to this topic")
 		}
+		if input.Evidence != nil {
+			config, e := c.GleanTopic.Query().Where(gleantopic.Slug(topic)).ForShare().Only(ctx)
+			if e != nil && !ent.IsNotFound(e) {
+				return e
+			}
+			if config != nil && config.SearchProtocol != nil {
+				p := config.SearchProtocol
+				if input.Evidence.ProfileID != p.ProfileID || input.Evidence.ProfileVersion != p.ProfileVersion {
+					return bizerrors.BadRequest("审核证据必须使用当前主题的协议版本")
+				}
+			} else if input.Evidence.ProfileID != topic {
+				return bizerrors.BadRequest("审核证据的 profile 必须对应当前主题")
+			}
+		}
 		previous, err := c.GleanPaperReview.Query().Where(gleanpaperreview.PaperID(paperID), gleanpaperreview.Topic(topic)).Only(ctx)
 		var before any = map[string]any{}
 		var record *ent.GleanPaperReview
@@ -107,13 +124,13 @@ func (s *Service) SaveReview(ctx context.Context, paperID idgen.ID, topic string
 			if input.ExpectedVersion != 0 {
 				return bizerrors.CatalogConflict()
 			}
-			record, err = c.GleanPaperReview.Create().SetPaperID(paperID).SetTopic(topic).SetStatus(gleanpaperreview.Status(input.Status)).SetNote(input.Note).SetLabels(input.Labels).SetCreatedBy(uid).SetUpdatedBy(uid).Save(ctx)
+			record, err = c.GleanPaperReview.Create().SetPaperID(paperID).SetTopic(topic).SetStatus(gleanpaperreview.Status(input.Status)).SetNote(input.Note).SetLabels(input.Labels).SetEvidence(input.Evidence).SetCreatedBy(uid).SetUpdatedBy(uid).Save(ctx)
 		} else if err == nil {
 			if previous.Version != input.ExpectedVersion {
 				return bizerrors.CatalogConflict()
 			}
 			before = reviewVO(previous)
-			record, err = c.GleanPaperReview.UpdateOneID(previous.ID).SetStatus(gleanpaperreview.Status(input.Status)).SetNote(input.Note).SetLabels(input.Labels).SetVersion(previous.Version + 1).SetUpdatedBy(uid).Save(ctx)
+			record, err = c.GleanPaperReview.UpdateOneID(previous.ID).SetStatus(gleanpaperreview.Status(input.Status)).SetNote(input.Note).SetLabels(input.Labels).SetEvidence(input.Evidence).SetVersion(previous.Version + 1).SetUpdatedBy(uid).Save(ctx)
 		}
 		if err != nil {
 			return err
@@ -260,7 +277,7 @@ func normalizeTopicInput(input *TopicBody, requireSearch bool) error {
 	return nil
 }
 func topicVO(t *ent.GleanTopic) TopicVO {
-	return TopicVO{Slug: t.Slug, Name: t.Name, Description: t.Description, Rule: t.Rule, SearchEnabled: t.SearchEnabled, TermGroups: t.TermGroups, SearchRoutes: t.SearchRoutes, Version: t.Version}
+	return TopicVO{Slug: t.Slug, Name: t.Name, Description: t.Description, Rule: t.Rule, SearchEnabled: t.SearchEnabled, TermGroups: t.TermGroups, SearchRoutes: t.SearchRoutes, SearchProtocol: t.SearchProtocol, Version: t.Version}
 }
 func (s *Service) topicConfigs(ctx context.Context) ([]TopicVO, error) {
 	result := append([]TopicVO(nil), topics...)
@@ -297,7 +314,7 @@ func (s *Service) SearchTopicConfigs(ctx context.Context) ([]SearchTopicConfig, 
 	}
 	result := make([]SearchTopicConfig, 0, len(configs))
 	for _, v := range configs {
-		result = append(result, SearchTopicConfig{Slug: v.Slug, SearchEnabled: v.SearchEnabled, TermGroups: v.TermGroups, SearchRoutes: v.SearchRoutes, Version: v.Version})
+		result = append(result, SearchTopicConfig{Slug: v.Slug, SearchEnabled: v.SearchEnabled, TermGroups: v.TermGroups, SearchRoutes: v.SearchRoutes, SearchProtocol: v.SearchProtocol, Version: v.Version})
 	}
 	return result, nil
 }
@@ -314,7 +331,7 @@ func (s *Service) SaveTopic(ctx context.Context, path string, input TopicBody, c
 		}
 		input.Slug = path
 	}
-	if err = normalizeTopicInput(&input, create); err != nil {
+	if err = normalizeTopicInput(&input, false); err != nil {
 		return TopicVO{}, err
 	}
 	var result TopicVO
@@ -346,6 +363,9 @@ func (s *Service) SaveTopic(ctx context.Context, path string, input TopicBody, c
 					}
 				}
 			}
+			if err := prepareTopicProtocol(&input, nil); err != nil {
+				return err
+			}
 			if err := normalizeTopic(&input); err != nil {
 				return err
 			}
@@ -353,12 +373,15 @@ func (s *Service) SaveTopic(ctx context.Context, path string, input TopicBody, c
 			if input.SearchRoutes != nil {
 				routes = *input.SearchRoutes
 			}
-			record, err = c.GleanTopic.Create().SetSlug(input.Slug).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetSearchRoutes(routes).SetCreatedBy(uid).SetUpdatedBy(uid).Save(ctx)
+			record, err = c.GleanTopic.Create().SetSlug(input.Slug).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetSearchRoutes(routes).SetSearchProtocol(input.SearchProtocol).SetCreatedBy(uid).SetUpdatedBy(uid).Save(ctx)
 		} else if err == nil {
 			if create || previous.Version != input.ExpectedVersion {
 				return bizerrors.CatalogConflict()
 			}
 			before = topicVO(previous)
+			if err := prepareTopicProtocol(&input, previous.SearchProtocol); err != nil {
+				return err
+			}
 			if input.SearchRoutes == nil {
 				routes := previous.SearchRoutes
 				input.SearchRoutes = &routes
@@ -366,7 +389,7 @@ func (s *Service) SaveTopic(ctx context.Context, path string, input TopicBody, c
 			if err := normalizeTopic(&input); err != nil {
 				return err
 			}
-			record, err = c.GleanTopic.UpdateOneID(previous.ID).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetSearchRoutes(*input.SearchRoutes).SetVersion(previous.Version + 1).SetUpdatedBy(uid).Save(ctx)
+			record, err = c.GleanTopic.UpdateOneID(previous.ID).SetName(input.Name).SetDescription(input.Description).SetRule(input.Rule).SetSearchEnabled(input.SearchEnabled).SetTermGroups(input.TermGroups).SetSearchRoutes(*input.SearchRoutes).SetSearchProtocol(input.SearchProtocol).SetVersion(previous.Version + 1).SetUpdatedBy(uid).Save(ctx)
 		}
 		if err != nil {
 			return err

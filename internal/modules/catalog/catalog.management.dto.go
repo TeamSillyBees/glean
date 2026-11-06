@@ -10,20 +10,22 @@ import (
 
 // ManualReviewVO 为主题内人工决定，不覆盖原始分类。
 type ManualReviewVO struct {
-	Status    string    `json:"status"`
-	Note      string    `json:"note"`
-	Labels    []string  `json:"labels"`
-	Version   int       `json:"version"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	UpdatedBy *idgen.ID `json:"updatedBy"`
+	Evidence  *retrieval.ScreeningEvidence `json:"evidence,omitempty"`
+	Status    string                       `json:"status"`
+	Note      string                       `json:"note"`
+	Labels    []string                     `json:"labels"`
+	Version   int                          `json:"version"`
+	UpdatedAt time.Time                    `json:"updatedAt"`
+	UpdatedBy *idgen.ID                    `json:"updatedBy"`
 }
 
 // ReviewBody 为一次直接保存的人工审核。
 type ReviewBody struct {
-	Status          string   `json:"status" enum:"pending,included,excluded"`
-	Note            string   `json:"note" maxLength:"4000"`
-	Labels          []string `json:"labels" maxItems:"30"`
-	ExpectedVersion int      `json:"expectedVersion" minimum:"0"`
+	Evidence        *retrieval.ScreeningEvidence `json:"evidence,omitempty"`
+	Status          string                       `json:"status" enum:"pending,included,excluded"`
+	Note            string                       `json:"note" maxLength:"4000"`
+	Labels          []string                     `json:"labels" maxItems:"30"`
+	ExpectedVersion int                          `json:"expectedVersion" minimum:"0"`
 }
 
 // CorrectionFields 仅允许修改展示书目，不允许修改去重标识和来源证据。
@@ -54,23 +56,26 @@ type CorrectionVO struct {
 
 // TopicBody 保存简单主题配置；组内 OR、组间 AND。
 type TopicBody struct {
-	Slug            string             `json:"slug,omitempty" maxLength:"80"`
-	Name            string             `json:"name" minLength:"1" maxLength:"100"`
-	Description     string             `json:"description" maxLength:"2000"`
-	Rule            string             `json:"rule" maxLength:"4000"`
-	SearchEnabled   bool               `json:"searchEnabled"`
-	TermGroups      [][]string         `json:"termGroups" maxItems:"10"`
-	SearchRoutes    *[]retrieval.Route `json:"searchRoutes,omitempty"`
-	ExpectedVersion int                `json:"expectedVersion" minimum:"0"`
+	SearchProtocol          *retrieval.Protocol `json:"searchProtocol,omitempty"`
+	ProtocolAcknowledgement string              `json:"protocolAcknowledgement,omitempty" maxLength:"64"`
+	Slug                    string              `json:"slug,omitempty" maxLength:"80"`
+	Name                    string              `json:"name" minLength:"1" maxLength:"100"`
+	Description             string              `json:"description" maxLength:"2000"`
+	Rule                    string              `json:"rule" maxLength:"4000"`
+	SearchEnabled           bool                `json:"searchEnabled"`
+	TermGroups              [][]string          `json:"termGroups" maxItems:"10"`
+	SearchRoutes            *[]retrieval.Route  `json:"searchRoutes,omitempty"`
+	ExpectedVersion         int                 `json:"expectedVersion" minimum:"0"`
 }
 
 // SearchTopicConfig 是给采集装配层的主题快照；内置主题空词组表示默认模板。
 type SearchTopicConfig struct {
-	Slug          string
-	SearchEnabled bool
-	TermGroups    [][]string
-	SearchRoutes  []retrieval.Route `json:"searchRoutes,omitempty"`
-	Version       int
+	SearchProtocol *retrieval.Protocol
+	Slug           string
+	SearchEnabled  bool
+	TermGroups     [][]string
+	SearchRoutes   []retrieval.Route `json:"searchRoutes,omitempty"`
+	Version        int
 }
 
 // CatalogAccessVO 表示当前用户是否可以管理共享目录。

@@ -44,6 +44,7 @@ func (m *Module) Register(api huma.API, registry *server.RouteRegistry) {
 	huma.Register(api, write(http.MethodPut, "/api/v1/catalog/papers/{id}/topics/{slug}/review", "catalog-review", "保存人工审核"), m.handler.saveReview)
 	huma.Register(api, write(http.MethodPut, "/api/v1/catalog/papers/{id}/correction", "catalog-correction", "保存元数据纠错"), m.handler.saveCorrection)
 	huma.Register(api, write(http.MethodPost, "/api/v1/catalog/topics", "catalog-create-topic", "新增研究主题"), m.handler.createTopic)
+	huma.Register(api, write(http.MethodPost, "/api/v1/catalog/topics/protocol-preview", "catalog-protocol-preview", "校验并预览检索协议"), m.handler.previewProtocol)
 	huma.Register(api, write(http.MethodPut, "/api/v1/catalog/topics/{slug}", "catalog-update-topic", "编辑研究主题"), m.handler.updateTopic)
 	for _, op := range writes {
 		registry.Register(op.Method, op.Path, platformauth.RouteSecurity{AccessMode: platformauth.AccessModePermission, Permission: "catalog:manage"})

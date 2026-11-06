@@ -80,7 +80,7 @@ func TestReviewVersionConflictRollsBack(t *testing.T) {
 	mock.ExpectQuery(`SELECT .* FROM "glean_membership"`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(201))
 	mock.ExpectQuery(`SELECT .* FROM "glean_paper_review"`).WillReturnRows(sqlmock.NewRows([]string{"id", "version", "status"}).AddRow(301, 2, "pending"))
 	mock.ExpectRollback()
-	_, err := service.SaveReview(managerContext(), 101, "biomed-ai", ReviewBody{Status: "included", ExpectedVersion: 1})
+	_, err := service.SaveReview(managerContext(), 101, "biomed-ai", ReviewBody{Status: "pending", ExpectedVersion: 1})
 	require.Equal(t, 409, bizerrors.StatusOf(err))
 }
 
@@ -95,7 +95,7 @@ func TestReviewAuditFailureRollsBack(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO "glean_paper_review"`).WillReturnResult(sqlmock.NewResult(301, 1))
 	mock.ExpectExec(`INSERT INTO "glean_catalog_change"`).WillReturnError(errors.New("audit unavailable"))
 	mock.ExpectRollback()
-	_, err := service.SaveReview(managerContext(), 101, "biomed-ai", ReviewBody{Status: "included"})
+	_, err := service.SaveReview(managerContext(), 101, "biomed-ai", ReviewBody{Status: "pending"})
 	require.ErrorContains(t, err, "audit unavailable")
 }
 

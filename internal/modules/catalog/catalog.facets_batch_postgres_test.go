@@ -38,7 +38,7 @@ func TestCatalogFacetBatchEquivalence(t *testing.T) {
 		require.NoError(t, err)
 	}
 	for i, id := range ids {
-		_, err := service.SaveReview(manager, id, "biomed-ai", ReviewBody{Status: []string{"included", "excluded", "pending"}[i], Labels: []string{"shared-label", fmt.Sprintf("label-%d", i)}})
+		_, err := service.SaveReview(manager, id, "biomed-ai", ReviewBody{Status: []string{"included", "excluded", "pending"}[i], Note: "transaction fixture", Evidence: screeningFixture("biomed-ai", []string{"included", "excluded", "pending"}[i]), Labels: []string{"shared-label", fmt.Sprintf("label-%d", i)}})
 		require.NoError(t, err)
 	}
 	year, venue := 2030, "Corrected venue"

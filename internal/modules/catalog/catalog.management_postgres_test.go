@@ -81,7 +81,7 @@ func TestCatalogManagementPostgres(t *testing.T) {
 	require.Len(t, before, 3)
 	require.Equal(t, 1, before[0].CuratedCount)
 	// 一次保存即生效，不改变另一个主题的结论。
-	excluded, err := service.SaveReview(manager, imported.PaperID, "biomed-ai", ReviewBody{Status: "excluded", Note: "人工范围判断", Labels: []string{"人工标注"}})
+	excluded, err := service.SaveReview(manager, imported.PaperID, "biomed-ai", ReviewBody{Status: "excluded", Evidence: screeningFixture("biomed-ai", "excluded"), Note: "人工范围判断", Labels: []string{"人工标注"}})
 	require.NoError(t, err)
 	require.Equal(t, 1, excluded.Version)
 	page, err := service.Papers(viewer, PaperQuery{Topic: "biomed-ai", CollectionScope: "curated"})
@@ -95,9 +95,9 @@ func TestCatalogManagementPostgres(t *testing.T) {
 	require.Equal(t, "excluded", detail.Memberships[0].ManualReview.Status)
 	require.Nil(t, detail.Memberships[1].ManualReview)
 	require.Equal(t, "immutable source title", detail.Memberships[0].Raw["title"])
-	_, err = service.SaveReview(manager, imported.PaperID, "biomed-ai", ReviewBody{Status: "included"})
+	_, err = service.SaveReview(manager, imported.PaperID, "biomed-ai", ReviewBody{Status: "included", Note: "transaction fixture", Evidence: screeningFixture("biomed-ai", "included")})
 	require.Equal(t, 409, bizerrors.StatusOf(err))
-	included, err := service.SaveReview(manager, imported.PaperID, "biomed-ai", ReviewBody{Status: "included", ExpectedVersion: 1})
+	included, err := service.SaveReview(manager, imported.PaperID, "biomed-ai", ReviewBody{Status: "included", Note: "transaction fixture", Evidence: screeningFixture("biomed-ai", "included"), ExpectedVersion: 1})
 	require.NoError(t, err)
 	require.Equal(t, 2, included.Version)
 	page, err = service.Papers(viewer, PaperQuery{Topic: "biomed-ai", CollectionScope: "curated"})
@@ -192,7 +192,7 @@ func TestCatalogManagementPostgres(t *testing.T) {
 	page, err = service.Papers(viewer, PaperQuery{Topic: "custom-topic", CollectionScope: "pending"})
 	require.NoError(t, err)
 	require.Equal(t, 1, page.Total)
-	_, err = service.SaveReview(manager, observation.PaperID, "custom-topic", ReviewBody{Status: "included"})
+	_, err = service.SaveReview(manager, observation.PaperID, "custom-topic", ReviewBody{Status: "included", Note: "transaction fixture", Evidence: screeningFixture("custom-topic", "included")})
 	require.NoError(t, err)
 	input.ObservedAt = input.ObservedAt.Add(time.Minute)
 	_, err = service.IngestObservation(entx.WithOperatorID(ctx, 7), input)
@@ -232,4 +232,28 @@ func TestCatalogManagementPostgres(t *testing.T) {
 	require.Equal(t, before[0].MembershipCount, after[0].MembershipCount)
 	require.Equal(t, 1, after[0].CuratedCount)
 	require.Empty(t, after[0].TermGroups)
+	// 导出不经过界面隐藏/纳入筛选；同论文三个 profile 的不同决定必须全部保留。
+	input.Topics = []string{"custom-topic", "llm-agent", "biomed-worldmodel"}
+	_, err = service.IngestObservation(entx.WithOperatorID(ctx, 7), input)
+	require.NoError(t, err)
+	_, err = service.SaveReview(manager, observation.PaperID, "llm-agent", ReviewBody{Status: "excluded", Note: "transaction-only explicit exclusion", Evidence: screeningFixture("llm-agent", "excluded")})
+	require.NoError(t, err)
+	exported, err := service.RetrievalExportPage(manager, input.RunID, 0, 1)
+	require.NoError(t, err)
+	require.Len(t, exported, 1, "hidden records still belong in the audit")
+	require.Equal(t, map[string]any{"hidden": true, "reading": "read"}, exported[0].Record["personal_state"])
+	decisions := map[string]string{}
+	for _, screening := range exported[0].Screening {
+		decisions[screening["profile_id"].(string)] = screening["decision"].(string)
+	}
+	require.Equal(t, map[string]string{"custom-topic": "included", "llm-agent": "excluded", "biomed-worldmodel": "pending"}, decisions)
+	require.NotEmpty(t, exported[0].Record["field_sources"])
+	require.NotEmpty(t, exported[0].IdentityEdges)
+	require.NotContains(t, exported[0].Record, "abstract")
+	next, err := service.RetrievalExportPage(manager, input.RunID, exported[0].ID, 1)
+	require.NoError(t, err)
+	require.Empty(t, next, "stable ID cursor must not repeat the previous record")
+	otherExport, err := service.RetrievalExportPage(viewer, input.RunID, 0, 1)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"hidden": false, "reading": "unread"}, otherExport[0].Record["personal_state"])
 }
