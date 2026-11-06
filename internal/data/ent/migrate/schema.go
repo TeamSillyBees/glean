@@ -245,6 +245,7 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "included", "excluded"}},
 		{Name: "note", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "labels", Type: field.TypeJSON},
+		{Name: "evidence", Type: field.TypeJSON, Nullable: true},
 		{Name: "version", Type: field.TypeInt, Default: 1},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -350,6 +351,88 @@ var (
 			},
 		},
 	}
+	// GleanSearchOccurrenceColumns holds the columns for the "glean_search_occurrence" table.
+	GleanSearchOccurrenceColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "run_id", Type: field.TypeInt64},
+		{Name: "request_id", Type: field.TypeInt64},
+		{Name: "ordinal", Type: field.TypeInt},
+		{Name: "source", Type: field.TypeString},
+		{Name: "source_id", Type: field.TypeString},
+		{Name: "record_key", Type: field.TypeString},
+		{Name: "payload", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanSearchOccurrenceTable holds the schema information for the "glean_search_occurrence" table.
+	GleanSearchOccurrenceTable = &schema.Table{
+		Name:       "glean_search_occurrence",
+		Columns:    GleanSearchOccurrenceColumns,
+		PrimaryKey: []*schema.Column{GleanSearchOccurrenceColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleansearchoccurrence_request_id_ordinal",
+				Unique:  true,
+				Columns: []*schema.Column{GleanSearchOccurrenceColumns[2], GleanSearchOccurrenceColumns[3]},
+			},
+			{
+				Name:    "gleansearchoccurrence_run_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanSearchOccurrenceColumns[1], GleanSearchOccurrenceColumns[0]},
+			},
+		},
+	}
+	// GleanSearchRequestColumns holds the columns for the "glean_search_request" table.
+	GleanSearchRequestColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "run_id", Type: field.TypeInt64},
+		{Name: "query_id", Type: field.TypeString},
+		{Name: "source", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString},
+		{Name: "payload", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanSearchRequestTable holds the schema information for the "glean_search_request" table.
+	GleanSearchRequestTable = &schema.Table{
+		Name:       "glean_search_request",
+		Columns:    GleanSearchRequestColumns,
+		PrimaryKey: []*schema.Column{GleanSearchRequestColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleansearchrequest_run_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanSearchRequestColumns[1], GleanSearchRequestColumns[0]},
+			},
+		},
+	}
+	// GleanSearchRunColumns holds the columns for the "glean_search_run" table.
+	GleanSearchRunColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "state_key", Type: field.TypeString},
+		{Name: "payload", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanSearchRunTable holds the schema information for the "glean_search_run" table.
+	GleanSearchRunTable = &schema.Table{
+		Name:       "glean_search_run",
+		Columns:    GleanSearchRunColumns,
+		PrimaryKey: []*schema.Column{GleanSearchRunColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleansearchrun_state_key_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanSearchRunColumns[1], GleanSearchRunColumns[0]},
+			},
+		},
+	}
 	// GleanTopicColumns holds the columns for the "glean_topic" table.
 	GleanTopicColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -360,6 +443,7 @@ var (
 		{Name: "search_enabled", Type: field.TypeBool, Default: true},
 		{Name: "term_groups", Type: field.TypeJSON},
 		{Name: "search_routes", Type: field.TypeJSON},
+		{Name: "search_protocol", Type: field.TypeJSON, Nullable: true},
 		{Name: "version", Type: field.TypeInt, Default: 1},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -724,6 +808,9 @@ var (
 		GleanPaperStateTable,
 		GleanPreferenceTable,
 		GleanSearchHitTable,
+		GleanSearchOccurrenceTable,
+		GleanSearchRequestTable,
+		GleanSearchRunTable,
 		GleanTopicTable,
 		GleanVenueTable,
 		SysConfigTable,
@@ -770,6 +857,15 @@ func init() {
 	}
 	GleanSearchHitTable.Annotation = &entsql.Annotation{
 		Table: "glean_search_hit",
+	}
+	GleanSearchOccurrenceTable.Annotation = &entsql.Annotation{
+		Table: "glean_search_occurrence",
+	}
+	GleanSearchRequestTable.Annotation = &entsql.Annotation{
+		Table: "glean_search_request",
+	}
+	GleanSearchRunTable.Annotation = &entsql.Annotation{
+		Table: "glean_search_run",
 	}
 	GleanTopicTable.Annotation = &entsql.Annotation{
 		Table: "glean_topic",

@@ -39,6 +39,15 @@ type GleanPreference func(*sql.Selector)
 // GleanSearchHit is the predicate function for gleansearchhit builders.
 type GleanSearchHit func(*sql.Selector)
 
+// GleanSearchOccurrence is the predicate function for gleansearchoccurrence builders.
+type GleanSearchOccurrence func(*sql.Selector)
+
+// GleanSearchRequest is the predicate function for gleansearchrequest builders.
+type GleanSearchRequest func(*sql.Selector)
+
+// GleanSearchRun is the predicate function for gleansearchrun builders.
+type GleanSearchRun func(*sql.Selector)
+
 // GleanTopic is the predicate function for gleantopic builders.
 type GleanTopic func(*sql.Selector)
 

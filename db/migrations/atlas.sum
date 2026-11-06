@@ -1,4 +1,4 @@
-h1:5vVrCsQr67IKFQYzVYWwZVVdiKrwzrE+zzOVYVFUxHE=
+h1:CYQv6wllUV9gRIPN+amtSFSsy28QXx+YSNALqbIxkBY=
 20261021000000_init.sql h1:SJ5rkc0Zy0W5w4zXNMr7s7FW2wZGqfu2FvhimnRpGGM=
 20261026000000_catalog.sql h1:uI/KEQJmStgCG1A1OkZGQ+n/Mxhbph5Tqq5wvbU3kFE=
 20261026120000_observations.sql h1:doYRzvRK0SqvS4eja4c3DUj2Bmj1vhthiw/cAM3Skog=
@@ -6,3 +6,4 @@ h1:5vVrCsQr67IKFQYzVYWwZVVdiKrwzrE+zzOVYVFUxHE=
 20261026124500_pmid_lookup.sql h1:w2LnTy30OavWV6l3Wc2q5GKoo6ZIWP2aq2ZBja8i8yw=
 20261027163000_catalog_management.sql h1:HpsQfpUak9XEPA0AiK5/cybgnbdEeIN0i9wKBi+Slwo=
 20261105000000_topic_search_routes.sql h1:sJ4aRJblAcfKPB+lP5ZIDyc+6pbFCwCaOeQjJc6AKZc=
+20261106000000_retrieval_protocol_audit.sql h1:ov+I7C9tD/rQJ+G8NUVJVvHEhK7gy+eqzuN38r/fvzQ=

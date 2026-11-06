@@ -29,6 +29,8 @@ const (
 	FieldTermGroups = "term_groups"
 	// FieldSearchRoutes holds the string denoting the search_routes field in the database.
 	FieldSearchRoutes = "search_routes"
+	// FieldSearchProtocol holds the string denoting the search_protocol field in the database.
+	FieldSearchProtocol = "search_protocol"
 	// FieldVersion holds the string denoting the version field in the database.
 	FieldVersion = "version"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -53,6 +55,7 @@ var Columns = []string{
 	FieldSearchEnabled,
 	FieldTermGroups,
 	FieldSearchRoutes,
+	FieldSearchProtocol,
 	FieldVersion,
 	FieldCreatedAt,
 	FieldUpdatedAt,

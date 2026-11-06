@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // GleanPaperReview is the model entity for the GleanPaperReview schema.
@@ -30,6 +31,8 @@ type GleanPaperReview struct {
 	Note string `json:"note,omitempty"`
 	// Labels holds the value of the "labels" field.
 	Labels []string `json:"labels,omitempty"`
+	// Evidence holds the value of the "evidence" field.
+	Evidence *retrieval.ScreeningEvidence `json:"evidence,omitempty"`
 	// Version holds the value of the "version" field.
 	Version int `json:"version,omitempty"`
 	// 创建时间。
@@ -48,7 +51,7 @@ func (*GleanPaperReview) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gleanpaperreview.FieldLabels:
+		case gleanpaperreview.FieldLabels, gleanpaperreview.FieldEvidence:
 			values[i] = new([]byte)
 		case gleanpaperreview.FieldID, gleanpaperreview.FieldPaperID, gleanpaperreview.FieldVersion, gleanpaperreview.FieldCreatedBy, gleanpaperreview.FieldUpdatedBy:
 			values[i] = new(sql.NullInt64)
@@ -107,6 +110,14 @@ func (_m *GleanPaperReview) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.Labels); err != nil {
 					return fmt.Errorf("unmarshal field labels: %w", err)
+				}
+			}
+		case gleanpaperreview.FieldEvidence:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field evidence", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Evidence); err != nil {
+					return fmt.Errorf("unmarshal field evidence: %w", err)
 				}
 			}
 		case gleanpaperreview.FieldVersion:
@@ -191,6 +202,9 @@ func (_m *GleanPaperReview) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("labels=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Labels))
+	builder.WriteString(", ")
+	builder.WriteString("evidence=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Evidence))
 	builder.WriteString(", ")
 	builder.WriteString("version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Version))

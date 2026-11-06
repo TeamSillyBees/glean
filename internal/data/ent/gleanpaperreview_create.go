@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // GleanPaperReviewCreate is the builder for creating a GleanPaperReview entity.
@@ -56,6 +57,12 @@ func (_c *GleanPaperReviewCreate) SetNillableNote(v *string) *GleanPaperReviewCr
 // SetLabels sets the "labels" field.
 func (_c *GleanPaperReviewCreate) SetLabels(v []string) *GleanPaperReviewCreate {
 	_c.mutation.SetLabels(v)
+	return _c
+}
+
+// SetEvidence sets the "evidence" field.
+func (_c *GleanPaperReviewCreate) SetEvidence(v *retrieval.ScreeningEvidence) *GleanPaperReviewCreate {
+	_c.mutation.SetEvidence(v)
 	return _c
 }
 
@@ -301,6 +308,10 @@ func (_c *GleanPaperReviewCreate) createSpec() (*GleanPaperReview, *sqlgraph.Cre
 	if value, ok := _c.mutation.Labels(); ok {
 		_spec.SetField(gleanpaperreview.FieldLabels, field.TypeJSON, value)
 		_node.Labels = value
+	}
+	if value, ok := _c.mutation.Evidence(); ok {
+		_spec.SetField(gleanpaperreview.FieldEvidence, field.TypeJSON, value)
+		_node.Evidence = value
 	}
 	if value, ok := _c.mutation.Version(); ok {
 		_spec.SetField(gleanpaperreview.FieldVersion, field.TypeInt, value)

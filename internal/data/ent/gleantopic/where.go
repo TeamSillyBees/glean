@@ -377,6 +377,16 @@ func SearchEnabledNEQ(v bool) predicate.GleanTopic {
 	return predicate.GleanTopic(sql.FieldNEQ(FieldSearchEnabled, v))
 }
 
+// SearchProtocolIsNil applies the IsNil predicate on the "search_protocol" field.
+func SearchProtocolIsNil() predicate.GleanTopic {
+	return predicate.GleanTopic(sql.FieldIsNull(FieldSearchProtocol))
+}
+
+// SearchProtocolNotNil applies the NotNil predicate on the "search_protocol" field.
+func SearchProtocolNotNil() predicate.GleanTopic {
+	return predicate.GleanTopic(sql.FieldNotNull(FieldSearchProtocol))
+}
+
 // VersionEQ applies the EQ predicate on the "version" field.
 func VersionEQ(v int) predicate.GleanTopic {
 	return predicate.GleanTopic(sql.FieldEQ(FieldVersion, v))

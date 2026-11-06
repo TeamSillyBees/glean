@@ -25,6 +25,8 @@ const (
 	FieldNote = "note"
 	// FieldLabels holds the string denoting the labels field in the database.
 	FieldLabels = "labels"
+	// FieldEvidence holds the string denoting the evidence field in the database.
+	FieldEvidence = "evidence"
 	// FieldVersion holds the string denoting the version field in the database.
 	FieldVersion = "version"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -47,6 +49,7 @@ var Columns = []string{
 	FieldStatus,
 	FieldNote,
 	FieldLabels,
+	FieldEvidence,
 	FieldVersion,
 	FieldCreatedAt,
 	FieldUpdatedAt,

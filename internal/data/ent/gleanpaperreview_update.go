@@ -15,6 +15,7 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/data/ent/predicate"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // GleanPaperReviewUpdate is the builder for updating GleanPaperReview entities.
@@ -102,6 +103,18 @@ func (_u *GleanPaperReviewUpdate) SetLabels(v []string) *GleanPaperReviewUpdate 
 // AppendLabels appends value to the "labels" field.
 func (_u *GleanPaperReviewUpdate) AppendLabels(v []string) *GleanPaperReviewUpdate {
 	_u.mutation.AppendLabels(v)
+	return _u
+}
+
+// SetEvidence sets the "evidence" field.
+func (_u *GleanPaperReviewUpdate) SetEvidence(v *retrieval.ScreeningEvidence) *GleanPaperReviewUpdate {
+	_u.mutation.SetEvidence(v)
+	return _u
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (_u *GleanPaperReviewUpdate) ClearEvidence() *GleanPaperReviewUpdate {
+	_u.mutation.ClearEvidence()
 	return _u
 }
 
@@ -282,6 +295,12 @@ func (_u *GleanPaperReviewUpdate) sqlSave(ctx context.Context) (_node int, err e
 			sqljson.Append(u, gleanpaperreview.FieldLabels, value)
 		})
 	}
+	if value, ok := _u.mutation.Evidence(); ok {
+		_spec.SetField(gleanpaperreview.FieldEvidence, field.TypeJSON, value)
+	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(gleanpaperreview.FieldEvidence, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(gleanpaperreview.FieldVersion, field.TypeInt, value)
 	}
@@ -401,6 +420,18 @@ func (_u *GleanPaperReviewUpdateOne) SetLabels(v []string) *GleanPaperReviewUpda
 // AppendLabels appends value to the "labels" field.
 func (_u *GleanPaperReviewUpdateOne) AppendLabels(v []string) *GleanPaperReviewUpdateOne {
 	_u.mutation.AppendLabels(v)
+	return _u
+}
+
+// SetEvidence sets the "evidence" field.
+func (_u *GleanPaperReviewUpdateOne) SetEvidence(v *retrieval.ScreeningEvidence) *GleanPaperReviewUpdateOne {
+	_u.mutation.SetEvidence(v)
+	return _u
+}
+
+// ClearEvidence clears the value of the "evidence" field.
+func (_u *GleanPaperReviewUpdateOne) ClearEvidence() *GleanPaperReviewUpdateOne {
+	_u.mutation.ClearEvidence()
 	return _u
 }
 
@@ -610,6 +641,12 @@ func (_u *GleanPaperReviewUpdateOne) sqlSave(ctx context.Context) (_node *GleanP
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, gleanpaperreview.FieldLabels, value)
 		})
+	}
+	if value, ok := _u.mutation.Evidence(); ok {
+		_spec.SetField(gleanpaperreview.FieldEvidence, field.TypeJSON, value)
+	}
+	if _u.mutation.EvidenceCleared() {
+		_spec.ClearField(gleanpaperreview.FieldEvidence, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(gleanpaperreview.FieldVersion, field.TypeInt, value)

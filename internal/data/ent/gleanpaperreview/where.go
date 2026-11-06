@@ -302,6 +302,16 @@ func NoteContainsFold(v string) predicate.GleanPaperReview {
 	return predicate.GleanPaperReview(sql.FieldContainsFold(FieldNote, v))
 }
 
+// EvidenceIsNil applies the IsNil predicate on the "evidence" field.
+func EvidenceIsNil() predicate.GleanPaperReview {
+	return predicate.GleanPaperReview(sql.FieldIsNull(FieldEvidence))
+}
+
+// EvidenceNotNil applies the NotNil predicate on the "evidence" field.
+func EvidenceNotNil() predicate.GleanPaperReview {
+	return predicate.GleanPaperReview(sql.FieldNotNull(FieldEvidence))
+}
+
 // VersionEQ applies the EQ predicate on the "version" field.
 func VersionEQ(v int) predicate.GleanPaperReview {
 	return predicate.GleanPaperReview(sql.FieldEQ(FieldVersion, v))

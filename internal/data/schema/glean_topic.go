@@ -14,7 +14,7 @@ type GleanTopic struct{ ent.Schema }
 
 // Fields 返回字段定义。
 func (GleanTopic) Fields() []ent.Field {
-	return append([]ent.Field{fieldx.ID(), field.String("slug").NotEmpty().Unique(), field.String("name").NotEmpty(), field.Text("description").Default(""), field.Text("rule").Default(""), field.Bool("search_enabled").Default(true), field.JSON("term_groups", [][]string{}).Default([][]string{}), field.JSON("search_routes", []retrieval.Route{}).Default([]retrieval.Route{}), field.Int("version").Default(1)}, fieldx.Audit()...)
+	return append([]ent.Field{fieldx.ID(), field.String("slug").NotEmpty().Unique(), field.String("name").NotEmpty(), field.Text("description").Default(""), field.Text("rule").Default(""), field.Bool("search_enabled").Default(true), field.JSON("term_groups", [][]string{}).Default([][]string{}), field.JSON("search_routes", []retrieval.Route{}).Default([]retrieval.Route{}), field.JSON("search_protocol", &retrieval.Protocol{}).Optional(), field.Int("version").Default(1)}, fieldx.Audit()...)
 }
 
 // Annotations 返回表名。

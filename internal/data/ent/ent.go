@@ -23,6 +23,9 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
 	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchoccurrence"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchrequest"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchrun"
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
@@ -104,6 +107,9 @@ func checkColumn(t, c string) error {
 			gleanpaperstate.Table:       gleanpaperstate.ValidColumn,
 			gleanpreference.Table:       gleanpreference.ValidColumn,
 			gleansearchhit.Table:        gleansearchhit.ValidColumn,
+			gleansearchoccurrence.Table: gleansearchoccurrence.ValidColumn,
+			gleansearchrequest.Table:    gleansearchrequest.ValidColumn,
+			gleansearchrun.Table:        gleansearchrun.ValidColumn,
 			gleantopic.Table:            gleantopic.ValidColumn,
 			gleanvenue.Table:            gleanvenue.ValidColumn,
 			sysconfig.Table:             sysconfig.ValidColumn,

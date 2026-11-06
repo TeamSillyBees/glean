@@ -141,6 +141,42 @@ func (f GleanSearchHitFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanSearchHitMutation", m)
 }
 
+// The GleanSearchOccurrenceFunc type is an adapter to allow the use of ordinary
+// function as GleanSearchOccurrence mutator.
+type GleanSearchOccurrenceFunc func(context.Context, *ent.GleanSearchOccurrenceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanSearchOccurrenceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanSearchOccurrenceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanSearchOccurrenceMutation", m)
+}
+
+// The GleanSearchRequestFunc type is an adapter to allow the use of ordinary
+// function as GleanSearchRequest mutator.
+type GleanSearchRequestFunc func(context.Context, *ent.GleanSearchRequestMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanSearchRequestFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanSearchRequestMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanSearchRequestMutation", m)
+}
+
+// The GleanSearchRunFunc type is an adapter to allow the use of ordinary
+// function as GleanSearchRun mutator.
+type GleanSearchRunFunc func(context.Context, *ent.GleanSearchRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanSearchRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanSearchRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanSearchRunMutation", m)
+}
+
 // The GleanTopicFunc type is an adapter to allow the use of ordinary
 // function as GleanTopic mutator.
 type GleanTopicFunc func(context.Context, *ent.GleanTopicMutation) (ent.Value, error)

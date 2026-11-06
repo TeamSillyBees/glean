@@ -27,6 +27,9 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
 	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchoccurrence"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchrequest"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchrun"
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
@@ -66,6 +69,12 @@ type Client struct {
 	GleanPreference *GleanPreferenceClient
 	// GleanSearchHit is the client for interacting with the GleanSearchHit builders.
 	GleanSearchHit *GleanSearchHitClient
+	// GleanSearchOccurrence is the client for interacting with the GleanSearchOccurrence builders.
+	GleanSearchOccurrence *GleanSearchOccurrenceClient
+	// GleanSearchRequest is the client for interacting with the GleanSearchRequest builders.
+	GleanSearchRequest *GleanSearchRequestClient
+	// GleanSearchRun is the client for interacting with the GleanSearchRun builders.
+	GleanSearchRun *GleanSearchRunClient
 	// GleanTopic is the client for interacting with the GleanTopic builders.
 	GleanTopic *GleanTopicClient
 	// GleanVenue is the client for interacting with the GleanVenue builders.
@@ -108,6 +117,9 @@ func (c *Client) init() {
 	c.GleanPaperState = NewGleanPaperStateClient(c.config)
 	c.GleanPreference = NewGleanPreferenceClient(c.config)
 	c.GleanSearchHit = NewGleanSearchHitClient(c.config)
+	c.GleanSearchOccurrence = NewGleanSearchOccurrenceClient(c.config)
+	c.GleanSearchRequest = NewGleanSearchRequestClient(c.config)
+	c.GleanSearchRun = NewGleanSearchRunClient(c.config)
 	c.GleanTopic = NewGleanTopicClient(c.config)
 	c.GleanVenue = NewGleanVenueClient(c.config)
 	c.SysConfig = NewSysConfigClient(c.config)
@@ -221,6 +233,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		GleanPaperState:       NewGleanPaperStateClient(cfg),
 		GleanPreference:       NewGleanPreferenceClient(cfg),
 		GleanSearchHit:        NewGleanSearchHitClient(cfg),
+		GleanSearchOccurrence: NewGleanSearchOccurrenceClient(cfg),
+		GleanSearchRequest:    NewGleanSearchRequestClient(cfg),
+		GleanSearchRun:        NewGleanSearchRunClient(cfg),
 		GleanTopic:            NewGleanTopicClient(cfg),
 		GleanVenue:            NewGleanVenueClient(cfg),
 		SysConfig:             NewSysConfigClient(cfg),
@@ -261,6 +276,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		GleanPaperState:       NewGleanPaperStateClient(cfg),
 		GleanPreference:       NewGleanPreferenceClient(cfg),
 		GleanSearchHit:        NewGleanSearchHitClient(cfg),
+		GleanSearchOccurrence: NewGleanSearchOccurrenceClient(cfg),
+		GleanSearchRequest:    NewGleanSearchRequestClient(cfg),
+		GleanSearchRun:        NewGleanSearchRunClient(cfg),
 		GleanTopic:            NewGleanTopicClient(cfg),
 		GleanVenue:            NewGleanVenueClient(cfg),
 		SysConfig:             NewSysConfigClient(cfg),
@@ -303,9 +321,10 @@ func (c *Client) Use(hooks ...Hook) {
 		c.GleanCatalogChange, c.GleanMembership, c.GleanMonitorState,
 		c.GleanObservation, c.GleanObservationMatch, c.GleanPaper,
 		c.GleanPaperCorrection, c.GleanPaperReview, c.GleanPaperState,
-		c.GleanPreference, c.GleanSearchHit, c.GleanTopic, c.GleanVenue, c.SysConfig,
-		c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu,
-		c.SysUser, c.SysUserRole,
+		c.GleanPreference, c.GleanSearchHit, c.GleanSearchOccurrence,
+		c.GleanSearchRequest, c.GleanSearchRun, c.GleanTopic, c.GleanVenue,
+		c.SysConfig, c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole,
+		c.SysRoleMenu, c.SysUser, c.SysUserRole,
 	} {
 		n.Use(hooks...)
 	}
@@ -318,9 +337,10 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.GleanCatalogChange, c.GleanMembership, c.GleanMonitorState,
 		c.GleanObservation, c.GleanObservationMatch, c.GleanPaper,
 		c.GleanPaperCorrection, c.GleanPaperReview, c.GleanPaperState,
-		c.GleanPreference, c.GleanSearchHit, c.GleanTopic, c.GleanVenue, c.SysConfig,
-		c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu,
-		c.SysUser, c.SysUserRole,
+		c.GleanPreference, c.GleanSearchHit, c.GleanSearchOccurrence,
+		c.GleanSearchRequest, c.GleanSearchRun, c.GleanTopic, c.GleanVenue,
+		c.SysConfig, c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole,
+		c.SysRoleMenu, c.SysUser, c.SysUserRole,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -351,6 +371,12 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.GleanPreference.mutate(ctx, m)
 	case *GleanSearchHitMutation:
 		return c.GleanSearchHit.mutate(ctx, m)
+	case *GleanSearchOccurrenceMutation:
+		return c.GleanSearchOccurrence.mutate(ctx, m)
+	case *GleanSearchRequestMutation:
+		return c.GleanSearchRequest.mutate(ctx, m)
+	case *GleanSearchRunMutation:
+		return c.GleanSearchRun.mutate(ctx, m)
 	case *GleanTopicMutation:
 		return c.GleanTopic.mutate(ctx, m)
 	case *GleanVenueMutation:
@@ -1836,6 +1862,405 @@ func (c *GleanSearchHitClient) mutate(ctx context.Context, m *GleanSearchHitMuta
 		return (&GleanSearchHitDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GleanSearchHit mutation op: %q", m.Op())
+	}
+}
+
+// GleanSearchOccurrenceClient is a client for the GleanSearchOccurrence schema.
+type GleanSearchOccurrenceClient struct {
+	config
+}
+
+// NewGleanSearchOccurrenceClient returns a client for the GleanSearchOccurrence from the given config.
+func NewGleanSearchOccurrenceClient(c config) *GleanSearchOccurrenceClient {
+	return &GleanSearchOccurrenceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleansearchoccurrence.Hooks(f(g(h())))`.
+func (c *GleanSearchOccurrenceClient) Use(hooks ...Hook) {
+	c.hooks.GleanSearchOccurrence = append(c.hooks.GleanSearchOccurrence, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleansearchoccurrence.Intercept(f(g(h())))`.
+func (c *GleanSearchOccurrenceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanSearchOccurrence = append(c.inters.GleanSearchOccurrence, interceptors...)
+}
+
+// Create returns a builder for creating a GleanSearchOccurrence entity.
+func (c *GleanSearchOccurrenceClient) Create() *GleanSearchOccurrenceCreate {
+	mutation := newGleanSearchOccurrenceMutation(c.config, OpCreate)
+	return &GleanSearchOccurrenceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanSearchOccurrence entities.
+func (c *GleanSearchOccurrenceClient) CreateBulk(builders ...*GleanSearchOccurrenceCreate) *GleanSearchOccurrenceCreateBulk {
+	return &GleanSearchOccurrenceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanSearchOccurrenceClient) MapCreateBulk(slice any, setFunc func(*GleanSearchOccurrenceCreate, int)) *GleanSearchOccurrenceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanSearchOccurrenceCreateBulk{err: fmt.Errorf("calling to GleanSearchOccurrenceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanSearchOccurrenceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanSearchOccurrenceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanSearchOccurrence.
+func (c *GleanSearchOccurrenceClient) Update() *GleanSearchOccurrenceUpdate {
+	mutation := newGleanSearchOccurrenceMutation(c.config, OpUpdate)
+	return &GleanSearchOccurrenceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanSearchOccurrenceClient) UpdateOne(_m *GleanSearchOccurrence) *GleanSearchOccurrenceUpdateOne {
+	mutation := newGleanSearchOccurrenceMutation(c.config, OpUpdateOne, withGleanSearchOccurrence(_m))
+	return &GleanSearchOccurrenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanSearchOccurrenceClient) UpdateOneID(id idgen.ID) *GleanSearchOccurrenceUpdateOne {
+	mutation := newGleanSearchOccurrenceMutation(c.config, OpUpdateOne, withGleanSearchOccurrenceID(id))
+	return &GleanSearchOccurrenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanSearchOccurrence.
+func (c *GleanSearchOccurrenceClient) Delete() *GleanSearchOccurrenceDelete {
+	mutation := newGleanSearchOccurrenceMutation(c.config, OpDelete)
+	return &GleanSearchOccurrenceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanSearchOccurrenceClient) DeleteOne(_m *GleanSearchOccurrence) *GleanSearchOccurrenceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanSearchOccurrenceClient) DeleteOneID(id idgen.ID) *GleanSearchOccurrenceDeleteOne {
+	builder := c.Delete().Where(gleansearchoccurrence.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanSearchOccurrenceDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanSearchOccurrence.
+func (c *GleanSearchOccurrenceClient) Query() *GleanSearchOccurrenceQuery {
+	return &GleanSearchOccurrenceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanSearchOccurrence},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanSearchOccurrence entity by its id.
+func (c *GleanSearchOccurrenceClient) Get(ctx context.Context, id idgen.ID) (*GleanSearchOccurrence, error) {
+	return c.Query().Where(gleansearchoccurrence.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanSearchOccurrenceClient) GetX(ctx context.Context, id idgen.ID) *GleanSearchOccurrence {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanSearchOccurrenceClient) Hooks() []Hook {
+	return c.hooks.GleanSearchOccurrence
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanSearchOccurrenceClient) Interceptors() []Interceptor {
+	return c.inters.GleanSearchOccurrence
+}
+
+func (c *GleanSearchOccurrenceClient) mutate(ctx context.Context, m *GleanSearchOccurrenceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanSearchOccurrenceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanSearchOccurrenceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanSearchOccurrenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanSearchOccurrenceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanSearchOccurrence mutation op: %q", m.Op())
+	}
+}
+
+// GleanSearchRequestClient is a client for the GleanSearchRequest schema.
+type GleanSearchRequestClient struct {
+	config
+}
+
+// NewGleanSearchRequestClient returns a client for the GleanSearchRequest from the given config.
+func NewGleanSearchRequestClient(c config) *GleanSearchRequestClient {
+	return &GleanSearchRequestClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleansearchrequest.Hooks(f(g(h())))`.
+func (c *GleanSearchRequestClient) Use(hooks ...Hook) {
+	c.hooks.GleanSearchRequest = append(c.hooks.GleanSearchRequest, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleansearchrequest.Intercept(f(g(h())))`.
+func (c *GleanSearchRequestClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanSearchRequest = append(c.inters.GleanSearchRequest, interceptors...)
+}
+
+// Create returns a builder for creating a GleanSearchRequest entity.
+func (c *GleanSearchRequestClient) Create() *GleanSearchRequestCreate {
+	mutation := newGleanSearchRequestMutation(c.config, OpCreate)
+	return &GleanSearchRequestCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanSearchRequest entities.
+func (c *GleanSearchRequestClient) CreateBulk(builders ...*GleanSearchRequestCreate) *GleanSearchRequestCreateBulk {
+	return &GleanSearchRequestCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanSearchRequestClient) MapCreateBulk(slice any, setFunc func(*GleanSearchRequestCreate, int)) *GleanSearchRequestCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanSearchRequestCreateBulk{err: fmt.Errorf("calling to GleanSearchRequestClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanSearchRequestCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanSearchRequestCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanSearchRequest.
+func (c *GleanSearchRequestClient) Update() *GleanSearchRequestUpdate {
+	mutation := newGleanSearchRequestMutation(c.config, OpUpdate)
+	return &GleanSearchRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanSearchRequestClient) UpdateOne(_m *GleanSearchRequest) *GleanSearchRequestUpdateOne {
+	mutation := newGleanSearchRequestMutation(c.config, OpUpdateOne, withGleanSearchRequest(_m))
+	return &GleanSearchRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanSearchRequestClient) UpdateOneID(id idgen.ID) *GleanSearchRequestUpdateOne {
+	mutation := newGleanSearchRequestMutation(c.config, OpUpdateOne, withGleanSearchRequestID(id))
+	return &GleanSearchRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanSearchRequest.
+func (c *GleanSearchRequestClient) Delete() *GleanSearchRequestDelete {
+	mutation := newGleanSearchRequestMutation(c.config, OpDelete)
+	return &GleanSearchRequestDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanSearchRequestClient) DeleteOne(_m *GleanSearchRequest) *GleanSearchRequestDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanSearchRequestClient) DeleteOneID(id idgen.ID) *GleanSearchRequestDeleteOne {
+	builder := c.Delete().Where(gleansearchrequest.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanSearchRequestDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanSearchRequest.
+func (c *GleanSearchRequestClient) Query() *GleanSearchRequestQuery {
+	return &GleanSearchRequestQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanSearchRequest},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanSearchRequest entity by its id.
+func (c *GleanSearchRequestClient) Get(ctx context.Context, id idgen.ID) (*GleanSearchRequest, error) {
+	return c.Query().Where(gleansearchrequest.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanSearchRequestClient) GetX(ctx context.Context, id idgen.ID) *GleanSearchRequest {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanSearchRequestClient) Hooks() []Hook {
+	return c.hooks.GleanSearchRequest
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanSearchRequestClient) Interceptors() []Interceptor {
+	return c.inters.GleanSearchRequest
+}
+
+func (c *GleanSearchRequestClient) mutate(ctx context.Context, m *GleanSearchRequestMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanSearchRequestCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanSearchRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanSearchRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanSearchRequestDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanSearchRequest mutation op: %q", m.Op())
+	}
+}
+
+// GleanSearchRunClient is a client for the GleanSearchRun schema.
+type GleanSearchRunClient struct {
+	config
+}
+
+// NewGleanSearchRunClient returns a client for the GleanSearchRun from the given config.
+func NewGleanSearchRunClient(c config) *GleanSearchRunClient {
+	return &GleanSearchRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleansearchrun.Hooks(f(g(h())))`.
+func (c *GleanSearchRunClient) Use(hooks ...Hook) {
+	c.hooks.GleanSearchRun = append(c.hooks.GleanSearchRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleansearchrun.Intercept(f(g(h())))`.
+func (c *GleanSearchRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanSearchRun = append(c.inters.GleanSearchRun, interceptors...)
+}
+
+// Create returns a builder for creating a GleanSearchRun entity.
+func (c *GleanSearchRunClient) Create() *GleanSearchRunCreate {
+	mutation := newGleanSearchRunMutation(c.config, OpCreate)
+	return &GleanSearchRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanSearchRun entities.
+func (c *GleanSearchRunClient) CreateBulk(builders ...*GleanSearchRunCreate) *GleanSearchRunCreateBulk {
+	return &GleanSearchRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanSearchRunClient) MapCreateBulk(slice any, setFunc func(*GleanSearchRunCreate, int)) *GleanSearchRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanSearchRunCreateBulk{err: fmt.Errorf("calling to GleanSearchRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanSearchRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanSearchRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanSearchRun.
+func (c *GleanSearchRunClient) Update() *GleanSearchRunUpdate {
+	mutation := newGleanSearchRunMutation(c.config, OpUpdate)
+	return &GleanSearchRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanSearchRunClient) UpdateOne(_m *GleanSearchRun) *GleanSearchRunUpdateOne {
+	mutation := newGleanSearchRunMutation(c.config, OpUpdateOne, withGleanSearchRun(_m))
+	return &GleanSearchRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanSearchRunClient) UpdateOneID(id idgen.ID) *GleanSearchRunUpdateOne {
+	mutation := newGleanSearchRunMutation(c.config, OpUpdateOne, withGleanSearchRunID(id))
+	return &GleanSearchRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanSearchRun.
+func (c *GleanSearchRunClient) Delete() *GleanSearchRunDelete {
+	mutation := newGleanSearchRunMutation(c.config, OpDelete)
+	return &GleanSearchRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanSearchRunClient) DeleteOne(_m *GleanSearchRun) *GleanSearchRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanSearchRunClient) DeleteOneID(id idgen.ID) *GleanSearchRunDeleteOne {
+	builder := c.Delete().Where(gleansearchrun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanSearchRunDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanSearchRun.
+func (c *GleanSearchRunClient) Query() *GleanSearchRunQuery {
+	return &GleanSearchRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanSearchRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanSearchRun entity by its id.
+func (c *GleanSearchRunClient) Get(ctx context.Context, id idgen.ID) (*GleanSearchRun, error) {
+	return c.Query().Where(gleansearchrun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanSearchRunClient) GetX(ctx context.Context, id idgen.ID) *GleanSearchRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanSearchRunClient) Hooks() []Hook {
+	return c.hooks.GleanSearchRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanSearchRunClient) Interceptors() []Interceptor {
+	return c.inters.GleanSearchRun
+}
+
+func (c *GleanSearchRunClient) mutate(ctx context.Context, m *GleanSearchRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanSearchRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanSearchRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanSearchRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanSearchRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanSearchRun mutation op: %q", m.Op())
 	}
 }
 
@@ -3366,15 +3791,17 @@ type (
 	hooks struct {
 		GleanCatalogChange, GleanMembership, GleanMonitorState, GleanObservation,
 		GleanObservationMatch, GleanPaper, GleanPaperCorrection, GleanPaperReview,
-		GleanPaperState, GleanPreference, GleanSearchHit, GleanTopic, GleanVenue,
-		SysConfig, SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu,
-		SysUser, SysUserRole []ent.Hook
+		GleanPaperState, GleanPreference, GleanSearchHit, GleanSearchOccurrence,
+		GleanSearchRequest, GleanSearchRun, GleanTopic, GleanVenue, SysConfig,
+		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
+		SysUserRole []ent.Hook
 	}
 	inters struct {
 		GleanCatalogChange, GleanMembership, GleanMonitorState, GleanObservation,
 		GleanObservationMatch, GleanPaper, GleanPaperCorrection, GleanPaperReview,
-		GleanPaperState, GleanPreference, GleanSearchHit, GleanTopic, GleanVenue,
-		SysConfig, SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu,
-		SysUser, SysUserRole []ent.Interceptor
+		GleanPaperState, GleanPreference, GleanSearchHit, GleanSearchOccurrence,
+		GleanSearchRequest, GleanSearchRun, GleanTopic, GleanVenue, SysConfig,
+		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
+		SysUserRole []ent.Interceptor
 	}
 )

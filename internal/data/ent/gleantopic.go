@@ -35,6 +35,8 @@ type GleanTopic struct {
 	TermGroups [][]string `json:"term_groups,omitempty"`
 	// SearchRoutes holds the value of the "search_routes" field.
 	SearchRoutes []retrieval.Route `json:"search_routes,omitempty"`
+	// SearchProtocol holds the value of the "search_protocol" field.
+	SearchProtocol *retrieval.Protocol `json:"search_protocol,omitempty"`
 	// Version holds the value of the "version" field.
 	Version int `json:"version,omitempty"`
 	// 创建时间。
@@ -53,7 +55,7 @@ func (*GleanTopic) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gleantopic.FieldTermGroups, gleantopic.FieldSearchRoutes:
+		case gleantopic.FieldTermGroups, gleantopic.FieldSearchRoutes, gleantopic.FieldSearchProtocol:
 			values[i] = new([]byte)
 		case gleantopic.FieldSearchEnabled:
 			values[i] = new(sql.NullBool)
@@ -128,6 +130,14 @@ func (_m *GleanTopic) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.SearchRoutes); err != nil {
 					return fmt.Errorf("unmarshal field search_routes: %w", err)
+				}
+			}
+		case gleantopic.FieldSearchProtocol:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field search_protocol", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SearchProtocol); err != nil {
+					return fmt.Errorf("unmarshal field search_protocol: %w", err)
 				}
 			}
 		case gleantopic.FieldVersion:
@@ -218,6 +228,9 @@ func (_m *GleanTopic) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("search_routes=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SearchRoutes))
+	builder.WriteString(", ")
+	builder.WriteString("search_protocol=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SearchProtocol))
 	builder.WriteString(", ")
 	builder.WriteString("version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Version))

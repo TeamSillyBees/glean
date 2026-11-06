@@ -88,6 +88,12 @@ func (_c *GleanTopicCreate) SetSearchRoutes(v []retrieval.Route) *GleanTopicCrea
 	return _c
 }
 
+// SetSearchProtocol sets the "search_protocol" field.
+func (_c *GleanTopicCreate) SetSearchProtocol(v *retrieval.Protocol) *GleanTopicCreate {
+	_c.mutation.SetSearchProtocol(v)
+	return _c
+}
+
 // SetVersion sets the "version" field.
 func (_c *GleanTopicCreate) SetVersion(v int) *GleanTopicCreate {
 	_c.mutation.SetVersion(v)
@@ -351,6 +357,10 @@ func (_c *GleanTopicCreate) createSpec() (*GleanTopic, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.SearchRoutes(); ok {
 		_spec.SetField(gleantopic.FieldSearchRoutes, field.TypeJSON, value)
 		_node.SearchRoutes = value
+	}
+	if value, ok := _c.mutation.SearchProtocol(); ok {
+		_spec.SetField(gleantopic.FieldSearchProtocol, field.TypeJSON, value)
+		_node.SearchProtocol = value
 	}
 	if value, ok := _c.mutation.Version(); ok {
 		_spec.SetField(gleantopic.FieldVersion, field.TypeInt, value)

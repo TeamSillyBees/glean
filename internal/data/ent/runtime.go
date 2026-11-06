@@ -16,6 +16,9 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
 	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchoccurrence"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchrequest"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchrun"
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
@@ -364,15 +367,15 @@ func init() {
 	// gleanpaperreview.DefaultLabels holds the default value on creation for the labels field.
 	gleanpaperreview.DefaultLabels = gleanpaperreviewDescLabels.Default.([]string)
 	// gleanpaperreviewDescVersion is the schema descriptor for version field.
-	gleanpaperreviewDescVersion := gleanpaperreviewFields[6].Descriptor()
+	gleanpaperreviewDescVersion := gleanpaperreviewFields[7].Descriptor()
 	// gleanpaperreview.DefaultVersion holds the default value on creation for the version field.
 	gleanpaperreview.DefaultVersion = gleanpaperreviewDescVersion.Default.(int)
 	// gleanpaperreviewDescCreatedAt is the schema descriptor for created_at field.
-	gleanpaperreviewDescCreatedAt := gleanpaperreviewFields[7].Descriptor()
+	gleanpaperreviewDescCreatedAt := gleanpaperreviewFields[8].Descriptor()
 	// gleanpaperreview.DefaultCreatedAt holds the default value on creation for the created_at field.
 	gleanpaperreview.DefaultCreatedAt = gleanpaperreviewDescCreatedAt.Default.(func() time.Time)
 	// gleanpaperreviewDescUpdatedAt is the schema descriptor for updated_at field.
-	gleanpaperreviewDescUpdatedAt := gleanpaperreviewFields[8].Descriptor()
+	gleanpaperreviewDescUpdatedAt := gleanpaperreviewFields[9].Descriptor()
 	// gleanpaperreview.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	gleanpaperreview.DefaultUpdatedAt = gleanpaperreviewDescUpdatedAt.Default.(func() time.Time)
 	// gleanpaperreview.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
@@ -489,6 +492,96 @@ func init() {
 	gleansearchhit.DefaultID = gleansearchhitDescID.Default.(func() idgen.ID)
 	// gleansearchhit.IDValidator is a validator for the "id" field. It is called by the builders before save.
 	gleansearchhit.IDValidator = gleansearchhitDescID.Validators[0].(func(int64) error)
+	gleansearchoccurrenceFields := schema.GleanSearchOccurrence{}.Fields()
+	_ = gleansearchoccurrenceFields
+	// gleansearchoccurrenceDescRunID is the schema descriptor for run_id field.
+	gleansearchoccurrenceDescRunID := gleansearchoccurrenceFields[1].Descriptor()
+	// gleansearchoccurrence.RunIDValidator is a validator for the "run_id" field. It is called by the builders before save.
+	gleansearchoccurrence.RunIDValidator = gleansearchoccurrenceDescRunID.Validators[0].(func(int64) error)
+	// gleansearchoccurrenceDescRequestID is the schema descriptor for request_id field.
+	gleansearchoccurrenceDescRequestID := gleansearchoccurrenceFields[2].Descriptor()
+	// gleansearchoccurrence.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	gleansearchoccurrence.RequestIDValidator = gleansearchoccurrenceDescRequestID.Validators[0].(func(int64) error)
+	// gleansearchoccurrenceDescOrdinal is the schema descriptor for ordinal field.
+	gleansearchoccurrenceDescOrdinal := gleansearchoccurrenceFields[3].Descriptor()
+	// gleansearchoccurrence.OrdinalValidator is a validator for the "ordinal" field. It is called by the builders before save.
+	gleansearchoccurrence.OrdinalValidator = gleansearchoccurrenceDescOrdinal.Validators[0].(func(int) error)
+	// gleansearchoccurrenceDescSource is the schema descriptor for source field.
+	gleansearchoccurrenceDescSource := gleansearchoccurrenceFields[4].Descriptor()
+	// gleansearchoccurrence.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	gleansearchoccurrence.SourceValidator = gleansearchoccurrenceDescSource.Validators[0].(func(string) error)
+	// gleansearchoccurrenceDescCreatedAt is the schema descriptor for created_at field.
+	gleansearchoccurrenceDescCreatedAt := gleansearchoccurrenceFields[8].Descriptor()
+	// gleansearchoccurrence.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleansearchoccurrence.DefaultCreatedAt = gleansearchoccurrenceDescCreatedAt.Default.(func() time.Time)
+	// gleansearchoccurrenceDescUpdatedAt is the schema descriptor for updated_at field.
+	gleansearchoccurrenceDescUpdatedAt := gleansearchoccurrenceFields[9].Descriptor()
+	// gleansearchoccurrence.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleansearchoccurrence.DefaultUpdatedAt = gleansearchoccurrenceDescUpdatedAt.Default.(func() time.Time)
+	// gleansearchoccurrence.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleansearchoccurrence.UpdateDefaultUpdatedAt = gleansearchoccurrenceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleansearchoccurrenceDescID is the schema descriptor for id field.
+	gleansearchoccurrenceDescID := gleansearchoccurrenceFields[0].Descriptor()
+	// gleansearchoccurrence.DefaultID holds the default value on creation for the id field.
+	gleansearchoccurrence.DefaultID = gleansearchoccurrenceDescID.Default.(func() idgen.ID)
+	// gleansearchoccurrence.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleansearchoccurrence.IDValidator = gleansearchoccurrenceDescID.Validators[0].(func(int64) error)
+	gleansearchrequestFields := schema.GleanSearchRequest{}.Fields()
+	_ = gleansearchrequestFields
+	// gleansearchrequestDescRunID is the schema descriptor for run_id field.
+	gleansearchrequestDescRunID := gleansearchrequestFields[1].Descriptor()
+	// gleansearchrequest.RunIDValidator is a validator for the "run_id" field. It is called by the builders before save.
+	gleansearchrequest.RunIDValidator = gleansearchrequestDescRunID.Validators[0].(func(int64) error)
+	// gleansearchrequestDescQueryID is the schema descriptor for query_id field.
+	gleansearchrequestDescQueryID := gleansearchrequestFields[2].Descriptor()
+	// gleansearchrequest.QueryIDValidator is a validator for the "query_id" field. It is called by the builders before save.
+	gleansearchrequest.QueryIDValidator = gleansearchrequestDescQueryID.Validators[0].(func(string) error)
+	// gleansearchrequestDescSource is the schema descriptor for source field.
+	gleansearchrequestDescSource := gleansearchrequestFields[3].Descriptor()
+	// gleansearchrequest.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	gleansearchrequest.SourceValidator = gleansearchrequestDescSource.Validators[0].(func(string) error)
+	// gleansearchrequestDescStatus is the schema descriptor for status field.
+	gleansearchrequestDescStatus := gleansearchrequestFields[4].Descriptor()
+	// gleansearchrequest.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	gleansearchrequest.StatusValidator = gleansearchrequestDescStatus.Validators[0].(func(string) error)
+	// gleansearchrequestDescCreatedAt is the schema descriptor for created_at field.
+	gleansearchrequestDescCreatedAt := gleansearchrequestFields[6].Descriptor()
+	// gleansearchrequest.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleansearchrequest.DefaultCreatedAt = gleansearchrequestDescCreatedAt.Default.(func() time.Time)
+	// gleansearchrequestDescUpdatedAt is the schema descriptor for updated_at field.
+	gleansearchrequestDescUpdatedAt := gleansearchrequestFields[7].Descriptor()
+	// gleansearchrequest.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleansearchrequest.DefaultUpdatedAt = gleansearchrequestDescUpdatedAt.Default.(func() time.Time)
+	// gleansearchrequest.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleansearchrequest.UpdateDefaultUpdatedAt = gleansearchrequestDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleansearchrequestDescID is the schema descriptor for id field.
+	gleansearchrequestDescID := gleansearchrequestFields[0].Descriptor()
+	// gleansearchrequest.DefaultID holds the default value on creation for the id field.
+	gleansearchrequest.DefaultID = gleansearchrequestDescID.Default.(func() idgen.ID)
+	// gleansearchrequest.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleansearchrequest.IDValidator = gleansearchrequestDescID.Validators[0].(func(int64) error)
+	gleansearchrunFields := schema.GleanSearchRun{}.Fields()
+	_ = gleansearchrunFields
+	// gleansearchrunDescStateKey is the schema descriptor for state_key field.
+	gleansearchrunDescStateKey := gleansearchrunFields[1].Descriptor()
+	// gleansearchrun.StateKeyValidator is a validator for the "state_key" field. It is called by the builders before save.
+	gleansearchrun.StateKeyValidator = gleansearchrunDescStateKey.Validators[0].(func(string) error)
+	// gleansearchrunDescCreatedAt is the schema descriptor for created_at field.
+	gleansearchrunDescCreatedAt := gleansearchrunFields[3].Descriptor()
+	// gleansearchrun.DefaultCreatedAt holds the default value on creation for the created_at field.
+	gleansearchrun.DefaultCreatedAt = gleansearchrunDescCreatedAt.Default.(func() time.Time)
+	// gleansearchrunDescUpdatedAt is the schema descriptor for updated_at field.
+	gleansearchrunDescUpdatedAt := gleansearchrunFields[4].Descriptor()
+	// gleansearchrun.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	gleansearchrun.DefaultUpdatedAt = gleansearchrunDescUpdatedAt.Default.(func() time.Time)
+	// gleansearchrun.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	gleansearchrun.UpdateDefaultUpdatedAt = gleansearchrunDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// gleansearchrunDescID is the schema descriptor for id field.
+	gleansearchrunDescID := gleansearchrunFields[0].Descriptor()
+	// gleansearchrun.DefaultID holds the default value on creation for the id field.
+	gleansearchrun.DefaultID = gleansearchrunDescID.Default.(func() idgen.ID)
+	// gleansearchrun.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	gleansearchrun.IDValidator = gleansearchrunDescID.Validators[0].(func(int64) error)
 	gleantopicFields := schema.GleanTopic{}.Fields()
 	_ = gleantopicFields
 	// gleantopicDescSlug is the schema descriptor for slug field.
@@ -520,15 +613,15 @@ func init() {
 	// gleantopic.DefaultSearchRoutes holds the default value on creation for the search_routes field.
 	gleantopic.DefaultSearchRoutes = gleantopicDescSearchRoutes.Default.([]retrieval.Route)
 	// gleantopicDescVersion is the schema descriptor for version field.
-	gleantopicDescVersion := gleantopicFields[8].Descriptor()
+	gleantopicDescVersion := gleantopicFields[9].Descriptor()
 	// gleantopic.DefaultVersion holds the default value on creation for the version field.
 	gleantopic.DefaultVersion = gleantopicDescVersion.Default.(int)
 	// gleantopicDescCreatedAt is the schema descriptor for created_at field.
-	gleantopicDescCreatedAt := gleantopicFields[9].Descriptor()
+	gleantopicDescCreatedAt := gleantopicFields[10].Descriptor()
 	// gleantopic.DefaultCreatedAt holds the default value on creation for the created_at field.
 	gleantopic.DefaultCreatedAt = gleantopicDescCreatedAt.Default.(func() time.Time)
 	// gleantopicDescUpdatedAt is the schema descriptor for updated_at field.
-	gleantopicDescUpdatedAt := gleantopicFields[10].Descriptor()
+	gleantopicDescUpdatedAt := gleantopicFields[11].Descriptor()
 	// gleantopic.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	gleantopic.DefaultUpdatedAt = gleantopicDescUpdatedAt.Default.(func() time.Time)
 	// gleantopic.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

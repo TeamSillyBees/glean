@@ -125,6 +125,18 @@ func (_u *GleanTopicUpdate) AppendSearchRoutes(v []retrieval.Route) *GleanTopicU
 	return _u
 }
 
+// SetSearchProtocol sets the "search_protocol" field.
+func (_u *GleanTopicUpdate) SetSearchProtocol(v *retrieval.Protocol) *GleanTopicUpdate {
+	_u.mutation.SetSearchProtocol(v)
+	return _u
+}
+
+// ClearSearchProtocol clears the value of the "search_protocol" field.
+func (_u *GleanTopicUpdate) ClearSearchProtocol() *GleanTopicUpdate {
+	_u.mutation.ClearSearchProtocol()
+	return _u
+}
+
 // SetVersion sets the "version" field.
 func (_u *GleanTopicUpdate) SetVersion(v int) *GleanTopicUpdate {
 	_u.mutation.ResetVersion()
@@ -305,6 +317,12 @@ func (_u *GleanTopicUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			sqljson.Append(u, gleantopic.FieldSearchRoutes, value)
 		})
 	}
+	if value, ok := _u.mutation.SearchProtocol(); ok {
+		_spec.SetField(gleantopic.FieldSearchProtocol, field.TypeJSON, value)
+	}
+	if _u.mutation.SearchProtocolCleared() {
+		_spec.ClearField(gleantopic.FieldSearchProtocol, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(gleantopic.FieldVersion, field.TypeInt, value)
 	}
@@ -443,6 +461,18 @@ func (_u *GleanTopicUpdateOne) SetSearchRoutes(v []retrieval.Route) *GleanTopicU
 // AppendSearchRoutes appends value to the "search_routes" field.
 func (_u *GleanTopicUpdateOne) AppendSearchRoutes(v []retrieval.Route) *GleanTopicUpdateOne {
 	_u.mutation.AppendSearchRoutes(v)
+	return _u
+}
+
+// SetSearchProtocol sets the "search_protocol" field.
+func (_u *GleanTopicUpdateOne) SetSearchProtocol(v *retrieval.Protocol) *GleanTopicUpdateOne {
+	_u.mutation.SetSearchProtocol(v)
+	return _u
+}
+
+// ClearSearchProtocol clears the value of the "search_protocol" field.
+func (_u *GleanTopicUpdateOne) ClearSearchProtocol() *GleanTopicUpdateOne {
+	_u.mutation.ClearSearchProtocol()
 	return _u
 }
 
@@ -655,6 +685,12 @@ func (_u *GleanTopicUpdateOne) sqlSave(ctx context.Context) (_node *GleanTopic, 
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, gleantopic.FieldSearchRoutes, value)
 		})
+	}
+	if value, ok := _u.mutation.SearchProtocol(); ok {
+		_spec.SetField(gleantopic.FieldSearchProtocol, field.TypeJSON, value)
+	}
+	if _u.mutation.SearchProtocolCleared() {
+		_spec.ClearField(gleantopic.FieldSearchProtocol, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(gleantopic.FieldVersion, field.TypeInt, value)
