@@ -471,9 +471,26 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
     await expect(correction.getByRole('button', { name: '保存纠错', exact: true })).toBeEnabled()
     return effective
   }
-  const correctedFacets = response(page, '/api/v1/catalog/facets')
   const corrected = await saveCorrection(1)
-  const effectiveFacets = await data<Facets>(await correctedFacets)
+  expect(corrected.title).toBe(correctedTitle)
+  expect(corrected.year).toBe(correctedYear)
+  await correction.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: info.outputPath('management-correction.png') })
+  await drawer(page).getByRole('button', { name: '关闭', exact: true }).click()
+  // 保存完成后显式刷新，只接收本次新发出的请求；切换目录时仍在途的旧响应可能早于纠错。
+  const correctedFacetsRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url())
+    return (
+      url.pathname === '/api/v1/catalog/facets' &&
+      request.method() === 'GET' &&
+      url.searchParams.get('topic') === 'biomed-ai' &&
+      url.searchParams.get('collectionScope') === 'curated'
+    )
+  })
+  await page.getByRole('button', { name: '刷新当前视图', exact: true }).click()
+  const correctedFacets = await (await correctedFacetsRequest).response()
+  expect(correctedFacets).not.toBeNull()
+  const effectiveFacets = await data<Facets>(correctedFacets!)
   const yearCount = (facets: Facets, year: number) =>
     facets.years.find((facet) => facet.value === String(year))?.count ?? 0
   expect(yearCount(effectiveFacets, correctedYear)).toBe(
@@ -482,11 +499,6 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   expect(yearCount(effectiveFacets, original.year)).toBe(
     yearCount(initialFacets, original.year) - 1,
   )
-  expect(corrected.title).toBe(correctedTitle)
-  expect(corrected.year).toBe(correctedYear)
-  await correction.scrollIntoViewIfNeeded()
-  await page.screenshot({ path: info.outputPath('management-correction.png') })
-  await drawer(page).getByRole('button', { name: '关闭', exact: true }).click()
   const correctedSearch = await search(page, correctedTitle)
   expect(correctedSearch.items.map((paper) => paper.id)).toContain(selected.id)
   await openPaper(page, selected.id)
