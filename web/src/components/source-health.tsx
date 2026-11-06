@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { Database, History, RefreshCw, Timer } from 'lucide-react'
-import { hasDate, useSources } from '../lib/source-query'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { Database, History, PlugZap, RefreshCw, Timer } from 'lucide-react'
+import { hasDate, useSources, type SourceConnection } from '../lib/source-query'
+import { request } from '../lib/api'
 export type { SourcesData, Checkpoint } from '../lib/source-query'
 import { number, topicLabels } from '../lib/utils'
 import type { TopicSlug } from '../lib/types'
@@ -13,6 +15,17 @@ const sourceNames: Record<string, string> = {
   arxiv: 'arXiv',
   biorxiv: 'bioRxiv',
   medrxiv: 'medRxiv',
+}
+const connectionLabels: Record<SourceConnection['status'], string> = {
+  connected: '已连通',
+  timeout: '连接超时',
+  network_error: '连接失败',
+  blocked: '访问受限',
+  rate_limited: '请求限流',
+  unavailable: '服务异常',
+  invalid_response: '响应异常',
+  deferred: '等待重试',
+  skipped: '未测试',
 }
 function timestamp(value?: string) {
   if (!hasDate(value)) return '尚无记录'
@@ -32,15 +45,29 @@ function lag(seconds: number) {
 }
 export function SourcesView({
   topic,
+  canManage = false,
   onOpenQuarantine,
   onOpenRuns,
 }: {
   topic: TopicSlug
+  canManage?: boolean
   onOpenQuarantine?: (source?: string) => void
   onOpenRuns?: () => void
 }) {
   const query = useSources()
   const [refreshMessage, setRefreshMessage] = useState('')
+  const testController = useRef<AbortController | null>(null)
+  useEffect(() => () => testController.current?.abort(), [])
+  const connectionTest = useMutation({
+    mutationFn: () => {
+      testController.current = new AbortController()
+      return request<{ items: SourceConnection[] }>('/api/v1/monitor/sources/test', {
+        method: 'POST',
+        signal: testController.current.signal,
+      })
+    },
+    retry: false,
+  })
   async function refresh() {
     const before = JSON.stringify(query.data)
     setRefreshMessage('')
@@ -75,7 +102,18 @@ export function SourcesView({
               : refreshMessage ||
                 '上次读取 ' + new Date(query.dataUpdatedAt).toLocaleTimeString('zh-CN')}
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canManage && (
+            <Button
+              size="sm"
+              disabled={connectionTest.isPending}
+              onClick={() => connectionTest.mutate()}
+              title="从服务器检测来源访问情况，不采集论文"
+            >
+              {connectionTest.isPending ? <RefreshCw className="animate-spin" /> : <PlugZap />}
+              {connectionTest.isPending ? '测试中…' : '测试连通性'}
+            </Button>
+          )}
           {onOpenRuns && (
             <Button variant="outline" size="sm" onClick={onOpenRuns}>
               <History />
@@ -88,6 +126,24 @@ export function SourcesView({
           </Button>
         </div>
       </div>
+      {connectionTest.isPending ? (
+        <p role="status" className="rounded-lg border bg-card px-4 py-3 text-sm">
+          正在从服务器测试各来源的连通性，最多等待 15 秒…
+        </p>
+      ) : connectionTest.isError ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          连通性测试未完成：{connectionTest.error.message}
+        </p>
+      ) : connectionTest.data ? (
+        <p role="status" className="rounded-lg border bg-card px-4 py-3 text-sm">
+          测试完成 ·{' '}
+          {connectionTest.data.items.filter((item) => item.status === 'connected').length}/
+          {connectionTest.data.items.length} 个来源已连通，结果见下方。未启动论文采集。
+        </p>
+      ) : null}
       {query.isError && (
         <p
           role="alert"
@@ -164,6 +220,10 @@ export function SourcesView({
       ) : (
         <div className="space-y-3">
           {items.map((source) => {
+            const connection = connectionTest.data?.items.find(
+              (item) => item.source === source.source,
+            )
+            const testing = connectionTest.isPending && source.enabled !== false
             const completed = hasDate(source.topicAcquiredThrough?.[topic])
             const status =
               (source.quarantined || 0) > 0
@@ -201,6 +261,46 @@ export function SourcesView({
                     {status}
                   </Badge>
                 </div>
+                {canManage && (
+                  <div
+                    className="mt-3 rounded-lg bg-muted/50 px-3 py-2.5 text-xs"
+                    aria-label={(sourceNames[source.source] || source.source) + ' 连通性'}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-muted-foreground">连通性</span>
+                      <Badge
+                        tone={
+                          testing
+                            ? 'neutral'
+                            : connection?.status === 'connected'
+                              ? 'green'
+                              : connection
+                                ? 'amber'
+                                : 'neutral'
+                        }
+                      >
+                        {testing
+                          ? '测试中…'
+                          : connection
+                            ? connectionLabels[connection.status]
+                            : '未测试'}
+                      </Badge>
+                      {connection && !testing && (
+                        <span className="text-muted-foreground tabular-nums">
+                          耗时 {(connection.elapsedMs / 1000).toFixed(1)} 秒 ·{' '}
+                          {new Date(connection.checkedAt).toLocaleTimeString('zh-CN')}
+                        </span>
+                      )}
+                    </div>
+                    {connection && !testing && connection.status !== 'connected' && (
+                      <p className="mt-2 break-words text-amber-800">
+                        {connection.message}
+                        {hasDate(connection.retryAt) &&
+                          ' 可重试时间：' + timestamp(connection.retryAt)}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
                     <dt className="text-xs text-muted-foreground">本主题已采集至</dt>

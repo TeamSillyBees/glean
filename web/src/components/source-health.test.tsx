@@ -57,10 +57,10 @@ afterEach(() => {
   client.clear()
   vi.restoreAllMocks()
 })
-function mount() {
+function mount(canManage = false) {
   return render(
     <QueryClientProvider client={client}>
-      <SourcesView topic="biomed-ai" />
+      <SourcesView topic="biomed-ai" canManage={canManage} />
     </QueryClientProvider>,
   )
 }
@@ -132,4 +132,103 @@ it('shows refresh progress and confirms an unchanged response without starting a
   expect(screen.getByRole('button', { name: '刷新状态' })).toBeEnabled()
   expect(fetcher).toHaveBeenCalledTimes(2)
   expect(fetcher.mock.calls[1][1].method).toBeUndefined()
+})
+
+const connectionResponse = () =>
+  new Response(
+    JSON.stringify({
+      code: 'OK',
+      data: {
+        items: [
+          {
+            source: 'crossref',
+            status: 'connected',
+            message: '有效响应',
+            statusCode: 200,
+            elapsedMs: 240,
+            checkedAt: '2026-10-28T12:00:01Z',
+          },
+          {
+            source: 'europepmc',
+            status: 'timeout',
+            message: '请求超时，未能确认连通，请稍后重试。',
+            elapsedMs: 15000,
+            checkedAt: '2026-10-28T12:00:15Z',
+          },
+        ],
+      },
+    }),
+    { status: 200 },
+  )
+
+it('tests connectivity only after an administrator clicks and shows mixed outcomes without changing progress', async () => {
+  mount(true)
+  await screen.findByRole('region', { name: '采集健康概览' })
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(screen.getAllByText('未测试')).toHaveLength(2)
+  let finish!: (value: Response) => void
+  fetcher.mockReturnValueOnce(
+    new Promise<Response>((resolve) => {
+      finish = resolve
+    }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: '测试连通性' }))
+  const button = await screen.findByRole('button', { name: '测试中…' })
+  expect(button).toBeDisabled()
+  fireEvent.click(button)
+  expect(screen.getByText(/最多等待 15 秒/)).toBeVisible()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  expect(fetcher.mock.calls[1][0]).toBe('/api/v1/monitor/sources/test')
+  expect(fetcher.mock.calls[1][1].method).toBe('POST')
+  finish(connectionResponse())
+  expect(await screen.findByText(/测试完成 · 1\/2 个来源已连通/)).toBeVisible()
+  expect(within(screen.getByLabelText('Crossref 连通性')).getByText('已连通')).toBeVisible()
+  expect(screen.getByLabelText('Crossref 连通性')).toHaveTextContent('耗时 0.2 秒')
+  expect(within(screen.getByLabelText('Europe PMC 连通性')).getByText('连接超时')).toBeVisible()
+  expect(screen.getByText(/请求超时，未能确认连通/)).toBeVisible()
+  expect(screen.getByRole('region', { name: '采集健康概览' })).toHaveTextContent(
+    '失败来源1 个Europe PMC',
+  )
+  expect(screen.getByRole('button', { name: '测试连通性' })).toBeEnabled()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+})
+
+it('shows request failure and allows a manual retry without automatically repeating external tests', async () => {
+  mount(true)
+  await screen.findByRole('region', { name: '采集健康概览' })
+  fetcher.mockResolvedValueOnce(
+    new Response(JSON.stringify({ message: '正在测试来源连通性，请稍后再试。' }), { status: 400 }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: '测试连通性' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('正在测试来源连通性')
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  expect(screen.getByText('自动采集已开启')).toBeVisible()
+  fetcher.mockResolvedValueOnce(connectionResponse())
+  fireEvent.click(screen.getByRole('button', { name: '测试连通性' }))
+  await screen.findByText(/测试完成 · 1\/2 个来源已连通/)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(fetcher).toHaveBeenCalledTimes(3)
+})
+
+it('keeps connectivity checks unavailable to readers and never probes automatically', async () => {
+  mount()
+  await screen.findByRole('region', { name: '采集健康概览' })
+  expect(screen.queryByRole('button', { name: '测试连通性' })).not.toBeInTheDocument()
+  expect(fetcher).toHaveBeenCalledTimes(1)
+})
+
+it('cancels an unfinished test when leaving the source page', async () => {
+  const view = mount(true)
+  await screen.findByRole('region', { name: '采集健康概览' })
+  let signal!: AbortSignal
+  fetcher.mockImplementationOnce((_path, init) => {
+    signal = init.signal
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    })
+  })
+  fireEvent.click(screen.getByRole('button', { name: '测试连通性' }))
+  await screen.findByRole('button', { name: '测试中…' })
+  view.unmount()
+  expect(signal.aborted).toBe(true)
 })

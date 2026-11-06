@@ -1170,6 +1170,7 @@ function WorkspaceReady({
           ) : view === 'sources' ? (
             <SourcesView
               topic={filters.topic}
+              canManage={canManage}
               onOpenRuns={() => navigate('runs')}
               onOpenQuarantine={(source = '') => {
                 setQuarantineSource(source)

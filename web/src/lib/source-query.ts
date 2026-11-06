@@ -34,6 +34,24 @@ export interface SourcesData {
   items: Checkpoint[]
   schedule: Schedule
 }
+export interface SourceConnection {
+  source: string
+  status:
+    | 'connected'
+    | 'timeout'
+    | 'network_error'
+    | 'blocked'
+    | 'rate_limited'
+    | 'unavailable'
+    | 'invalid_response'
+    | 'deferred'
+    | 'skipped'
+  message: string
+  statusCode?: number
+  elapsedMs: number
+  checkedAt: string
+  retryAt?: string
+}
 export const hasDate = (value?: string) =>
   !!value && !value.startsWith('0001-') && Number.isFinite(Date.parse(value))
 export function useSources() {

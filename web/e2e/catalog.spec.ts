@@ -431,6 +431,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await navigate(page, '采集状态')
   await expect(page.getByText('真实来源采集', { exact: true })).toBeVisible()
   await expect(page.getByText('自动采集已关闭', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '测试连通性', exact: true })).toHaveCount(0)
   const sourcesResponse = apiResponse(page, '/api/v1/monitor/sources')
   await page.getByRole('button', { name: '刷新状态', exact: true }).click()
   const sources = await data<{

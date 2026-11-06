@@ -131,6 +131,51 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
     true,
   )
   await page.screenshot({ path: info.outputPath('access-recovered-real-backend.png') })
+  await navigate(page, '采集状态')
+  const sourcesRead = response(page, '/api/v1/monitor/sources')
+  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  const sources = await data<{ items: { source: string }[] }>(await sourcesRead)
+  await expect(page.getByRole('button', { name: '测试连通性', exact: true })).toBeVisible()
+  // 外部请求只能显式开启；普通 CI 只验证管理入口，不依赖公共来源的实时可用性。
+  if (process.env.GLEAN_E2E_SOURCE_CONNECTIONS === '1') {
+    const checked = page.waitForResponse(
+      (res) =>
+        new URL(res.url()).pathname === '/api/v1/monitor/sources/test' &&
+        res.request().method() === 'POST',
+      { timeout: 25_000 },
+    )
+    await page.getByRole('button', { name: '测试连通性', exact: true }).click()
+    await expect(page.getByRole('button', { name: '测试中…', exact: true })).toBeDisabled()
+    const result = await data<{ items: { source: string; status: string; statusCode?: number }[] }>(
+      await checked,
+    )
+    expect(result.items.map((item) => item.source).sort()).toEqual(
+      sources.items.map((item) => item.source).sort(),
+    )
+    for (const item of result.items) {
+      expect(item.status).not.toBe('invalid_response')
+      expect(item.status).not.toBe('skipped')
+      if (item.statusCode)
+        expect([200, 401, 403, 429, 500, 502, 503, 504]).toContain(item.statusCode)
+    }
+    await expect(page.getByText(/测试完成 ·/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '测试连通性', exact: true })).toBeEnabled()
+    const afterTest = response(page, '/api/v1/monitor/sources')
+    await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+    expect(await data(await afterTest)).toEqual(sources)
+    await page.screenshot({ path: info.outputPath('source-connectivity-desktop.png') })
+    await page.setViewportSize({ width: 390, height: 844 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+      true,
+    )
+    await expect(page.getByRole('button', { name: '测试连通性', exact: true })).toBeVisible()
+    await page.screenshot({ path: info.outputPath('source-connectivity-mobile.png') })
+    await page.setViewportSize({ width: 1440, height: 1080 })
+    await info.attach('source-connectivity-results', {
+      body: JSON.stringify(result, null, 2),
+      contentType: 'application/json',
+    })
+  }
   const currentPlanResponse = response(page, '/api/v1/monitor/templates')
   await navigate(page, '检索方案')
   const currentPlan = await data<{ items: { topic: string; termGroups: string[][] }[] }>(
