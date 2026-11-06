@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/teamsillybees/glean/internal/retrieval"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // TemplateProvider 在新运行开始时读取主题配置；恢复运行不再次读取。
@@ -47,8 +49,11 @@ func freezeTemplates(input []SearchTemplate) ([]SearchTemplate, string, error) {
 	ids := map[string]bool{}
 	for i := range result {
 		t := &result[i]
-		if !topicSlugPattern.MatchString(t.Topic) || len(t.Topic) > 80 || t.ID == "" || topics[t.Topic] || ids[t.ID] || len(t.TermGroups) == 0 || len(t.TermGroups) > 10 {
+		if !topicSlugPattern.MatchString(t.Topic) || len(t.Topic) > 80 || t.ID == "" || topics[t.Topic] || ids[t.ID] || (len(t.TermGroups) == 0 && len(t.Routes) == 0) || len(t.TermGroups) > 10 {
 			return nil, "", fmt.Errorf("invalid search template configuration")
+		}
+		if err := retrieval.ValidateRoutes(t.Routes, time.Now().UTC()); err != nil {
+			return nil, "", err
 		}
 		topics[t.Topic] = true
 		ids[t.ID] = true
@@ -70,6 +75,24 @@ func freezeTemplates(input []SearchTemplate) ([]SearchTemplate, string, error) {
 		}
 		t.Query = strings.Join(groups, " AND ")
 		t.Terms = uniqueStrings(terms)
+		if len(t.Routes) > 0 {
+			queries := []string{}
+			terms = nil
+			for _, route := range t.Routes {
+				parts := []string{}
+				for _, group := range route.TermGroups {
+					quoted := []string{}
+					for _, term := range group {
+						quoted = append(quoted, strconv.Quote(term))
+						terms = append(terms, term)
+					}
+					parts = append(parts, "("+strings.Join(quoted, " OR ")+")")
+				}
+				queries = append(queries, "("+strings.Join(parts, " AND ")+")")
+			}
+			t.Query = strings.Join(queries, " OR ")
+			t.Terms = uniqueStrings(terms)
+		}
 	}
 	raw, _ = json.Marshal(result)
 	defaults, _ := json.Marshal(SearchTemplates())

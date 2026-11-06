@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/teamsillybees/glean/internal/modules/catalog"
 	"github.com/teamsillybees/glean/internal/modules/monitor"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 type searchTopicFixture struct {
@@ -55,4 +56,19 @@ func TestMonitorTopicBridgeFailsClosed(t *testing.T) {
 	p.catalog = searchTopicFixture{configs: []catalog.SearchTopicConfig{{Slug: "same"}, {Slug: "same"}}}
 	_, err = p.Templates(context.Background())
 	require.ErrorContains(t, err, "duplicate")
+}
+
+// TestMonitorTopicRoutesBridge 路线覆盖内置关键词时保留核定策略，自定义主题不获得虚构资格。
+func TestMonitorTopicRoutesBridge(t *testing.T) {
+	routes := []retrieval.Route{{ID: "main", Sources: []string{"pubmed"}, TermGroups: [][]string{{"alpha"}}}}
+	p := &monitorTemplateProvider{catalog: searchTopicFixture{configs: []catalog.SearchTopicConfig{{Slug: "biomed-ai", SearchEnabled: true, SearchRoutes: routes, Version: 3}, {Slug: "custom", SearchEnabled: true, SearchRoutes: routes, Version: 1}}}}
+	got, err := p.Templates(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, routes, got[0].Routes)
+	require.Equal(t, monitor.SearchTemplates()[0].Core, got[0].Core)
+	require.Equal(t, monitor.SearchTemplates()[0].Policy, got[0].Policy)
+	require.Equal(t, routes, got[1].Routes)
+	require.False(t, got[1].Core)
+	require.Empty(t, got[1].TermGroups)
 }

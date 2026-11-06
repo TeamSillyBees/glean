@@ -63,11 +63,12 @@ func (p *monitorTemplateProvider) Templates(ctx context.Context) ([]monitor.Sear
 			continue
 		}
 		t, known := builtin[config.Slug]
-		if known && len(config.TermGroups) == 0 {
+		if known && len(config.TermGroups) == 0 && len(config.SearchRoutes) == 0 {
 			result = append(result, t)
 			continue
 		}
 		configured := monitor.TopicSearchTemplate(config.Slug, config.TermGroups, config.Version)
+		configured.Routes = config.SearchRoutes
 		if known {
 			configured.Core = t.Core
 			configured.Policy = t.Policy

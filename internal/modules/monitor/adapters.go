@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/teamsillybees/glean/internal/platform/httpclient"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 const sourcePageSize = 100
@@ -96,6 +97,16 @@ func (s *remoteSource) Fetch(ctx context.Context, req FetchRequest) (Page, error
 	}
 	if s.executor == nil {
 		return Page{}, &SourceError{Kind: "disabled", Message: "HTTP executor not configured"}
+	}
+	// 显式路线使用共享编译器；空字段模式保留旧快照语义。
+	if req.Template.FieldMode != "" && !req.Template.Core {
+		compiled, err := retrieval.Compile(s.name, req.Template.TermGroups, req.Template.FieldMode)
+		if err != nil {
+			return Page{}, &SourceError{Kind: "invalid_query", Message: err.Error()}
+		}
+		if compiled.Mode == "boolean" {
+			req.Template.Query = compiled.Query
+		}
 	}
 	switch s.name {
 	case "crossref":
@@ -183,6 +194,13 @@ func (s *remoteSource) crossref(ctx context.Context, req FetchRequest) (Page, er
 		}
 	}
 	feeds := crossrefDiscoveryQueries(req.Template)
+	if req.Template.FieldMode != "" && !req.Template.Core {
+		compiled, err := retrieval.Compile("crossref", req.Template.TermGroups, req.Template.FieldMode)
+		if err != nil {
+			return Page{}, &SourceError{Kind: "invalid_query", Message: err.Error()}
+		}
+		feeds = compiled.Queries
+	}
 	path := "/works"
 	if req.Template.Core {
 		var e error

@@ -18,6 +18,24 @@ func (s *Service) RunFinite(ctx context.Context, window Window, maxRequests int)
 	return s.runFinite(ctx, &window, maxRequests, 0)
 }
 
+// RunPlanWindowFinite 为当前计划启动同窗新运行；已有活动运行必须先恢复。
+func (s *Service) RunPlanWindowFinite(ctx context.Context, window Window, maxRequests int) (Snapshot, error) {
+	snapshot, err := s.Snapshot(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if activeSnapshotRun(snapshot) != nil {
+		return snapshot, bizerrors.BadRequest("an active run exists; resume it without new-plan")
+	}
+	_, version, err := s.currentTemplates(ctx)
+	if err != nil {
+		return snapshot, err
+	}
+	copy := *s
+	copy.explicitPlanVersion = version
+	return copy.RunFinite(ctx, window, maxRequests)
+}
+
 // ResumeFinite 在请求预算内恢复当前运行；无待办时遵循持久化 72 小时计划与首次三十日窗口。
 func (s *Service) ResumeFinite(ctx context.Context, maxRequests int) (Snapshot, error) {
 	return s.runFinite(ctx, nil, maxRequests, 0)
@@ -50,19 +68,16 @@ func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int
 		}
 	}
 	initialRequests := 0
-	key := ""
 	if window != nil {
-		key = s.windowKey(*window)
 		if active := activeSnapshotRun(latest); active != nil {
-			key = s.windowKey(*window, active.TemplateVersion)
-		}
-		if active := activeSnapshotRun(latest); active != nil && active.RequestKey != key {
-			return latest, bizerrors.BadRequest("another window is active; resume its original window first")
-		}
-		for _, run := range latest.Runs {
-			if run.RequestKey == s.windowKey(*window, run.TemplateVersion) {
-				initialRequests = run.Requests
-				if !run.FinishedAt.IsZero() {
+			if active.RequestKey != s.windowKey(*window, active.TemplateVersion) || (s.explicitPlanVersion != "" && s.explicitPlanVersion != active.TemplateVersion) {
+				return latest, bizerrors.BadRequest("another window or plan is active; resume its original window first")
+			}
+			initialRequests = active.Requests
+		} else {
+			for i := len(latest.Runs) - 1; i >= 0; i-- {
+				run := latest.Runs[i]
+				if run.RequestKey == s.windowKey(*window, run.TemplateVersion) && (s.explicitPlanVersion == "" || s.explicitPlanVersion == run.TemplateVersion) && !run.FinishedAt.IsZero() {
 					if s.pipeline != nil {
 						return s.runOnce(ctx, s.clock().UTC(), window, target)
 					}
@@ -73,6 +88,7 @@ func (s *Service) runFinite(ctx context.Context, window *Window, maxRequests int
 	} else if run := activeSnapshotRun(latest); run != nil {
 		initialRequests = run.Requests
 	}
+
 	for {
 		used := 0
 		if run := activeSnapshotRun(latest); run != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 	"github.com/teamsillybees/glean/internal/platform/response"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // Window 表示半开采集时间窗；End 在运行开始时固定，不能随翻页移动。
@@ -24,15 +25,16 @@ type PublicationEvent struct {
 
 // Record 保存一条来源版本及原始证据，AcquiredAt 不表示正式发表日期。
 type Record struct {
-	TemplateVersion string   `json:"templateVersion,omitempty"`
-	CoreDiscovery   bool     `json:"coreDiscovery,omitempty"`
-	ValidationError string   `json:"validationError,omitempty"`
-	SourceURL       string   `json:"sourceUrl"`
-	PMID            string   `json:"pmid"`
-	IsMock          bool     `json:"isMock"`
-	ArxivID         string   `json:"arxivId"`
-	Authors         []string `json:"authors"`
-	PublicationType string   `json:"publicationType"`
+	Discoveries     []retrieval.Hit `json:"discoveries,omitempty"`
+	TemplateVersion string          `json:"templateVersion,omitempty"`
+	CoreDiscovery   bool            `json:"coreDiscovery,omitempty"`
+	ValidationError string          `json:"validationError,omitempty"`
+	SourceURL       string          `json:"sourceUrl"`
+	PMID            string          `json:"pmid"`
+	IsMock          bool            `json:"isMock"`
+	ArxivID         string          `json:"arxivId"`
+	Authors         []string        `json:"authors"`
+	PublicationType string          `json:"publicationType"`
 
 	Source            string             `json:"source"`
 	SourceID          string             `json:"sourceId"`
@@ -52,14 +54,19 @@ type Record struct {
 
 // SearchTemplate 是各来源共用的版本化检索意图，来源适配器只翻译语法。
 type SearchTemplate struct {
-	ID         string          `json:"id"`
-	Version    string          `json:"version"`
-	Topic      string          `json:"topic"`
-	Query      string          `json:"query"`
-	Terms      []string        `json:"terms"`
-	TermGroups [][]string      `json:"termGroups"`
-	Core       bool            `json:"core"`
-	Policy     InclusionPolicy `json:"policy"`
+	Routes       []retrieval.Route `json:"routes,omitempty"`
+	FieldMode    string            `json:"fieldMode,omitempty"`
+	QueryID      string            `json:"queryId,omitempty"`
+	QueryVersion string            `json:"queryVersion,omitempty"`
+	BackfillFrom *time.Time        `json:"backfillFrom,omitempty"`
+	ID           string            `json:"id"`
+	Version      string            `json:"version"`
+	Topic        string            `json:"topic"`
+	Query        string            `json:"query"`
+	Terms        []string          `json:"terms"`
+	TermGroups   [][]string        `json:"termGroups"`
+	Core         bool              `json:"core"`
+	Policy       InclusionPolicy   `json:"policy"`
 }
 
 // InclusionPolicy 描述纳入门槛；检索命中不代表满足门槛。
@@ -156,6 +163,7 @@ type Quarantine struct {
 
 // Checkpoint 分离采集、审核与目录投影水位。
 type Checkpoint struct {
+	QueryAcquiredThrough map[string]time.Time `json:"queryAcquiredThrough,omitempty"`
 	LastAcquiredAt       time.Time            `json:"lastAcquiredAt"`
 	Quarantined          int                  `json:"quarantined"`
 	HandledThrough       time.Time            `json:"handledThrough"`
@@ -178,34 +186,36 @@ type Checkpoint struct {
 
 // SourceProgress 保存单次运行每个来源的可恢复游标。
 type SourceProgress struct {
-	RetryableFailure  bool                `json:"retryableFailure,omitempty"`
-	RetryNotBefore    time.Time           `json:"retryNotBefore,omitempty"`
-	RegistryByTopic   map[string][]string `json:"registryByTopic,omitempty"`
-	CoreWide          bool                `json:"coreWide"`
-	IncrementalWindow Window              `json:"incrementalWindow"`
-	Quarantined       int                 `json:"quarantined"`
-	Handled           bool                `json:"handled"`
-	Observed          int                 `json:"observed"`
-	ReviewedCount     int                 `json:"reviewedCount"`
-	Projected         int                 `json:"projected"`
-	CoreBackfill      bool                `json:"coreBackfill"`
-	RegistryISSNs     []string            `json:"registryIssns,omitempty"`
-	AdvanceCheckpoint bool                `json:"advanceCheckpoint"`
-	Window            Window              `json:"window"`
-	TemplateIndex     int                 `json:"templateIndex"`
-	Cursor            string              `json:"cursor,omitempty"`
-	CandidateKeys     []string            `json:"candidateKeys"`
-	Acquired          bool                `json:"acquired"`
-	Reviewed          bool                `json:"reviewed"`
-	Published         bool                `json:"published"`
-	Failed            bool                `json:"failed"`
-	Attempts          int                 `json:"attempts"`
-	Pages             int                 `json:"pages"`
-	LastError         string              `json:"lastError,omitempty"`
+	Queries           map[string]*QueryProgress `json:"queries,omitempty"`
+	RetryableFailure  bool                      `json:"retryableFailure,omitempty"`
+	RetryNotBefore    time.Time                 `json:"retryNotBefore,omitempty"`
+	RegistryByTopic   map[string][]string       `json:"registryByTopic,omitempty"`
+	CoreWide          bool                      `json:"coreWide"`
+	IncrementalWindow Window                    `json:"incrementalWindow"`
+	Quarantined       int                       `json:"quarantined"`
+	Handled           bool                      `json:"handled"`
+	Observed          int                       `json:"observed"`
+	ReviewedCount     int                       `json:"reviewedCount"`
+	Projected         int                       `json:"projected"`
+	CoreBackfill      bool                      `json:"coreBackfill"`
+	RegistryISSNs     []string                  `json:"registryIssns,omitempty"`
+	AdvanceCheckpoint bool                      `json:"advanceCheckpoint"`
+	Window            Window                    `json:"window"`
+	TemplateIndex     int                       `json:"templateIndex"`
+	Cursor            string                    `json:"cursor,omitempty"`
+	CandidateKeys     []string                  `json:"candidateKeys"`
+	Acquired          bool                      `json:"acquired"`
+	Reviewed          bool                      `json:"reviewed"`
+	Published         bool                      `json:"published"`
+	Failed            bool                      `json:"failed"`
+	Attempts          int                       `json:"attempts"`
+	Pages             int                       `json:"pages"`
+	LastError         string                    `json:"lastError,omitempty"`
 }
 
 // Run 保存一次固定水位的运行，取消或退避后恢复同一 ID。
 type Run struct {
+	UnavailableQueries []QueryProgress            `json:"unavailableQueries,omitempty"`
 	SearchTemplates    []SearchTemplate           `json:"searchTemplates,omitempty"`
 	RetryCandidateKeys map[string][]string        `json:"retryCandidateKeys,omitempty"`
 	RetryOf            idgen.ID                   `json:"retryOf,omitempty"`
@@ -273,8 +283,9 @@ type RunsVO struct {
 
 // TemplatesVO 返回当前统一检索模板。
 type TemplatesVO struct {
-	Items   []SearchTemplate `json:"items"`
-	Version string           `json:"version"`
+	Previews []QueryPreview   `json:"previews,omitempty"`
+	Items    []SearchTemplate `json:"items"`
+	Version  string           `json:"version"`
 }
 
 type sourcesRequest struct{}

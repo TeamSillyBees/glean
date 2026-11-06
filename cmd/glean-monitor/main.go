@@ -44,6 +44,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("glean-monitor", flag.ContinueOnError)
 	demo := flags.Bool("demo", false, "explicit synthetic fixture mode; normal mode uses real source APIs and PostgreSQL")
 	retryFailed := flags.String("retry-failed", "", "explicitly resume classified transient failures from a retained run ID; original sources/window are preserved")
+	newPlan := flags.Bool("new-plan", false, "explicitly scan the current search plan for a fixed --since/--until window; preserve old plan receipts")
 	doctor := flags.Bool("doctor", false, "check database, actor and real-source configuration without calling source APIs")
 	since := flags.String("since", "", "inclusive real source update lower bound, RFC3339; omit with until to resume scheduled window")
 	until := flags.String("until", "", "exclusive fixed real source watermark, RFC3339")
@@ -90,11 +91,14 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			return fmt.Errorf("--retry-failed cannot be combined with --demo/--doctor/--since/--until")
 		}
 	}
+	if *newPlan && (*demo || *doctor || *retryFailed != "" || *since == "" || *until == "") {
+		return fmt.Errorf("--new-plan requires both --since and --until and cannot be combined with --demo/--doctor/--retry-failed")
+	}
 	if !*demo {
 		if *persist {
 			return fmt.Errorf("--persist-mock requires explicit --demo; normal mode is real")
 		}
-		return runLive(ctx, out, *node, *operator, os.Getenv("INITRA_MONITOR_DATABASE_URL"), *allowLocal, *sourceNames, *since, *until, *maxPages, *pageSize, *contact, *doctor, *full, *requireObservation, retryID)
+		return runLive(ctx, out, *node, *operator, os.Getenv("INITRA_MONITOR_DATABASE_URL"), *allowLocal, *sourceNames, *since, *until, *maxPages, *pageSize, *contact, *doctor, *full, *requireObservation, retryID, *newPlan)
 	}
 	if *doctor || *since != "" || *until != "" || *requireObservation {
 		return fmt.Errorf("--doctor/--since/--until apply to real mode, not --demo")
@@ -216,7 +220,7 @@ func validateDSN(dsn string, allowLocal bool) error {
 	return fmt.Errorf("database requires sslmode=verify-full; loopback development may explicitly allow sslmode=disable")
 }
 
-func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn string, allowLocal bool, sourceNames, since, until string, maxPages, pageSize int, contact string, doctor, full, requireObservation bool, retryID idgen.ID) error {
+func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn string, allowLocal bool, sourceNames, since, until string, maxPages, pageSize int, contact string, doctor, full, requireObservation bool, retryID idgen.ID, newPlan bool) error {
 	if pageSize < 1 || pageSize > 1000 {
 		return fmt.Errorf("--page-size must be 1-1000")
 	}
@@ -342,6 +346,8 @@ func runLive(ctx context.Context, out io.Writer, node int64, operator, dsn strin
 	var snapshot monitor.Snapshot
 	if retryID > 0 {
 		snapshot, err = service.RetryFailedFinite(ctx, retryID, maxPages)
+	} else if newPlan && window != nil {
+		snapshot, err = service.RunPlanWindowFinite(ctx, *window, maxPages)
 	} else if window != nil {
 		snapshot, err = service.RunFinite(ctx, *window, maxPages)
 	} else {
@@ -486,6 +492,9 @@ func realRunStatus(snapshot monitor.Snapshot) string {
 		}
 	}
 	if !run.FinishedAt.IsZero() {
+		if len(run.UnavailableQueries) > 0 || run.Status == "completed_with_gaps" {
+			return "completed_with_gaps"
+		}
 		return "completed"
 	}
 	return "bounded-partial"

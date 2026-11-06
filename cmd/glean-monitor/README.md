@@ -31,6 +31,17 @@ The real-source CLI is bounded to three minutes and 1–200 upstream request att
 
 Omitting `--since` and `--until` resumes a pending durable run, or starts a due run using the stored 72-hour UTC schedule and source checkpoints. Explicit windows are half-open, at most 90 days, and cannot end in the future. Reusing the same completed explicit window is idempotent while its run receipt is retained; durable catalog observation identities also prevent duplicate papers after monitor-history compaction.
 
+After changing a topic's search routes, normal resume still uses the original frozen plan. To explicitly scan the **same fixed window with the current plan**, use:
+
+```sh
+go run ./cmd/glean-monitor --node 11 --new-plan \
+  --sources pubmed,europepmc \
+  --since 2026-10-20T00:00:00Z --until 2026-10-26T00:00:00Z \
+  --max-pages 6
+```
+
+`--new-plan` requires both explicit bounds and cannot be combined with `--demo`, `--doctor`, or `--retry-failed`. An active run must finish first. Old completed runs and their frozen plan remain intact; repeating a completed window with the **same current plan version** remains idempotent. If the new run stops pending, resume normally with its original source set/window, without `--new-plan`. This flag does not enable scheduling, reset retries, or claim complete historical coverage. Route `backfillFrom` bounds are honored within the supplied window; a window entirely before that bound is rejected.
+
 A finite invocation may stop **pending** because its page/time budget is exhausted, pagination remains, or upstream retry time has not arrived. This is not a completed harvest. Resume with the same source set/window or let the configured scheduler continue. Fixed end watermarks and cursors are preserved; acquisition watermarks advance only after all source/topic pagination completes, while review/projection watermarks advance independently after those phases complete. A manual window cannot jump an existing acquisition gap.
 
 Ordinary scans use the three versioned topic queries with a seven-day overlap and a thirty-day first window. Every normal journal-source run performs full core-journal feeds **after** ordinary discovery over the same overlap window. Every tenth run widens only that core-journal window to ninety days; ordinary discovery continues independently. Non-journal providers do not duplicate ISSN core scans. Core feeds retain all journal records rather than silently discarding items by keyword; `coreDiscovery=true` means “core journal discovery, topic relevance unreviewed,” never confirmed topic relevance or scientific inclusion. The registry is an incomplete historical seed, not the full journal universe.
@@ -46,6 +57,8 @@ Use the regular authenticated catalog UI/API for source evidence, publication ev
 - `GET /api/v1/monitor/runs`
 - `GET /api/v1/monitor/sources`
 - `GET /api/v1/monitor/templates`
+
+Query-level evidence records the compiled route expression, fixed time window, source, and version. It is **not a complete per-request HTTP log**: Crossref executes separate bibliographic seed requests whose union is shown as a readable route expression. Full-window harvest sources do not enforce keyword matching upstream; all returned candidates remain subject to downstream relevance review. Finished runs with unavailable planned sources report `completed_with_gaps`, not complete coverage.
 
 Formal dates come from publisher/source publication events, never from acquisition or index timestamps. Machine output remains `scientificReviewed=false`, `inclusionStatus=pending`; it cannot convert discovery into scientific inclusion.
 

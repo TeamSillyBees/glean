@@ -203,3 +203,24 @@ func TestObservationReportUsesCurrentPipelineReview(t *testing.T) {
 	require.False(t, got.LLMIsMock)
 	require.Empty(t, got.PipelineStatus)
 }
+
+// TestNewPlanFlagRequiresExplicitWindow 防止新计划覆盖旧游标或隐式扩大窗口。
+func TestNewPlanFlagRequiresExplicitWindow(t *testing.T) {
+	const since = "2026-10-20T00:00:00Z"
+	const until = "2026-10-26T00:00:00Z"
+	for _, extra := range [][]string{{}, {"--since", since}, {"--until", until}, {"--since", since, "--until", until, "--demo"}, {"--since", since, "--until", until, "--doctor"}, {"--retry-failed", "7"}} {
+		args := append([]string{"--node", "11", "--new-plan"}, extra...)
+		require.ErrorContains(t, run(context.Background(), args, &bytes.Buffer{}), "--new-plan")
+	}
+	t.Setenv("INITRA_MONITOR_DATABASE_URL", "")
+	require.ErrorContains(t, run(context.Background(), []string{"--node", "11", "--new-plan", "--since", since, "--until", until}, &bytes.Buffer{}), "INITRA_MONITOR_DATABASE_URL")
+}
+
+// TestRealRunStatusPreservesUnavailableCoverage 未启用的计划来源不能报告为完整采集。
+func TestRealRunStatusPreservesUnavailableCoverage(t *testing.T) {
+	finished := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
+	for _, run := range []monitor.Run{{Status: "completed_with_gaps", FinishedAt: finished}, {Status: "completed", FinishedAt: finished, UnavailableQueries: []monitor.QueryProgress{{Source: "pubmed", Status: "unavailable"}}}} {
+		require.Equal(t, "completed_with_gaps", realRunStatus(monitor.Snapshot{Runs: []monitor.Run{run}}))
+	}
+	require.Equal(t, "completed", realRunStatus(monitor.Snapshot{Runs: []monitor.Run{{Status: "completed", FinishedAt: finished}}}))
+}

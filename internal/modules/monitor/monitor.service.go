@@ -17,6 +17,7 @@ import (
 	"github.com/teamsillybees/glean/internal/modules/bizerrors"
 	"github.com/teamsillybees/glean/internal/platform/entx"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // Config 限制一次执行的工作量；正常装配采用 RuntimeConfig，调度由调用方显式触发。
@@ -46,21 +47,22 @@ func DefaultConfig() Config {
 
 // Service 协调采集、审核和目录投影，数据库状态通过修订号 CAS 防止并发覆盖。
 type Service struct {
-	pipeline         PipelineProcessor
-	materialProvider MaterialProvider
-	client           *ent.Client
-	memory           *memoryState
-	ids              *idgen.Generator
-	config           Config
-	sources          []Source
-	reviewer         Reviewer
-	publisher        Publisher
-	clock            func() time.Time
-	journals         JournalProvider
-	templates        TemplateProvider
-	schedulerEnabled bool
-	operatorID       idgen.ID
-	requireOperator  bool
+	explicitPlanVersion string
+	pipeline            PipelineProcessor
+	materialProvider    MaterialProvider
+	client              *ent.Client
+	memory              *memoryState
+	ids                 *idgen.Generator
+	config              Config
+	sources             []Source
+	reviewer            Reviewer
+	publisher           Publisher
+	clock               func() time.Time
+	journals            JournalProvider
+	templates           TemplateProvider
+	schedulerEnabled    bool
+	operatorID          idgen.ID
+	requireOperator     bool
 }
 
 // NewService 创建使用 Ent 的持久化监控服务；不自行启动后台任务。
@@ -215,6 +217,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 		}
 	}
 	if run != nil {
+		if s.explicitPlanVersion != "" && s.explicitPlanVersion != run.TemplateVersion {
+			return state.Snapshot, bizerrors.BadRequest("another plan is active; resume it first")
+		}
 		if _, snapshotErr := runTemplates(run); snapshotErr != nil {
 			return state.Snapshot, bizerrors.BadRequest("active monitor run requires its original template version")
 		}
@@ -234,7 +239,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 	if run == nil {
 		if requested != nil {
 			for _, previous := range state.Runs {
-				if previous.RequestKey == s.windowKey(*requested, previous.TemplateVersion) {
+				if previous.RequestKey == s.windowKey(*requested, previous.TemplateVersion) && (s.explicitPlanVersion == "" || s.explicitPlanVersion == previous.TemplateVersion) {
 					if err := s.processPipelines(ctx, state); err != nil {
 						return state.Snapshot, err
 					}
@@ -247,9 +252,12 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			}
 			return state.Snapshot, nil
 		}
-		templates, _, templateErr := s.currentTemplates(ctx)
+		templates, version, templateErr := s.currentTemplates(ctx)
 		if templateErr != nil {
 			return state.Snapshot, templateErr
+		}
+		if s.explicitPlanVersion != "" && s.explicitPlanVersion != version {
+			return state.Snapshot, bizerrors.BadRequest("search plan changed; retry with the current plan")
 		}
 		registry := []string{}
 		registryByTopic := map[string][]string{}
@@ -283,6 +291,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			continue
 		}
 		selectedTemplates := executionTemplates(templates, progress.CoreBackfill)
+		if progress.Queries != nil {
+			selectedTemplates = sourceTemplates(templates, progress.CoreBackfill, source.Name())
+		}
 		checkpoint := state.Sources[source.Name()]
 		if !isMockSource(source) {
 			s.shareProviderCooldown(state, source.Name(), checkpoint)
@@ -312,6 +323,10 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			if progress.CoreBackfill && !template.Core && !progress.IncrementalWindow.Start.IsZero() {
 				fetchWindow = progress.IncrementalWindow
 			}
+			query := queryFor(progress, template)
+			if query != nil {
+				fetchWindow = query.Window
+			}
 			registryISSNs := progress.RegistryISSNs
 			if template.Core && len(progress.RegistryByTopic) > 0 {
 				registryISSNs = progress.RegistryByTopic[template.Topic]
@@ -328,6 +343,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			cancel()
 			pages++
 			run.Requests++
+			if query != nil {
+				query.Requests++
+			}
 			if fetchErr != nil {
 				if ctx.Err() != nil {
 					return s.cancelRun(ctx, state, run, ctx.Err())
@@ -351,6 +369,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			}
 			for _, record := range page.Records {
 				progress.Observed++
+				if query != nil {
+					query.Observed++
+				}
 				record.IsMock = isMockSource(source)
 				record.CoreDiscovery = template.Core
 				record.TemplateVersion = run.TemplateVersion
@@ -360,6 +381,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 					record.AcquiredAt = s.clock().UTC()
 				}
 				record.Topics = uniqueStrings(append(record.Topics, template.Topic))
+				if query != nil && template.FieldMode != "" {
+					record.Discoveries = []retrieval.Hit{{RunID: run.ID, QueryID: query.QueryID, QueryVersion: query.QueryVersion, PlanVersion: run.TemplateVersion, Source: source.Name(), Query: query.Query, Mode: query.Mode, DiscoveredAt: record.AcquiredAt}}
+				}
 				reason := ""
 				if record.ValidationError != "" {
 					reason = safeRejectionKind(record.ValidationError)
@@ -373,6 +397,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				}
 				if reason != "" {
 					s.quarantineRecord(state, progress, checkpoint, record, reason, now)
+					if query != nil {
+						query.Quarantined++
+					}
 					continue
 				}
 				key, identity := recordIdentity(record)
@@ -398,18 +425,32 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 					}
 				}
 				if !exists {
+					if query != nil {
+						query.NewCandidates++
+					}
 					candidate = &Candidate{RunID: run.ID, Templates: append([]SearchTemplate(nil), templates...), ID: s.ids.NextID(), Key: key, Identity: identity, Record: record}
 					state.Records[key] = candidate
 				} else {
+					// 已发布路径已在目录确认；只在热缓存保留本次运行的路径，未确认的路径不能丢弃。
+					oldHits := candidate.Record.Discoveries
+					if candidate.Published && len(record.Discoveries) > 0 {
+						oldHits = nil
+						for _, hit := range candidate.Record.Discoveries {
+							if hit.RunID == run.ID {
+								oldHits = append(oldHits, hit)
+							}
+						}
+					}
+					discoveries, discoveriesChanged := mergeDiscoveries(oldHits, record.Discoveries)
 					topics := uniqueStrings(append(candidate.Record.Topics, record.Topics...))
 					topicsChanged := len(topics) != len(candidate.Record.Topics)
 					templateChanged := s.pipeline != nil && candidate.Pipeline != nil && candidate.Record.TemplateVersion != run.TemplateVersion
-					if candidate.PipelineArchived && (topicsChanged || templateChanged) {
+					if candidate.PipelineArchived && (topicsChanged || templateChanged || discoveriesChanged) {
 						if err := s.restorePipeline(ctx, candidate); err != nil {
 							return state.Snapshot, err
 						}
 					}
-					if (candidate.Compacted || s.pipeline != nil) && (topicsChanged || templateChanged) {
+					if (candidate.Compacted || s.pipeline != nil) && (topicsChanged || templateChanged || discoveriesChanged) {
 						candidate.Record = record
 						candidate.Compacted = false
 					}
@@ -422,6 +463,10 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 						}
 						candidate.Pipeline = nil
 						candidate.PipelineProjected = false
+						candidate.Published = false
+					}
+					candidate.Record.Discoveries = discoveries
+					if discoveriesChanged {
 						candidate.Published = false
 					}
 					candidate.Record.Topics = topics
@@ -439,22 +484,62 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				break
 			}
 			progress.Pages++
+			if query != nil {
+				query.Pages++
+				query.LastError = ""
+			}
 			progress.Cursor = page.NextCursor
 			checkpoint.LastError = ""
 			checkpoint.ConsecutiveFailures = 0
 			checkpoint.LastStatusCode = 0
 			checkpoint.NextRetryAt = time.Time{}
 			if page.Complete {
+				morePartitions := false
+				if query != nil {
+					query.CompletedPartitions++
+					if query.AdvanceCheckpoint {
+						if checkpoint.QueryAcquiredThrough == nil {
+							checkpoint.QueryAcquiredThrough = map[string]time.Time{}
+						}
+						checkpoint.QueryAcquiredThrough[queryKey(template)] = later(checkpoint.QueryAcquiredThrough[queryKey(template)], query.Window.End)
+					}
+					if query.Window.End.Before(query.TargetEnd) {
+						query.Window.Start = query.Window.End
+						query.Window.End = query.Window.Start.Add(90 * 24 * time.Hour)
+						if query.Window.End.After(query.TargetEnd) {
+							query.Window.End = query.TargetEnd
+						}
+						morePartitions = true
+					} else {
+						query.Status = "completed"
+						if query.Observed == 0 {
+							query.Status = "completed_empty"
+						}
+						query.CompletedAt = s.clock().UTC()
+					}
+				}
 				if checkpoint.TopicAcquiredThrough == nil {
 					checkpoint.TopicAcquiredThrough = map[string]time.Time{}
 				}
-				if (!progress.CoreBackfill || template.Core || (progress.TemplateIndex < len(templates) && !templates[progress.TemplateIndex].Core)) && (progress.AdvanceCheckpoint || run.RequestKey == "") {
+				if query != nil {
+					topicComplete, canAdvance := true, true
+					for _, q := range progress.Queries {
+						if q.Topic == template.Topic {
+							topicComplete = topicComplete && (q.Status == "completed" || q.Status == "completed_empty")
+							canAdvance = canAdvance && q.AdvanceCheckpoint
+						}
+					}
+					if topicComplete && canAdvance && (progress.AdvanceCheckpoint || run.RequestKey == "") {
+						checkpoint.TopicAcquiredThrough[template.Topic] = later(checkpoint.TopicAcquiredThrough[template.Topic], run.FixedEnd)
+					}
+				} else if (!progress.CoreBackfill || template.Core || (progress.TemplateIndex < len(templates) && !templates[progress.TemplateIndex].Core)) && (progress.AdvanceCheckpoint || run.RequestKey == "") {
 					checkpoint.TopicAcquiredThrough[template.Topic] = later(checkpoint.TopicAcquiredThrough[template.Topic], run.FixedEnd)
 				}
-				progress.TemplateIndex++
 				progress.Cursor = ""
-				templateCount := len(selectedTemplates)
-				if progress.TemplateIndex == templateCount {
+				if !morePartitions {
+					progress.TemplateIndex++
+				}
+				if progress.TemplateIndex == len(selectedTemplates) {
 					progress.Acquired = true
 					checkpoint.LastAcquiredAt = s.clock().UTC()
 					if progress.AdvanceCheckpoint || run.RequestKey == "" {
@@ -593,6 +678,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			}
 		}
 	}
+	s.updateQueryStatuses(run, state)
 	terminal, failed, quarantined := true, false, false
 	for _, progress := range run.Sources {
 		terminal = terminal && (progress.Handled || progress.Published || progress.Failed)
@@ -601,6 +687,9 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 	}
 	if terminal {
 		run.Status = "completed"
+		if len(run.UnavailableQueries) > 0 {
+			run.Status = "completed_with_gaps"
+		}
 		if quarantined {
 			run.Status = "completed_with_quarantine"
 		}
@@ -713,6 +802,13 @@ func (s *Service) startRun(state *monitorState, now time.Time, requested *Window
 		sort.Strings(keys)
 		run.Sources[source.Name()] = &SourceProgress{RegistryByTopic: registryByTopic, CoreWide: wideCore && requested == nil, IncrementalWindow: Window{Start: incrementalStart, End: run.FixedEnd}, Window: Window{Start: start, End: run.FixedEnd}, CandidateKeys: keys, RegistryISSNs: append([]string(nil), registry...), CoreBackfill: core, AdvanceCheckpoint: checkpoint.AcquiredThrough.IsZero() || !start.After(checkpoint.AcquiredThrough), Failed: checkpoint.Blocked}
 	}
+	for _, source := range s.sources {
+		progress := run.Sources[source.Name()]
+		if err := initializeQueryProgress(&run, progress, state.Sources[source.Name()], sourceTemplates(templates, progress.CoreBackfill, source.Name()), source.Name(), requested != nil); err != nil {
+			return nil, err
+		}
+	}
+	recordUnavailableQueries(&run, templates, s.sources)
 	state.Runs = append(state.Runs, run)
 	return &state.Runs[len(state.Runs)-1], nil
 }
@@ -788,6 +884,7 @@ func recordIdentity(record Record) (string, string) {
 	copy := record
 	copy.DOI = doi
 	copy.AcquiredAt = time.Time{}
+	copy.Discoveries = nil
 	copy.Topics = nil
 	copy.CoreDiscovery = false
 	if len(copy.Raw) == 0 {

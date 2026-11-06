@@ -61,5 +61,5 @@ func (h *Handler) templates(ctx context.Context, _ *templatesRequest) (*template
 	if err != nil {
 		return nil, err
 	}
-	return &templatesResponse{Body: response.OK(ctx, TemplatesVO{Items: items, Version: version})}, nil
+	return &templatesResponse{Body: response.OK(ctx, TemplatesVO{Items: items, Version: version, Previews: queryPreviews(items, h.service.sources)})}, nil
 }
