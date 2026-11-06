@@ -22,6 +22,7 @@ type ModelEndpointConfig struct {
 
 // ModelPipelineConfig 描述明确启用的真实模型，不含默认付费供应商。
 type ModelPipelineConfig struct {
+	Budget      ModelBudgetConfig   `mapstructure:"budget"`
 	Enabled     bool                `mapstructure:"enabled"`
 	AutoDisplay bool                `mapstructure:"auto_display"`
 	Jev         ModelEndpointConfig `mapstructure:"jev"`
@@ -30,6 +31,9 @@ type ModelPipelineConfig struct {
 
 // Validate 拒绝凭据URL、非HTTPS远端和不安全环境变量名。
 func (c ModelPipelineConfig) Validate() error {
+	if err := c.Budget.validate(); err != nil {
+		return err
+	}
 	for _, v := range []ModelEndpointConfig{c.Jev, c.Generative} {
 		if v.Endpoint != "" {
 			u, e := url.Parse(v.Endpoint)
@@ -62,6 +66,7 @@ func (c ModelPipelineConfig) ModelHTTPServices() map[string]httpclient.ServiceCo
 
 // ModelPipelineProcessor 分工调用Jev和生成模型，永不回退为mock。
 type ModelPipelineProcessor struct {
+	budget     *modelBudget
 	jev        *JevClient
 	generative *GenerativeClient
 	config     ModelPipelineConfig
@@ -211,7 +216,7 @@ const reviewPrompt = `请独立使用同时提供的原始材料审核草稿。�
 
 // ModelPipelineConfigFromEnv 为有限运行CLI读取同一组公开配置，密钥仅由指定环境变量读取。
 func ModelPipelineConfigFromEnv() ModelPipelineConfig {
-	return ModelPipelineConfig{Enabled: os.Getenv("INITRA_MONITOR_MODELS_ENABLED") == "true", AutoDisplay: os.Getenv("INITRA_MONITOR_MODELS_AUTO_DISPLAY") == "true", Jev: ModelEndpointConfig{Endpoint: os.Getenv("INITRA_MONITOR_MODELS_JEV_ENDPOINT"), Model: os.Getenv("INITRA_MONITOR_MODELS_JEV_MODEL"), APIKeyEnv: modelEnvName("INITRA_MONITOR_MODELS_JEV_API_KEY_ENV", "INITRA_JEV_API_KEY"), Timeout: modelEnvTimeout("INITRA_MONITOR_MODELS_JEV_TIMEOUT")}, Generative: ModelEndpointConfig{Endpoint: os.Getenv("INITRA_MONITOR_MODELS_GENERATIVE_ENDPOINT"), Model: os.Getenv("INITRA_MONITOR_MODELS_GENERATIVE_MODEL"), APIKeyEnv: modelEnvName("INITRA_MONITOR_MODELS_GENERATIVE_API_KEY_ENV", "INITRA_GENERATIVE_API_KEY"), Timeout: modelEnvTimeout("INITRA_MONITOR_MODELS_GENERATIVE_TIMEOUT")}}
+	return ModelPipelineConfig{Budget: ModelBudgetConfig{MaxCalls: modelEnvInt("INITRA_MONITOR_MODELS_BUDGET_MAX_CALLS"), MaxReservedTokens: modelEnvInt("INITRA_MONITOR_MODELS_BUDGET_MAX_RESERVED_TOKENS"), MaxInputBytes: modelEnvInt("INITRA_MONITOR_MODELS_BUDGET_MAX_INPUT_BYTES"), MaxOutputTokens: modelEnvInt("INITRA_MONITOR_MODELS_BUDGET_MAX_OUTPUT_TOKENS")}, Enabled: os.Getenv("INITRA_MONITOR_MODELS_ENABLED") == "true", AutoDisplay: os.Getenv("INITRA_MONITOR_MODELS_AUTO_DISPLAY") == "true", Jev: ModelEndpointConfig{Endpoint: os.Getenv("INITRA_MONITOR_MODELS_JEV_ENDPOINT"), Model: os.Getenv("INITRA_MONITOR_MODELS_JEV_MODEL"), APIKeyEnv: modelEnvName("INITRA_MONITOR_MODELS_JEV_API_KEY_ENV", "INITRA_JEV_API_KEY"), Timeout: modelEnvTimeout("INITRA_MONITOR_MODELS_JEV_TIMEOUT")}, Generative: ModelEndpointConfig{Endpoint: os.Getenv("INITRA_MONITOR_MODELS_GENERATIVE_ENDPOINT"), Model: os.Getenv("INITRA_MONITOR_MODELS_GENERATIVE_MODEL"), APIKeyEnv: modelEnvName("INITRA_MONITOR_MODELS_GENERATIVE_API_KEY_ENV", "INITRA_GENERATIVE_API_KEY"), Timeout: modelEnvTimeout("INITRA_MONITOR_MODELS_GENERATIVE_TIMEOUT")}}
 }
 func modelEnvName(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -283,4 +288,17 @@ func (p *ModelPipelineProcessor) StageTimeout(stage string) time.Duration {
 		return 60 * time.Second
 	}
 	return d
+}
+
+// modelEnvInt 将无效输入保留为负值，交给统一校验拒绝，不能悄悄恢复默认预算。
+func modelEnvInt(key string) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return 0
+	}
+	n, e := strconv.Atoi(v)
+	if e != nil {
+		return -1
+	}
+	return n
 }

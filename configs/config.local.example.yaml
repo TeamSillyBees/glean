@@ -36,6 +36,11 @@ log:
 # 可选：先通过私密环境变量设置实际key；这里永远只填写变量名。
 monitor:
   models:
+    budget:
+      max_calls: 100
+      max_reserved_tokens: 1000000
+      max_input_bytes: 131072
+      max_output_tokens: 4096
     enabled: false # 显式启用且配置密钥后才允许模型处理及额外全文获取
     auto_display: false # 仅控制模型产物展示，不代表科学纳入
     jev:

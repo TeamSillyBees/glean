@@ -30,6 +30,7 @@ type ModelCallMetadata struct {
 
 // ModelClientConfig 是启动层注入的模型参数。
 type ModelClientConfig struct {
+	budget      *modelBudget
 	Model, Path string
 	APIKey      string `json:"-"`
 	Timeout     time.Duration
@@ -181,7 +182,11 @@ func (c *GenerativeClient) Generate(ctx context.Context, system string, input an
 	if err != nil {
 		return meta, invalidModelResponse()
 	}
-	raw, hash, err := modelPOST(ctx, c.executor, c.config, map[string]any{"model": c.config.Model, "stream": false, "messages": []map[string]string{{"role": "system", "content": system + "\n只返回一个 JSON 对象，不要添加 Markdown 围栏。"}, {"role": "user", "content": string(encoded)}}})
+	outputLimit := 4096
+	if c.config.budget != nil {
+		outputLimit = c.config.budget.limits.MaxOutputTokens
+	}
+	raw, hash, err := modelPOST(ctx, c.executor, c.config, map[string]any{"model": c.config.Model, "stream": false, "store": false, "max_completion_tokens": outputLimit, "messages": []map[string]string{{"role": "system", "content": system + "\n只返回一个 JSON 对象，不要添加 Markdown 围栏。"}, {"role": "user", "content": string(encoded)}}})
 	if err != nil {
 		return meta, err
 	}
@@ -237,6 +242,11 @@ func modelPOST(ctx context.Context, e httpclient.Executor, c ModelClientConfig, 
 		return nil, "", &PipelineError{Kind: "invalid_request"}
 	}
 	hash := sha256.Sum256(raw)
+	if c.budget != nil {
+		if err = c.budget.reserve(ctx, len(raw)); err != nil {
+			return nil, "", err
+		}
+	}
 	timeout := c.Timeout
 	if timeout <= 0 {
 		timeout = 60 * time.Second

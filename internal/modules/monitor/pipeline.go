@@ -18,7 +18,19 @@ type MaterialProvider interface {
 }
 
 // SetPipelineProcessor 显式装配真实阶段处理器；不执行任何外部请求。
-func (s *Service) SetPipelineProcessor(p PipelineProcessor) { s.pipeline = p }
+func (s *Service) SetPipelineProcessor(p PipelineProcessor) {
+	s.pipeline = p
+	if model, ok := p.(*ModelPipelineProcessor); ok {
+		b := &modelBudget{service: s, limits: model.config.Budget.defaults()}
+		model.budget = b
+		if model.jev != nil {
+			model.jev.config.budget = b
+		}
+		if model.generative != nil {
+			model.generative.config.budget = b
+		}
+	}
+}
 
 // SetMaterialProvider 装配有界公开材料获取器。
 func (s *Service) SetMaterialProvider(p MaterialProvider) { s.materialProvider = p }
@@ -167,6 +179,9 @@ func (s *Service) processPipelines(ctx context.Context, state *monitorState) err
 				stage.Error = "model_processing_failed"
 				var pe *PipelineError
 				if errors.As(err, &pe) {
+					if strings.HasPrefix(pe.Kind, "model_") {
+						stage.Error = pe.Kind
+					}
 					if pe.Kind == "authentication_failed" || pe.Kind == "invalid_response" {
 						stage.Error = pe.Kind
 					}

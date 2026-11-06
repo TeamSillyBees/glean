@@ -347,6 +347,12 @@ func configDefaults() map[string]any {
 		"monitor.operator_id":                     "",
 		"monitor.models.enabled":                  false,
 		"monitor.models.auto_display":             false,
+
+		"monitor.models.budget.max_calls":           100,
+		"monitor.models.budget.max_reserved_tokens": 1000000,
+		"monitor.models.budget.max_input_bytes":     131072,
+		"monitor.models.budget.max_output_tokens":   4096,
+
 		"monitor.models.jev.endpoint":             "",
 		"monitor.models.jev.model":                "",
 		"monitor.models.jev.api_key_env":          "INITRA_JEV_API_KEY",
