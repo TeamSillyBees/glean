@@ -314,8 +314,8 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   await page.screenshot({ path: info.outputPath('management-empty-topic-mobile.png') })
   // Source progress remains a read-only destination; opening it never starts a scan.
   await page.getByRole('button', { name: '查看采集进度', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '来源健康', exact: true })).toBeVisible()
-  await expect(page.getByText('定时计划未启用', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '采集状态', exact: true })).toBeVisible()
+  await expect(page.getByText('自动采集已关闭', { exact: true })).toBeVisible()
   await navigate(page, new RegExp(`^${topicName}`))
   await expect(page.getByRole('heading', { name: '这个主题还没有论文', exact: true })).toBeVisible()
 

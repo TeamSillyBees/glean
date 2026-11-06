@@ -221,8 +221,8 @@ describe('backend source state and exact searchable facets', () => {
     )
     expect(screen.getByText('真实来源采集')).toBeInTheDocument()
     expect(screen.getByText('尚无完成记录')).toBeInTheDocument()
-    expect(screen.getAllByText('未知').length).toBeGreaterThan(0)
-    expect(screen.getByText('定时计划未启用')).toBeInTheDocument()
+    expect(screen.getAllByText('尚无记录').length).toBeGreaterThan(0)
+    expect(screen.getByText('自动采集已关闭')).toBeInTheDocument()
     expect(screen.queryByText('Mock 开发模式')).not.toBeInTheDocument()
   })
   it('keeps completed acquisition with quarantined records amber rather than green success and links to read-only evidence', async () => {

@@ -1,41 +1,58 @@
-import { Clock3, Database, Radio, RefreshCw, ShieldCheck, Timer, TriangleAlert } from 'lucide-react'
+import { useState } from 'react'
+import { Database, History, RefreshCw, Timer } from 'lucide-react'
 import { hasDate, useSources } from '../lib/source-query'
 export type { SourcesData, Checkpoint } from '../lib/source-query'
-import { date, number, topicLabels } from '../lib/utils'
+import { number, topicLabels } from '../lib/utils'
 import type { TopicSlug } from '../lib/types'
 import { Badge, Empty, ErrorState, Loading } from './common'
 import { Button } from './ui/button'
-const checkpointDate = (value?: string) => (hasDate(value) ? date(value) : '尚未完成')
-function timestamp(value?: string) {
-  if (!hasDate(value)) return '尚未完成'
-  const parsed = new Date(value!)
-  return Number.isFinite(parsed.getTime())
-    ? new Intl.DateTimeFormat('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'UTC',
-      }).format(parsed) + ' UTC'
-    : value
+const sourceNames: Record<string, string> = {
+  crossref: 'Crossref',
+  pubmed: 'PubMed',
+  europepmc: 'Europe PMC',
+  arxiv: 'arXiv',
+  biorxiv: 'bioRxiv',
+  medrxiv: 'medRxiv',
 }
-function lag(seconds?: number) {
-  if (seconds == null || !Number.isFinite(seconds)) return '未知'
-  if (seconds < 3600) return `${Math.max(0, Math.floor(seconds / 60))} 分钟`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时`
-  return `${Math.floor(seconds / 86400)} 天 ${Math.floor((seconds % 86400) / 3600)} 小时`
+function timestamp(value?: string) {
+  if (!hasDate(value)) return '尚无记录'
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value!))
+}
+function lag(seconds: number) {
+  if (seconds < 3600) return Math.max(0, Math.floor(seconds / 60)) + ' 分钟'
+  if (seconds < 86400) return Math.floor(seconds / 3600) + ' 小时'
+  return Math.floor(seconds / 86400) + ' 天'
 }
 export function SourcesView({
   topic,
   onOpenQuarantine,
+  onOpenRuns,
 }: {
   topic: TopicSlug
   onOpenQuarantine?: (source?: string) => void
+  onOpenRuns?: () => void
 }) {
   const query = useSources()
-  if (query.isLoading) return <Loading />
+  const [refreshMessage, setRefreshMessage] = useState('')
+  async function refresh() {
+    const before = JSON.stringify(query.data)
+    setRefreshMessage('')
+    const result = await query.refetch()
+    if (!result.isError)
+      setRefreshMessage(
+        before === JSON.stringify(result.data)
+          ? '已刷新 · 采集状态没有变化'
+          : '已刷新 · 采集状态已更新',
+      )
+  }
+  if (query.isPending) return <Loading label="正在读取采集状态…" />
   if (query.isError && !query.data)
     return <ErrorState error={query.error} retry={() => query.refetch()} />
   const { items, schedule } = query.data!
@@ -50,155 +67,131 @@ export function SourcesView({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <Badge tone={schedule.acquisitionMode === 'live' ? 'green' : 'neutral'}>
-            {schedule.acquisitionMode === 'live'
-              ? '真实来源采集'
-              : schedule.acquisitionMode === 'demo'
-                ? '独立演示环境'
-                : '采集模式待确认'}
-          </Badge>
-          <Badge>{schedule.schedulerEnabled ? '定时计划已启用' : '定时计划未启用'}</Badge>
+        <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
+          {query.isFetching
+            ? '正在刷新采集状态…'
+            : query.isError
+              ? '刷新失败'
+              : refreshMessage ||
+                '上次读取 ' + new Date(query.dataUpdatedAt).toLocaleTimeString('zh-CN')}
+        </p>
+        <div className="flex gap-2">
+          {onOpenRuns && (
+            <Button variant="outline" size="sm" onClick={onOpenRuns}>
+              <History />
+              查看采集记录
+            </Button>
+          )}
+          <Button variant="outline" size="sm" disabled={query.isFetching} onClick={refresh}>
+            <RefreshCw className={query.isFetching ? 'animate-spin' : undefined} />
+            刷新状态
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={query.isFetching}
-          onClick={() => query.refetch()}
-        >
-          <RefreshCw />
-          刷新状态
-        </Button>
       </div>
       {query.isError && (
         <p
           role="alert"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-900"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
         >
           刷新失败，以下保留上次成功读取的来源状态，可能不是最新进度。
         </p>
       )}
-      <section
-        aria-label="采集健康概览"
-        className="rounded-xl border bg-white p-5 text-sm leading-7"
-      >
-        <p>
-          最近一次来源完整采集距今：
-          <strong>
-            {lastSuccess
-              ? lag((query.dataUpdatedAt - lastSuccess) / 1000)
-              : '未知（尚无成功时间记录）'}
-          </strong>
+      <section className="rounded-xl border bg-card p-5">
+        <div className="flex items-center gap-3">
+          <Timer className="size-5 text-primary" />
+          <h2 className="font-semibold">
+            {schedule.schedulerEnabled ? '自动采集已开启' : '自动采集已关闭'}
+          </h2>
+          <Badge className="ml-auto">
+            {schedule.acquisitionMode === 'live'
+              ? '真实来源采集'
+              : schedule.acquisitionMode === 'demo'
+                ? '演示环境'
+                : '模式待确认'}
+          </Badge>
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {schedule.schedulerEnabled
+            ? '每 ' +
+              schedule.everyHours +
+              ' 小时采集一次 · 下次计划 ' +
+              timestamp(schedule.nextRunUtc)
+            : '目前不会自动获取新论文。开启自动采集需由管理员在服务器配置。'}
         </p>
-        <p className="text-xs text-muted-foreground">
-          按最近读取时间计算；仅代表最近成功的启用来源，不代表全部来源或目录写入已更新。
-        </p>
-        <p>
-          失败来源：
-          <strong>
-            {failedSources.length ? failedSources.map((source) => source.source).join('、') : '无'}
-          </strong>
-        </p>
-        <p>
-          隔离记录：<strong>{quarantined == null ? '未知' : `${number(quarantined)} 条`}</strong>
+        <p className="mt-2 text-xs text-muted-foreground">
+          刷新状态只更新本页显示。{number(schedule.completedRuns)} 次采集已完成。
         </p>
       </section>
-      {!!quarantined && (
-        <p
-          role="status"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900"
-        >
-          {number(quarantined)}{' '}
-          条来源记录已隔离待处理，其他有效记录会继续处理。隔离未解决前，目录写入窗口保持保守。
-          {onOpenQuarantine && (
-            <Button variant="ghost" size="sm" onClick={() => onOpenQuarantine()}>
+      <section aria-label="采集健康概览" className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs text-muted-foreground">最近成功采集</p>
+          <p className="mt-2 font-semibold">
+            {lastSuccess ? lag((query.dataUpdatedAt - lastSuccess) / 1000) + '前' : '尚无成功记录'}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">所有启用来源中的最近一次</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs text-muted-foreground">失败来源</p>
+          <p className="mt-2 font-semibold">{failedSources.length} 个</p>
+          {failedSources.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {failedSources
+                .map((source) => sourceNames[source.source] || source.source)
+                .join('、')}
+            </p>
+          )}
+        </div>
+        <div className="rounded-xl border bg-card p-4">
+          <p className="text-xs text-muted-foreground">待处理记录</p>
+          <p className="mt-2 font-semibold">
+            {quarantined == null ? '未知' : number(quarantined) + ' 条'}
+          </p>
+          {!!quarantined && onOpenQuarantine && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto p-0 mt-1"
+              onClick={() => onOpenQuarantine()}
+            >
               查看全部隔离记录
             </Button>
           )}
-        </p>
-      )}
-      <dl className="grid divide-y rounded-xl border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        {[
-          {
-            icon: Timer,
-            label: '计划间隔',
-            value: `${schedule.everyHours} 小时`,
-            detail: '固定 UTC 锚点',
-          },
-          {
-            icon: ShieldCheck,
-            label: '已完成轮次',
-            value: number(schedule.completedRuns),
-            detail: '来自后端运行记录',
-          },
-          {
-            icon: Clock3,
-            label: schedule.schedulerEnabled ? '下一计划时间' : '计划中的下一窗口',
-            value: checkpointDate(schedule.nextRunUtc),
-            detail: schedule.schedulerEnabled ? '以实际运行状态为准' : '未启用，不代表将自动运行',
-          },
-        ].map(({ icon: Icon, label, value, detail }) => (
-          <div key={label} className="min-w-0 px-4 py-4 sm:px-5">
-            <dt className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Icon className="size-4" aria-hidden="true" />
-              {label}
-            </dt>
-            <dd className="mt-2 break-words text-lg font-semibold tabular-nums">
-              {value}
-              <p className="mt-1 text-xs font-normal text-muted-foreground">{detail}</p>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <div>
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <Radio className="size-4 text-primary" />
-          {topicLabels[topic] || topic} · 来源进度
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          只有本主题所有分页完成，才推进该主题窗口。没有完成记录时显示未知，不以“无错误”代表最新。
-        </p>
-      </div>
+        </div>
+      </section>
+      <h2 className="text-sm font-semibold">{topicLabels[topic] || topic} · 各来源进度</h2>
       {!items.length ? (
-        <Empty
-          title="尚未建立来源检查点"
-          description="真实来源完成采集后，会在这里显示独立进度。"
-        />
+        <Empty title="尚无采集记录" description="采集运行后，这里会显示各来源的结果。" />
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="space-y-3">
           {items.map((source) => {
             const completed = hasDate(source.topicAcquiredThrough?.[topic])
             const status =
               (source.quarantined || 0) > 0
-                ? `${number(source.quarantined)} 条隔离待处理`
+                ? number(source.quarantined) + ' 条隔离待处理'
                 : source.enabled === false
                   ? '未启用'
                   : source.blocked
-                    ? '访问受限 · 已停止重试'
+                    ? '访问受限'
                     : source.consecutiveFailures
-                      ? '等待恢复'
+                      ? '采集失败'
                       : completed
-                        ? '已有完整窗口'
+                        ? '已完成采集'
                         : '尚无完成记录'
             return (
-              <section key={source.source} className="min-w-0 rounded-xl border bg-card p-4 sm:p-5">
+              <section
+                key={source.source}
+                aria-label={(sourceNames[source.source] || source.source) + ' 采集状态'}
+                className="min-w-0 rounded-xl border bg-card p-4 sm:p-5"
+              >
                 <div className="flex flex-wrap items-center gap-3">
-                  <Database className="size-4 shrink-0 text-primary" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">{source.source}</h3>
-                  {!!source.quarantined && onOpenQuarantine && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`查看 ${source.source} 隔离记录`}
-                      onClick={() => onOpenQuarantine(source.source)}
-                    >
-                      查看隔离记录
-                    </Button>
-                  )}
+                  <Database className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">
+                    {sourceNames[source.source] || source.source}
+                  </h3>
                   <Badge
                     className="ml-auto"
                     tone={
-                      source.blocked || source.consecutiveFailures || (source.quarantined || 0) > 0
+                      source.blocked || source.consecutiveFailures || source.quarantined
                         ? 'amber'
                         : completed && source.enabled !== false
                           ? 'green'
@@ -208,87 +201,74 @@ export function SourcesView({
                     {status}
                   </Badge>
                 </div>
-                <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2 border-y py-3">
-                  <p className="text-xs text-accent-foreground">本主题已完整采集至</p>
-                  <p className="text-sm font-medium tabular-nums text-foreground">
-                    {timestamp(source.topicAcquiredThrough?.[topic])}
-                  </p>
-                </div>
-                <dl className="mt-4 space-y-3 text-sm">
-                  {[
-                    ['上次完整采集成功', timestamp(source.lastAcquiredAt)],
-                    [
-                      '距上次完整采集成功',
-                      hasDate(source.lastAcquiredAt)
-                        ? lag((query.dataUpdatedAt - Date.parse(source.lastAcquiredAt!)) / 1000)
-                        : '未知',
-                    ],
-                    [
-                      '隔离记录',
-                      source.quarantined == null ? '未知' : `${number(source.quarantined)} 条`,
-                    ],
-                    ['失败次数', number(source.consecutiveFailures)],
-                    [
-                      '本主题窗口距今',
-                      hasDate(source.topicAcquiredThrough?.[topic]) &&
-                      Number.isFinite(Date.parse(source.topicAcquiredThrough![topic]))
-                        ? lag(
-                            Math.max(
-                              0,
-                              (query.dataUpdatedAt -
-                                Date.parse(source.topicAcquiredThrough![topic])) /
-                                1000,
-                            ),
-                          )
-                        : '未知',
-                    ],
-                    ['全来源采集窗口', timestamp(source.acquiredThrough)],
-                    ['全来源窗口距今', lag(source.lagSeconds)],
-                    [
-                      schedule.reviewMode === 'mock' ? '模型占位窗口' : '模型阶段窗口',
-                      timestamp(source.reviewedThrough),
-                    ],
-                    ['处理窗口（含隔离）', timestamp(source.handledThrough)],
-                    ['目录写入窗口', timestamp(source.publishedThrough)],
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex flex-wrap justify-between gap-2">
-                      <dt className="text-muted-foreground">{label}</dt>
-                      <dd className="min-w-0 break-words tabular-nums">{value}</dd>
-                    </div>
-                  ))}
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">本主题已采集至</dt>
+                    <dd className="mt-1 tabular-nums">
+                      {timestamp(source.topicAcquiredThrough?.[topic])}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">上次成功采集</dt>
+                    <dd className="mt-1 tabular-nums">{timestamp(source.lastAcquiredAt)}</dd>
+                  </div>
                 </dl>
-                {source.coreBackfillPending && (
-                  <p className="mt-4 text-xs text-muted-foreground">核心来源回溯仍待完成。</p>
-                )}
                 {source.lastError && (
-                  <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-800">
-                    <p className="flex gap-2">
-                      <TriangleAlert className="mt-1 size-3.5 shrink-0" />
-                      <span className="min-w-0 break-words">
-                        {source.lastStatusCode ? `HTTP ${source.lastStatusCode} · ` : ''}
-                        {source.lastError}
-                      </span>
+                  <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                    <p className="break-words">
+                      {source.lastStatusCode ? 'HTTP ' + source.lastStatusCode + ' · ' : ''}
+                      {source.lastError}
                     </p>
                     {source.blocked ? (
-                      <p className="mt-2">需先处理来源访问限制，后端不会自动重复请求。</p>
+                      <p className="mt-2 text-xs">访问受限，需管理员处理后再采集。</p>
                     ) : (
                       hasDate(source.nextRetryAt) && (
-                        <p className="mt-2">下一次允许重试：{timestamp(source.nextRetryAt)}</p>
+                        <p className="mt-2 text-xs">
+                          下一次允许重试：{timestamp(source.nextRetryAt)}
+                        </p>
                       )
                     )}
                   </div>
                 )}
+                {!!source.quarantined && onOpenQuarantine && (
+                  <Button
+                    className="mt-3"
+                    variant="outline"
+                    size="sm"
+                    aria-label={'查看 ' + source.source + ' 隔离记录'}
+                    onClick={() => onOpenQuarantine(source.source)}
+                  >
+                    查看隔离记录
+                  </Button>
+                )}
+                <details className="mt-4 border-t pt-3 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">查看处理详情</summary>
+                  <dl className="mt-3 space-y-2">
+                    {[
+                      ['全来源采集窗口', timestamp(source.acquiredThrough)],
+                      [
+                        schedule.reviewMode === 'mock' ? '模型占位窗口' : '模型处理至',
+                        timestamp(source.reviewedThrough),
+                      ],
+                      ['处理窗口（含隔离）', timestamp(source.handledThrough)],
+                      ['目录写入至', timestamp(source.publishedThrough)],
+                      ['连续失败次数', number(source.consecutiveFailures)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex flex-wrap justify-between gap-2">
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {source.coreBackfillPending && (
+                    <p className="mt-2 text-muted-foreground">历史文献回溯待完成</p>
+                  )}
+                </details>
               </section>
             )
           })}
         </div>
       )}
-      <p className="text-sm leading-6 text-muted-foreground">
-        {schedule.reviewMode === 'mock'
-          ? '模型总结待接入，不影响真实论文检索。模型处理窗口仅代表模拟流程完成，不代表科学审读。'
-          : '模型处理、目录写入与科学审读分别记录。'}{' '}
-        目录写入不代表正式发表。
-      </p>
     </div>
   )
 }

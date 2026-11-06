@@ -179,8 +179,8 @@ describe('Glean query workspace', () => {
     ).getAllByRole('button')) {
       expect(button).toHaveAttribute('type', 'button')
     }
-    await user.click(screen.getByRole('button', { name: '来源健康' }))
-    await screen.findByRole('heading', { name: '来源健康', level: 1 })
+    await user.click(screen.getByRole('button', { name: '采集状态' }))
+    await screen.findByRole('heading', { name: '采集状态', level: 1 })
     await user.click(screen.getByRole('button', { name: '论文工作台' }))
     expect(document.querySelector('input[type="password"]')).toBeNull()
     expect(paths.filter((p) => p === '/api/v1/auth/login')).toHaveLength(1)
@@ -198,8 +198,8 @@ describe('Glean query workspace', () => {
       expect(screen.queryByText(/从未扫描/)).not.toBeInTheDocument()
       expect(!!screen.queryByText(/此主题已暂停后续检索/)).toBe(!enabled)
       await user.click(screen.getByRole('button', { name: '查看采集进度' }))
-      await screen.findByRole('heading', { name: '来源健康', level: 1 })
-      await screen.findByText('定时计划未启用')
+      await screen.findByRole('heading', { name: '采集状态', level: 1 })
+      await screen.findByText('自动采集已关闭')
     },
   )
   it.each(['unknown', 'loading', 'error'])(
@@ -601,11 +601,11 @@ describe('Glean query workspace', () => {
   it('keeps real monitoring read-only and separates model mock from disabled scheduling', async () => {
     const user = mount()
     await signIn(user)
-    await user.click(screen.getByRole('button', { name: '来源健康' }))
+    await user.click(screen.getByRole('button', { name: '采集状态' }))
     expect(await screen.findByText('真实来源采集')).toBeInTheDocument()
-    expect(screen.getByText('定时计划未启用')).toBeInTheDocument()
+    expect(screen.getByText('自动采集已关闭')).toBeInTheDocument()
     expect(screen.queryByText('Mock 开发模式')).not.toBeInTheDocument()
-    expect(screen.getByText('尚未建立来源检查点')).toBeInTheDocument()
+    expect(screen.getByText('尚无采集记录')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '扫描记录' }))
     expect(await screen.findByText('还没有扫描记录')).toBeInTheDocument()
     expect(paths.every((path) => !path.includes('/run-now'))).toBe(true)

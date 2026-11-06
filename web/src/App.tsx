@@ -91,8 +91,8 @@ const viewMeta: Record<View, { title: string; description: string }> = {
     description: '从海量研究中，找到值得认真阅读的下一篇。',
   },
   sources: {
-    title: '来源健康',
-    description: '每个来源各自前进，数据从哪里来始终清楚。',
+    title: '采集状态',
+    description: '查看自动采集与各文献来源的进度。',
   },
   runs: {
     title: '扫描记录',
@@ -609,7 +609,7 @@ function WorkspaceReady({
       <div className="sidebar-section-label">监测与来源</div>
       <div className="space-y-1">
         <NavButton icon={Radio} active={view === 'sources'} onClick={() => navigate('sources')}>
-          来源健康
+          采集状态
         </NavButton>
         <NavButton
           icon={ShieldAlert}
@@ -1170,6 +1170,7 @@ function WorkspaceReady({
           ) : view === 'sources' ? (
             <SourcesView
               topic={filters.topic}
+              onOpenRuns={() => navigate('runs')}
               onOpenQuarantine={(source = '') => {
                 setQuarantineSource(source)
                 navigate('quarantine')

@@ -428,9 +428,9 @@ test('real historical catalog: login, filters, detail, durable personal state an
 
   // A configured real provider is not a completed harvest. No scheduler or live
   // canary runs in this isolated historical-only database, so progress stays unknown.
-  await navigate(page, '来源健康')
+  await navigate(page, '采集状态')
   await expect(page.getByText('真实来源采集', { exact: true })).toBeVisible()
-  await expect(page.getByText('定时计划未启用', { exact: true })).toBeVisible()
+  await expect(page.getByText('自动采集已关闭', { exact: true })).toBeVisible()
   const sourcesResponse = apiResponse(page, '/api/v1/monitor/sources')
   await page.getByRole('button', { name: '刷新状态', exact: true }).click()
   const sources = await data<{
@@ -462,6 +462,10 @@ test('real historical catalog: login, filters, detail, durable personal state an
     ),
   ).toBe(true)
   await expect(page.getByText('尚无完成记录', { exact: true })).toHaveCount(6)
+  const sourceRefresh = apiResponse(page, '/api/v1/monitor/sources')
+  await page.getByRole('button', { name: '刷新状态', exact: true }).click()
+  expect((await sourceRefresh).status()).toBe(200)
+  await expect(page.getByRole('status').filter({ hasText: '已刷新' })).toBeVisible()
   await noHorizontalOverflow(page)
   await screenshot(page, info, 'source-health')
 
@@ -492,7 +496,7 @@ test('real historical catalog: login, filters, detail, durable personal state an
   await expect(page.getByRole('combobox', { name: '隔离记录来源', exact: true })).toHaveText(
     'arxiv',
   )
-  await navigate(page, '来源健康')
+  await navigate(page, '采集状态')
   await expect(page.getByText('尚无完成记录', { exact: true })).toHaveCount(6)
   await navigate(page, '隔离记录')
   await expect(page.getByRole('combobox', { name: '隔离记录来源', exact: true })).toHaveText(

@@ -31,10 +31,10 @@ describe('deferred views', () => {
     const View = deferredView(() => gate.promise)
     const page = render(<View />)
     page.rerender(<h2>论文工作台</h2>)
-    await act(async () => gate.resolve({ default: () => <h2>来源健康</h2> }))
+    await act(async () => gate.resolve({ default: () => <h2>采集状态</h2> }))
     expect(screen.getByRole('heading')).toHaveTextContent('论文工作台')
     page.rerender(<View />)
-    expect(await screen.findByRole('heading', { name: '来源健康' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '采集状态' })).toBeInTheDocument()
   })
 
   it('retries a rejected import without remounting the surrounding session', async () => {

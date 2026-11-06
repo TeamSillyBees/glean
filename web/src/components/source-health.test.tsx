@@ -67,10 +67,10 @@ function mount() {
 it('distinguishes successful collection time from window age and names failures and quarantine', async () => {
   mount()
   const summary = await screen.findByRole('region', { name: '采集健康概览' })
-  expect(summary).toHaveTextContent('最近一次来源完整采集距今：2 小时')
-  expect(summary).toHaveTextContent('失败来源：europepmc')
-  expect(summary).toHaveTextContent('隔离记录：3 条')
-  expect(summary).toHaveTextContent('不代表全部来源或目录写入已更新')
+  expect(summary).toHaveTextContent('最近成功采集2 小时前')
+  expect(summary).toHaveTextContent('失败来源1 个Europe PMC')
+  expect(summary).toHaveTextContent('待处理记录3 条')
+  expect(summary).toHaveTextContent('所有启用来源中的最近一次')
   expect(screen.getByText('HTTP 503 · source unavailable')).toBeVisible()
   expect(screen.getByText(/下一次允许重试/)).toBeVisible()
 })
@@ -87,9 +87,9 @@ it('does not infer legacy success from watermarks, disabled sources, or an inval
   )
   mount()
   const summary = await screen.findByRole('region', { name: '采集健康概览' })
-  expect(summary).toHaveTextContent('未知（尚无成功时间记录）')
-  expect(summary).toHaveTextContent('失败来源：无')
-  expect(summary).toHaveTextContent('隔离记录：0 条')
+  expect(summary).toHaveTextContent('尚无成功记录')
+  expect(summary).toHaveTextContent('失败来源0 个')
+  expect(summary).toHaveTextContent('待处理记录0 条')
 })
 it('keeps cached diagnostics after refresh failure then recovers without launching collection', async () => {
   mount()
@@ -98,16 +98,38 @@ it('keeps cached diagnostics after refresh failure then recovers without launchi
   fireEvent.click(screen.getByRole('button', { name: '刷新状态' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('可能不是最新进度')
   expect(
-    within(screen.getByRole('region', { name: '采集健康概览' })).getByText('europepmc'),
+    within(screen.getByRole('region', { name: '采集健康概览' })).getByText('Europe PMC'),
   ).toBeVisible()
   fetcher.mockResolvedValue(
     response({ ...state, counts: { quarantinedCandidates: 0 }, items: [state.items[0]] }),
   )
   fireEvent.click(screen.getByRole('button', { name: '刷新状态' }))
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
-  expect(screen.getByRole('region', { name: '采集健康概览' })).toHaveTextContent('失败来源：无')
+  expect(screen.getByRole('status')).toHaveTextContent('已刷新 · 采集状态已更新')
+  expect(screen.getByRole('region', { name: '采集健康概览' })).toHaveTextContent('失败来源0 个')
   for (const [path, init] of fetcher.mock.calls) {
     expect(path).toBe('/api/v1/monitor/sources')
     expect(init.method).toBeUndefined()
   }
+})
+
+it('shows refresh progress and confirms an unchanged response without starting a scan', async () => {
+  mount()
+  await screen.findByRole('region', { name: '采集健康概览' })
+  let finish!: (value: Response) => void
+  fetcher.mockReturnValueOnce(
+    new Promise<Response>((resolve) => {
+      finish = resolve
+    }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: '刷新状态' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '刷新状态' })).toBeDisabled())
+  expect(screen.getByRole('status')).toHaveTextContent('正在刷新采集状态')
+  finish(response())
+  await waitFor(() =>
+    expect(screen.getByRole('status')).toHaveTextContent('已刷新 · 采集状态没有变化'),
+  )
+  expect(screen.getByRole('button', { name: '刷新状态' })).toBeEnabled()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  expect(fetcher.mock.calls[1][1].method).toBeUndefined()
 })
