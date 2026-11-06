@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // GleanTopicCreate is the builder for creating a GleanTopic entity.
@@ -78,6 +79,12 @@ func (_c *GleanTopicCreate) SetNillableSearchEnabled(v *bool) *GleanTopicCreate 
 // SetTermGroups sets the "term_groups" field.
 func (_c *GleanTopicCreate) SetTermGroups(v [][]string) *GleanTopicCreate {
 	_c.mutation.SetTermGroups(v)
+	return _c
+}
+
+// SetSearchRoutes sets the "search_routes" field.
+func (_c *GleanTopicCreate) SetSearchRoutes(v []retrieval.Route) *GleanTopicCreate {
+	_c.mutation.SetSearchRoutes(v)
 	return _c
 }
 
@@ -216,6 +223,10 @@ func (_c *GleanTopicCreate) defaults() {
 		v := gleantopic.DefaultTermGroups
 		_c.mutation.SetTermGroups(v)
 	}
+	if _, ok := _c.mutation.SearchRoutes(); !ok {
+		v := gleantopic.DefaultSearchRoutes
+		_c.mutation.SetSearchRoutes(v)
+	}
 	if _, ok := _c.mutation.Version(); !ok {
 		v := gleantopic.DefaultVersion
 		_c.mutation.SetVersion(v)
@@ -263,6 +274,9 @@ func (_c *GleanTopicCreate) check() error {
 	}
 	if _, ok := _c.mutation.TermGroups(); !ok {
 		return &ValidationError{Name: "term_groups", err: errors.New(`ent: missing required field "GleanTopic.term_groups"`)}
+	}
+	if _, ok := _c.mutation.SearchRoutes(); !ok {
+		return &ValidationError{Name: "search_routes", err: errors.New(`ent: missing required field "GleanTopic.search_routes"`)}
 	}
 	if _, ok := _c.mutation.Version(); !ok {
 		return &ValidationError{Name: "version", err: errors.New(`ent: missing required field "GleanTopic.version"`)}
@@ -333,6 +347,10 @@ func (_c *GleanTopicCreate) createSpec() (*GleanTopic, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TermGroups(); ok {
 		_spec.SetField(gleantopic.FieldTermGroups, field.TypeJSON, value)
 		_node.TermGroups = value
+	}
+	if value, ok := _c.mutation.SearchRoutes(); ok {
+		_spec.SetField(gleantopic.FieldSearchRoutes, field.TypeJSON, value)
+		_node.SearchRoutes = value
 	}
 	if value, ok := _c.mutation.Version(); ok {
 		_spec.SetField(gleantopic.FieldVersion, field.TypeInt, value)

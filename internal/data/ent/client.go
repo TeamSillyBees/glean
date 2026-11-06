@@ -26,6 +26,7 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
@@ -63,6 +64,8 @@ type Client struct {
 	GleanPaperState *GleanPaperStateClient
 	// GleanPreference is the client for interacting with the GleanPreference builders.
 	GleanPreference *GleanPreferenceClient
+	// GleanSearchHit is the client for interacting with the GleanSearchHit builders.
+	GleanSearchHit *GleanSearchHitClient
 	// GleanTopic is the client for interacting with the GleanTopic builders.
 	GleanTopic *GleanTopicClient
 	// GleanVenue is the client for interacting with the GleanVenue builders.
@@ -104,6 +107,7 @@ func (c *Client) init() {
 	c.GleanPaperReview = NewGleanPaperReviewClient(c.config)
 	c.GleanPaperState = NewGleanPaperStateClient(c.config)
 	c.GleanPreference = NewGleanPreferenceClient(c.config)
+	c.GleanSearchHit = NewGleanSearchHitClient(c.config)
 	c.GleanTopic = NewGleanTopicClient(c.config)
 	c.GleanVenue = NewGleanVenueClient(c.config)
 	c.SysConfig = NewSysConfigClient(c.config)
@@ -216,6 +220,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		GleanPaperReview:      NewGleanPaperReviewClient(cfg),
 		GleanPaperState:       NewGleanPaperStateClient(cfg),
 		GleanPreference:       NewGleanPreferenceClient(cfg),
+		GleanSearchHit:        NewGleanSearchHitClient(cfg),
 		GleanTopic:            NewGleanTopicClient(cfg),
 		GleanVenue:            NewGleanVenueClient(cfg),
 		SysConfig:             NewSysConfigClient(cfg),
@@ -255,6 +260,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		GleanPaperReview:      NewGleanPaperReviewClient(cfg),
 		GleanPaperState:       NewGleanPaperStateClient(cfg),
 		GleanPreference:       NewGleanPreferenceClient(cfg),
+		GleanSearchHit:        NewGleanSearchHitClient(cfg),
 		GleanTopic:            NewGleanTopicClient(cfg),
 		GleanVenue:            NewGleanVenueClient(cfg),
 		SysConfig:             NewSysConfigClient(cfg),
@@ -297,7 +303,7 @@ func (c *Client) Use(hooks ...Hook) {
 		c.GleanCatalogChange, c.GleanMembership, c.GleanMonitorState,
 		c.GleanObservation, c.GleanObservationMatch, c.GleanPaper,
 		c.GleanPaperCorrection, c.GleanPaperReview, c.GleanPaperState,
-		c.GleanPreference, c.GleanTopic, c.GleanVenue, c.SysConfig,
+		c.GleanPreference, c.GleanSearchHit, c.GleanTopic, c.GleanVenue, c.SysConfig,
 		c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu,
 		c.SysUser, c.SysUserRole,
 	} {
@@ -312,7 +318,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.GleanCatalogChange, c.GleanMembership, c.GleanMonitorState,
 		c.GleanObservation, c.GleanObservationMatch, c.GleanPaper,
 		c.GleanPaperCorrection, c.GleanPaperReview, c.GleanPaperState,
-		c.GleanPreference, c.GleanTopic, c.GleanVenue, c.SysConfig,
+		c.GleanPreference, c.GleanSearchHit, c.GleanTopic, c.GleanVenue, c.SysConfig,
 		c.SysDictCollection, c.SysDictItem, c.SysMenu, c.SysRole, c.SysRoleMenu,
 		c.SysUser, c.SysUserRole,
 	} {
@@ -343,6 +349,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.GleanPaperState.mutate(ctx, m)
 	case *GleanPreferenceMutation:
 		return c.GleanPreference.mutate(ctx, m)
+	case *GleanSearchHitMutation:
+		return c.GleanSearchHit.mutate(ctx, m)
 	case *GleanTopicMutation:
 		return c.GleanTopic.mutate(ctx, m)
 	case *GleanVenueMutation:
@@ -1695,6 +1703,139 @@ func (c *GleanPreferenceClient) mutate(ctx context.Context, m *GleanPreferenceMu
 		return (&GleanPreferenceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GleanPreference mutation op: %q", m.Op())
+	}
+}
+
+// GleanSearchHitClient is a client for the GleanSearchHit schema.
+type GleanSearchHitClient struct {
+	config
+}
+
+// NewGleanSearchHitClient returns a client for the GleanSearchHit from the given config.
+func NewGleanSearchHitClient(c config) *GleanSearchHitClient {
+	return &GleanSearchHitClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `gleansearchhit.Hooks(f(g(h())))`.
+func (c *GleanSearchHitClient) Use(hooks ...Hook) {
+	c.hooks.GleanSearchHit = append(c.hooks.GleanSearchHit, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `gleansearchhit.Intercept(f(g(h())))`.
+func (c *GleanSearchHitClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GleanSearchHit = append(c.inters.GleanSearchHit, interceptors...)
+}
+
+// Create returns a builder for creating a GleanSearchHit entity.
+func (c *GleanSearchHitClient) Create() *GleanSearchHitCreate {
+	mutation := newGleanSearchHitMutation(c.config, OpCreate)
+	return &GleanSearchHitCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GleanSearchHit entities.
+func (c *GleanSearchHitClient) CreateBulk(builders ...*GleanSearchHitCreate) *GleanSearchHitCreateBulk {
+	return &GleanSearchHitCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GleanSearchHitClient) MapCreateBulk(slice any, setFunc func(*GleanSearchHitCreate, int)) *GleanSearchHitCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GleanSearchHitCreateBulk{err: fmt.Errorf("calling to GleanSearchHitClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GleanSearchHitCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GleanSearchHitCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GleanSearchHit.
+func (c *GleanSearchHitClient) Update() *GleanSearchHitUpdate {
+	mutation := newGleanSearchHitMutation(c.config, OpUpdate)
+	return &GleanSearchHitUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GleanSearchHitClient) UpdateOne(_m *GleanSearchHit) *GleanSearchHitUpdateOne {
+	mutation := newGleanSearchHitMutation(c.config, OpUpdateOne, withGleanSearchHit(_m))
+	return &GleanSearchHitUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GleanSearchHitClient) UpdateOneID(id idgen.ID) *GleanSearchHitUpdateOne {
+	mutation := newGleanSearchHitMutation(c.config, OpUpdateOne, withGleanSearchHitID(id))
+	return &GleanSearchHitUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GleanSearchHit.
+func (c *GleanSearchHitClient) Delete() *GleanSearchHitDelete {
+	mutation := newGleanSearchHitMutation(c.config, OpDelete)
+	return &GleanSearchHitDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GleanSearchHitClient) DeleteOne(_m *GleanSearchHit) *GleanSearchHitDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GleanSearchHitClient) DeleteOneID(id idgen.ID) *GleanSearchHitDeleteOne {
+	builder := c.Delete().Where(gleansearchhit.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GleanSearchHitDeleteOne{builder}
+}
+
+// Query returns a query builder for GleanSearchHit.
+func (c *GleanSearchHitClient) Query() *GleanSearchHitQuery {
+	return &GleanSearchHitQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGleanSearchHit},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GleanSearchHit entity by its id.
+func (c *GleanSearchHitClient) Get(ctx context.Context, id idgen.ID) (*GleanSearchHit, error) {
+	return c.Query().Where(gleansearchhit.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GleanSearchHitClient) GetX(ctx context.Context, id idgen.ID) *GleanSearchHit {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *GleanSearchHitClient) Hooks() []Hook {
+	return c.hooks.GleanSearchHit
+}
+
+// Interceptors returns the client interceptors.
+func (c *GleanSearchHitClient) Interceptors() []Interceptor {
+	return c.inters.GleanSearchHit
+}
+
+func (c *GleanSearchHitClient) mutate(ctx context.Context, m *GleanSearchHitMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GleanSearchHitCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GleanSearchHitUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GleanSearchHitUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GleanSearchHitDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GleanSearchHit mutation op: %q", m.Op())
 	}
 }
 
@@ -3225,15 +3366,15 @@ type (
 	hooks struct {
 		GleanCatalogChange, GleanMembership, GleanMonitorState, GleanObservation,
 		GleanObservationMatch, GleanPaper, GleanPaperCorrection, GleanPaperReview,
-		GleanPaperState, GleanPreference, GleanTopic, GleanVenue, SysConfig,
-		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
-		SysUserRole []ent.Hook
+		GleanPaperState, GleanPreference, GleanSearchHit, GleanTopic, GleanVenue,
+		SysConfig, SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu,
+		SysUser, SysUserRole []ent.Hook
 	}
 	inters struct {
 		GleanCatalogChange, GleanMembership, GleanMonitorState, GleanObservation,
 		GleanObservationMatch, GleanPaper, GleanPaperCorrection, GleanPaperReview,
-		GleanPaperState, GleanPreference, GleanTopic, GleanVenue, SysConfig,
-		SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu, SysUser,
-		SysUserRole []ent.Interceptor
+		GleanPaperState, GleanPreference, GleanSearchHit, GleanTopic, GleanVenue,
+		SysConfig, SysDictCollection, SysDictItem, SysMenu, SysRole, SysRoleMenu,
+		SysUser, SysUserRole []ent.Interceptor
 	}
 )

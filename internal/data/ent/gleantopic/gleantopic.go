@@ -7,6 +7,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 const (
@@ -26,6 +27,8 @@ const (
 	FieldSearchEnabled = "search_enabled"
 	// FieldTermGroups holds the string denoting the term_groups field in the database.
 	FieldTermGroups = "term_groups"
+	// FieldSearchRoutes holds the string denoting the search_routes field in the database.
+	FieldSearchRoutes = "search_routes"
 	// FieldVersion holds the string denoting the version field in the database.
 	FieldVersion = "version"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -49,6 +52,7 @@ var Columns = []string{
 	FieldRule,
 	FieldSearchEnabled,
 	FieldTermGroups,
+	FieldSearchRoutes,
 	FieldVersion,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -79,6 +83,8 @@ var (
 	DefaultSearchEnabled bool
 	// DefaultTermGroups holds the default value on creation for the "term_groups" field.
 	DefaultTermGroups [][]string
+	// DefaultSearchRoutes holds the default value on creation for the "search_routes" field.
+	DefaultSearchRoutes []retrieval.Route
 	// DefaultVersion holds the default value on creation for the "version" field.
 	DefaultVersion int
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.

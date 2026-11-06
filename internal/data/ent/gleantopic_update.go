@@ -15,6 +15,7 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/predicate"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // GleanTopicUpdate is the builder for updating GleanTopic entities.
@@ -109,6 +110,18 @@ func (_u *GleanTopicUpdate) SetTermGroups(v [][]string) *GleanTopicUpdate {
 // AppendTermGroups appends value to the "term_groups" field.
 func (_u *GleanTopicUpdate) AppendTermGroups(v [][]string) *GleanTopicUpdate {
 	_u.mutation.AppendTermGroups(v)
+	return _u
+}
+
+// SetSearchRoutes sets the "search_routes" field.
+func (_u *GleanTopicUpdate) SetSearchRoutes(v []retrieval.Route) *GleanTopicUpdate {
+	_u.mutation.SetSearchRoutes(v)
+	return _u
+}
+
+// AppendSearchRoutes appends value to the "search_routes" field.
+func (_u *GleanTopicUpdate) AppendSearchRoutes(v []retrieval.Route) *GleanTopicUpdate {
+	_u.mutation.AppendSearchRoutes(v)
 	return _u
 }
 
@@ -284,6 +297,14 @@ func (_u *GleanTopicUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			sqljson.Append(u, gleantopic.FieldTermGroups, value)
 		})
 	}
+	if value, ok := _u.mutation.SearchRoutes(); ok {
+		_spec.SetField(gleantopic.FieldSearchRoutes, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSearchRoutes(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gleantopic.FieldSearchRoutes, value)
+		})
+	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(gleantopic.FieldVersion, field.TypeInt, value)
 	}
@@ -410,6 +431,18 @@ func (_u *GleanTopicUpdateOne) SetTermGroups(v [][]string) *GleanTopicUpdateOne 
 // AppendTermGroups appends value to the "term_groups" field.
 func (_u *GleanTopicUpdateOne) AppendTermGroups(v [][]string) *GleanTopicUpdateOne {
 	_u.mutation.AppendTermGroups(v)
+	return _u
+}
+
+// SetSearchRoutes sets the "search_routes" field.
+func (_u *GleanTopicUpdateOne) SetSearchRoutes(v []retrieval.Route) *GleanTopicUpdateOne {
+	_u.mutation.SetSearchRoutes(v)
+	return _u
+}
+
+// AppendSearchRoutes appends value to the "search_routes" field.
+func (_u *GleanTopicUpdateOne) AppendSearchRoutes(v []retrieval.Route) *GleanTopicUpdateOne {
+	_u.mutation.AppendSearchRoutes(v)
 	return _u
 }
 
@@ -613,6 +646,14 @@ func (_u *GleanTopicUpdateOne) sqlSave(ctx context.Context) (_node *GleanTopic, 
 	if value, ok := _u.mutation.AppendedTermGroups(); ok {
 		_spec.AddModifier(func(u *sql.UpdateBuilder) {
 			sqljson.Append(u, gleantopic.FieldTermGroups, value)
+		})
+	}
+	if value, ok := _u.mutation.SearchRoutes(); ok {
+		_spec.SetField(gleantopic.FieldSearchRoutes, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSearchRoutes(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, gleantopic.FieldSearchRoutes, value)
 		})
 	}
 	if value, ok := _u.mutation.Version(); ok {

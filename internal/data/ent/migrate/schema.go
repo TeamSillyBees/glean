@@ -315,6 +315,41 @@ var (
 		Columns:    GleanPreferenceColumns,
 		PrimaryKey: []*schema.Column{GleanPreferenceColumns[0]},
 	}
+	// GleanSearchHitColumns holds the columns for the "glean_search_hit" table.
+	GleanSearchHitColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "observation_id", Type: field.TypeInt64},
+		{Name: "run_id", Type: field.TypeInt64},
+		{Name: "query_id", Type: field.TypeString},
+		{Name: "query_version", Type: field.TypeString},
+		{Name: "plan_version", Type: field.TypeString},
+		{Name: "source", Type: field.TypeString},
+		{Name: "query_text", Type: field.TypeString, Size: 2147483647},
+		{Name: "mode", Type: field.TypeString},
+		{Name: "discovered_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// GleanSearchHitTable holds the schema information for the "glean_search_hit" table.
+	GleanSearchHitTable = &schema.Table{
+		Name:       "glean_search_hit",
+		Columns:    GleanSearchHitColumns,
+		PrimaryKey: []*schema.Column{GleanSearchHitColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "gleansearchhit_observation_id_run_id_query_id_query_version",
+				Unique:  true,
+				Columns: []*schema.Column{GleanSearchHitColumns[1], GleanSearchHitColumns[2], GleanSearchHitColumns[3], GleanSearchHitColumns[4]},
+			},
+			{
+				Name:    "gleansearchhit_run_id",
+				Unique:  false,
+				Columns: []*schema.Column{GleanSearchHitColumns[2]},
+			},
+		},
+	}
 	// GleanTopicColumns holds the columns for the "glean_topic" table.
 	GleanTopicColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -324,6 +359,7 @@ var (
 		{Name: "rule", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "search_enabled", Type: field.TypeBool, Default: true},
 		{Name: "term_groups", Type: field.TypeJSON},
+		{Name: "search_routes", Type: field.TypeJSON},
 		{Name: "version", Type: field.TypeInt, Default: 1},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -687,6 +723,7 @@ var (
 		GleanPaperReviewTable,
 		GleanPaperStateTable,
 		GleanPreferenceTable,
+		GleanSearchHitTable,
 		GleanTopicTable,
 		GleanVenueTable,
 		SysConfigTable,
@@ -730,6 +767,9 @@ func init() {
 	}
 	GleanPreferenceTable.Annotation = &entsql.Annotation{
 		Table: "glean_preference",
+	}
+	GleanSearchHitTable.Annotation = &entsql.Annotation{
+		Table: "glean_search_hit",
 	}
 	GleanTopicTable.Annotation = &entsql.Annotation{
 		Table: "glean_topic",

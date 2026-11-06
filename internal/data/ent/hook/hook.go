@@ -129,6 +129,18 @@ func (f GleanPreferenceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanPreferenceMutation", m)
 }
 
+// The GleanSearchHitFunc type is an adapter to allow the use of ordinary
+// function as GleanSearchHit mutator.
+type GleanSearchHitFunc func(context.Context, *ent.GleanSearchHitMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GleanSearchHitFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GleanSearchHitMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GleanSearchHitMutation", m)
+}
+
 // The GleanTopicFunc type is an adapter to allow the use of ordinary
 // function as GleanTopic mutator.
 type GleanTopicFunc func(context.Context, *ent.GleanTopicMutation) (ent.Value, error)

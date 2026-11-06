@@ -22,6 +22,7 @@ import (
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperreview"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpaperstate"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanpreference"
+	"github.com/teamsillybees/glean/internal/data/ent/gleansearchhit"
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/data/ent/gleanvenue"
 	"github.com/teamsillybees/glean/internal/data/ent/sysconfig"
@@ -102,6 +103,7 @@ func checkColumn(t, c string) error {
 			gleanpaperreview.Table:      gleanpaperreview.ValidColumn,
 			gleanpaperstate.Table:       gleanpaperstate.ValidColumn,
 			gleanpreference.Table:       gleanpreference.ValidColumn,
+			gleansearchhit.Table:        gleansearchhit.ValidColumn,
 			gleantopic.Table:            gleantopic.ValidColumn,
 			gleanvenue.Table:            gleanvenue.ValidColumn,
 			sysconfig.Table:             sysconfig.ValidColumn,

@@ -32,6 +32,8 @@ type Tx struct {
 	GleanPaperState *GleanPaperStateClient
 	// GleanPreference is the client for interacting with the GleanPreference builders.
 	GleanPreference *GleanPreferenceClient
+	// GleanSearchHit is the client for interacting with the GleanSearchHit builders.
+	GleanSearchHit *GleanSearchHitClient
 	// GleanTopic is the client for interacting with the GleanTopic builders.
 	GleanTopic *GleanTopicClient
 	// GleanVenue is the client for interacting with the GleanVenue builders.
@@ -193,6 +195,7 @@ func (tx *Tx) init() {
 	tx.GleanPaperReview = NewGleanPaperReviewClient(tx.config)
 	tx.GleanPaperState = NewGleanPaperStateClient(tx.config)
 	tx.GleanPreference = NewGleanPreferenceClient(tx.config)
+	tx.GleanSearchHit = NewGleanSearchHitClient(tx.config)
 	tx.GleanTopic = NewGleanTopicClient(tx.config)
 	tx.GleanVenue = NewGleanVenueClient(tx.config)
 	tx.SysConfig = NewSysConfigClient(tx.config)

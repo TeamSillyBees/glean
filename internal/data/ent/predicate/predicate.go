@@ -36,6 +36,9 @@ type GleanPaperState func(*sql.Selector)
 // GleanPreference is the predicate function for gleanpreference builders.
 type GleanPreference func(*sql.Selector)
 
+// GleanSearchHit is the predicate function for gleansearchhit builders.
+type GleanSearchHit func(*sql.Selector)
+
 // GleanTopic is the predicate function for gleantopic builders.
 type GleanTopic func(*sql.Selector)
 

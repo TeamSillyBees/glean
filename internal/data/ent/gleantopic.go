@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/teamsillybees/glean/internal/data/ent/gleantopic"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
+	"github.com/teamsillybees/glean/internal/retrieval"
 )
 
 // GleanTopic is the model entity for the GleanTopic schema.
@@ -32,6 +33,8 @@ type GleanTopic struct {
 	SearchEnabled bool `json:"search_enabled,omitempty"`
 	// TermGroups holds the value of the "term_groups" field.
 	TermGroups [][]string `json:"term_groups,omitempty"`
+	// SearchRoutes holds the value of the "search_routes" field.
+	SearchRoutes []retrieval.Route `json:"search_routes,omitempty"`
 	// Version holds the value of the "version" field.
 	Version int `json:"version,omitempty"`
 	// 创建时间。
@@ -50,7 +53,7 @@ func (*GleanTopic) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case gleantopic.FieldTermGroups:
+		case gleantopic.FieldTermGroups, gleantopic.FieldSearchRoutes:
 			values[i] = new([]byte)
 		case gleantopic.FieldSearchEnabled:
 			values[i] = new(sql.NullBool)
@@ -117,6 +120,14 @@ func (_m *GleanTopic) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.TermGroups); err != nil {
 					return fmt.Errorf("unmarshal field term_groups: %w", err)
+				}
+			}
+		case gleantopic.FieldSearchRoutes:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field search_routes", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SearchRoutes); err != nil {
+					return fmt.Errorf("unmarshal field search_routes: %w", err)
 				}
 			}
 		case gleantopic.FieldVersion:
@@ -204,6 +215,9 @@ func (_m *GleanTopic) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("term_groups=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TermGroups))
+	builder.WriteString(", ")
+	builder.WriteString("search_routes=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SearchRoutes))
 	builder.WriteString(", ")
 	builder.WriteString("version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Version))
