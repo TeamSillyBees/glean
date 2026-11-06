@@ -1,9 +1,11 @@
 package monitor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +26,11 @@ func canaryDiagnostic(source string, err error) string {
 		}
 	}
 	var upstream *SourceError
+	var network net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &network) && network.Timeout()) {
+		diagnostic.Kind = "timeout"
+		diagnostic.Retryable = true
+	}
 	if errors.As(err, &upstream) && upstream != nil {
 		switch upstream.Kind {
 		case "http", "transport", "invalid_response", "provider_backoff", "provider_forbidden", "disabled", "missing_registry":
