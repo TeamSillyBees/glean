@@ -31,7 +31,11 @@ if (!initial.size) throw new Error('No initial JavaScript found')
 function sizes(files) {
   const assets = files.map((file) => {
     const bytes = readFileSync(file)
-    return { file: relative(root, file), bytes: bytes.length, gzipBytes: gzipSync(bytes).length }
+    return {
+      file: relative(root, file).replaceAll('\\', '/'),
+      bytes: bytes.length,
+      gzipBytes: gzipSync(bytes).length,
+    }
   })
   return {
     assets,

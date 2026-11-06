@@ -1,4 +1,5 @@
 import { CalendarDays, FileText, History, Link2, Quote } from 'lucide-react'
+import { DiscoveryPaths } from './discovery-paths'
 import type { AbstractEvidence, Paper, SourceObservation } from '../lib/types'
 import { date, number, reviewLabels, topicLabels, manualReviewLabels } from '../lib/utils'
 import { Badge, ExternalLink } from './common'
@@ -405,6 +406,7 @@ function Observation({ item }: { item: SourceObservation }) {
             <ExternalLink href={item.sourceUrl}>官方来源记录</ExternalLink>
           )}
         </div>
+        <DiscoveryPaths items={item.discoveries} hasMore={item.discoveriesHasMore} />
         {item.authors?.length ? (
           <p className="mt-3 text-xs leading-6 text-muted-foreground">{item.authors.join(' · ')}</p>
         ) : null}

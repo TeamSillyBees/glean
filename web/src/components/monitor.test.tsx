@@ -62,6 +62,38 @@ function mount(client = new QueryClient({ defaultOptions: { queries: { retry: fa
 }
 
 describe('scan progress visibility', () => {
+  it('shows unexecuted planned queries on a completed-with-gaps run', async () => {
+    const item = {
+      ...run('completed_with_gaps'),
+      unavailableQueries: [
+        {
+          queryId: 'medical-route',
+          queryVersion: 'v2',
+          topic: 'biomed-ai',
+          source: 'pubmed',
+          mode: 'boolean',
+          query: 'cancer',
+          status: 'unavailable',
+          window: { start: '2020-01-01T00:00:00Z', end: '2026-11-01T00:00:00Z' },
+          targetEnd: '2026-11-01T00:00:00Z',
+          requests: 0,
+          pages: 0,
+          observed: 0,
+          quarantined: 0,
+          newCandidates: 0,
+          warnings: ['Source not enabled'],
+        },
+      ],
+    }
+    fetcher.mockResolvedValue(response([item]))
+    mount()
+    expect(await screen.findByText('已结束 · 存在未执行路线')).toBeVisible()
+    expect(screen.getByText(/不代表整个检索计划已覆盖/)).toBeVisible()
+    fireEvent.click(screen.getByText('查询覆盖：0 / 1 个窗口完成'))
+    expect(screen.getByText('未执行 · 来源未启用')).toBeVisible()
+    expect(screen.getByText('来源限制：Source not enabled')).toBeVisible()
+  })
+
   it('renders terminal failure, retry wait, cancellation and quarantine distinctly in Chinese', async () => {
     fetcher.mockResolvedValue(
       response([

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
+import { exampleSearchRoutes, parseSearchRoutes } from '../lib/search-routes'
 import type { Topic, TopicInput } from '../lib/types'
 import { Button } from './ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
@@ -99,6 +100,14 @@ function TopicEditor({
   const [terms, setTerms] = useState(
     topic?.termGroups?.map((group) => group.join(' | ')).join('\n') || '',
   )
+  const [routes, setRoutes] = useState(JSON.stringify(topic?.searchRoutes || [], null, 2))
+  let routesError = ''
+  let parsedRoutes: ReturnType<typeof parseSearchRoutes> = []
+  try {
+    parsedRoutes = parseSearchRoutes(routes)
+  } catch (error) {
+    routesError = (error as Error).message
+  }
   const pending = useIsMutating({ mutationKey: ['topic-write'] }) > 0
   const mutation = useMutation({
     mutationKey: ['topic-write'],
@@ -121,7 +130,7 @@ function TopicEditor({
   })
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (client.isMutating({ mutationKey: ['topic-write'] })) return
+    if (client.isMutating({ mutationKey: ['topic-write'] }) || routesError) return
     mutation.mutate({
       original: client.getQueryCache().find({ queryKey: ['topics'], exact: true }),
       input: {
@@ -138,6 +147,7 @@ function TopicEditor({
               .filter(Boolean),
           )
           .filter((group) => group.length),
+        searchRoutes: parsedRoutes,
         expectedVersion: topic?.version ?? 0,
       },
     })
@@ -147,7 +157,7 @@ function TopicEditor({
       <DialogTitle>{topic ? '编辑研究主题' : '新增研究主题'}</DialogTitle>
       <DialogDescription>
         每行是一组必须满足的检索词，同组使用 |
-        分隔同义词。内置主题留空保留默认检索模板；新主题启用检索时需填写词组。
+        分隔同义词。内置主题留空保留默认检索模板；新主题启用检索时需填写词组或检索路线。
       </DialogDescription>
       <fieldset disabled={pending} className="space-y-4">
         <label className="block text-sm">
@@ -186,6 +196,7 @@ function TopicEditor({
             aria-labelledby={`${labelId}-terms`}
             required={
               enabled &&
+              parsedRoutes.length === 0 &&
               !['biomed-ai', 'llm-agent', 'biomed-worldmodel'].includes(topic?.slug || '')
             }
             rows={4}
@@ -195,6 +206,52 @@ function TopicEditor({
             placeholder={'cancer | tumor\nartificial intelligence | machine learning'}
           />
         </label>
+        <details
+          className="rounded-lg border p-3"
+          open={!!topic?.searchRoutes?.length || undefined}
+        >
+          <summary className="cursor-pointer text-sm font-medium">高级检索路线（JSON）</summary>
+          <p id={`${labelId}-routes-help`} className="my-3 text-xs leading-6 text-muted-foreground">
+            最多 20 条，id 为 1–80 位小写字母、数字或连字符且唯一稳定。每条路线包含 sources 与
+            termGroups；词组之间为 AND，同组为 OR。 每条最多 10 组、50 个词，每词最多 300
+            字节。配置路线后使用路线检索，基础词组仍保留。清空为 [] 恢复基础词组或内置模板。
+            来源：crossref、pubmed、europepmc、arxiv、biorxiv、medrxiv。title_abstract 仅用于 pubmed
+            / europepmc；其他来源使用 default。 backfillFrom 可选，填写非未来的 ISO 时间戳，例如
+            2020-01-01T00:00:00Z。 Crossref
+            以首组各词分别检索后取并集，不执行服务端布尔词组匹配；arXiv、bioRxiv、medRxiv
+            按时间窗口采集。
+            取得后先保留候选，再由后续流程审核主题相关性，不保证关键词已匹配。不同来源的命中数不能直接比较，完成不保证文献穷尽。保存仅更新配置，不会立即启动扫描或回填。
+          </p>
+          <label className="block text-sm">
+            <span id={`${labelId}-routes`}>检索路线 JSON</span>
+            <textarea
+              aria-labelledby={`${labelId}-routes`}
+              aria-describedby={`${labelId}-routes-help`}
+              aria-invalid={!!routesError}
+              rows={12}
+              className={`${managementField} font-mono text-xs`}
+              value={routes}
+              onChange={(event) => setRoutes(event.target.value)}
+              spellCheck={false}
+            />
+          </label>
+          {routesError ? (
+            <p role="alert" className="mt-2 text-sm text-red-700">
+              {routesError}
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {parsedRoutes.length} 条路线 ·{' '}
+              {parsedRoutes.reduce((count, route) => count + route.sources.length, 0)} 个来源查询
+            </p>
+          )}
+          <details className="mt-3 text-xs">
+            <summary className="cursor-pointer">查看双路线示例（复制到上方编辑）</summary>
+            <pre className="mt-2 overflow-auto whitespace-pre-wrap">
+              {JSON.stringify(exampleSearchRoutes, null, 2)}
+            </pre>
+          </details>
+        </details>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           参与后续扫描
@@ -222,7 +279,9 @@ function TopicEditor({
           <Button type="button" variant="outline" onClick={onClose}>
             取消
           </Button>
-          <Button type="submit">{pending ? '保存中…' : '保存主题'}</Button>
+          <Button type="submit" disabled={!!routesError}>
+            {pending ? '保存中…' : '保存主题'}
+          </Button>
         </div>
       </fieldset>
     </form>

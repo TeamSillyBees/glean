@@ -6,9 +6,22 @@ import type { TopicSlug } from '../lib/types'
 import { Badge, Empty, ErrorState, Loading } from './common'
 import { Button } from './ui/button'
 import type { Run } from './run-types'
+import { QueryCoverage } from './query-coverage'
 import { RunRecovery } from './run-recovery'
 export { SourcesView } from './source-health'
 export { FreshnessStrip } from './freshness-strip'
+interface QueryPreview {
+  queryId: string
+  queryVersion: string
+  topic: string
+  source: string
+  mode: string
+  query: string
+  queries?: string[]
+  warnings?: string[]
+  enabled: boolean
+  backfillFrom?: string
+}
 interface SearchTemplate {
   id: string
   version: string
@@ -33,6 +46,7 @@ const venueStatusLabels: Record<string, string> = {
 }
 const statusLabels: Record<string, string> = {
   completed: '已完成',
+  completed_with_gaps: '已结束 · 存在未执行路线',
   completed_with_quarantine: '完成 · 有隔离记录',
   completed_with_errors: '已结束 · 存在失败',
   retry_wait: '等待重试',
@@ -123,6 +137,21 @@ export function RunsView() {
               </Badge>
               <Badge tone="violet">{run.mode === 'mock' ? '历史模拟运行' : '真实来源采集'}</Badge>
             </div>
+            {run.status === 'completed_with_gaps' && (
+              <p className="mt-4 text-sm leading-6 text-amber-800">
+                本次运行已结束，但部分计划路线未执行，不代表整个检索计划已覆盖。
+              </p>
+            )}
+            {!!run.unavailableQueries?.length && (
+              <div className="mt-4 space-y-2">
+                <h3 className="text-sm font-medium">未启用来源的计划路线</h3>
+                <QueryCoverage
+                  queries={Object.fromEntries(
+                    run.unavailableQueries.map((item, index) => [String(index), item]),
+                  )}
+                />
+              </div>
+            )}
             {run.status === 'completed_with_errors' && (
               <p className="mt-4 text-sm leading-6 text-red-700">
                 本次运行已结束，但有来源未完成。已获取的数据会保留，不代表整个扫描窗口已完成。
@@ -177,6 +206,7 @@ export function RunsView() {
                       目录写入 {progress.published ? '✓' : '—'}
                     </Badge>
                   </span>
+                  <QueryCoverage queries={progress.queries} />
                   {progress.failed && <Badge tone="red">来源处理失败</Badge>}
                   {progress.lastError && (
                     <p
@@ -198,13 +228,17 @@ export function TemplatesView({ topic }: { topic: TopicSlug }) {
   const query = useQuery({
     queryKey: ['templates'],
     queryFn: ({ signal }) =>
-      request<{ items: SearchTemplate[]; version: string }>('/api/v1/monitor/templates', {
-        signal,
-      }),
+      request<{ items: SearchTemplate[]; version: string; previews?: QueryPreview[] }>(
+        '/api/v1/monitor/templates',
+        {
+          signal,
+        },
+      ),
   })
   if (query.isLoading) return <Loading />
   if (query.isError) return <ErrorState error={query.error} retry={() => query.refetch()} />
   const items = (query.data?.items || []).filter((item) => item.topic === topic)
+  const previews = (query.data?.previews || []).filter((item) => item.topic === topic)
   return (
     <div className="space-y-5">
       <div className="border-b pb-5">
@@ -217,6 +251,73 @@ export function TemplatesView({ topic }: { topic: TopicSlug }) {
           统一模板表达检索意图，由后端翻译为各来源语法。检索命中不意味着满足主题、期刊或全文门槛。
         </p>
       </div>
+      <section aria-label="来源查询编译预览" className="space-y-3">
+        <h2 className="text-sm font-semibold">来源查询编译预览</h2>
+        <p className="text-sm text-muted-foreground">
+          仅编译预览，尚未执行。以下来自已保存的主题与当前来源配置；打开此页不会请求外部文献库或启动采集。
+        </p>
+        {!previews.length ? (
+          <p className="text-xs text-muted-foreground">
+            暂无该主题的逐来源编译预览；旧接口可能尚未提供，不能据此认定路线已执行。
+          </p>
+        ) : (
+          previews.map((preview, index) => (
+            <article
+              key={`${preview.source}-${preview.queryId}-${index}`}
+              className="min-w-0 space-y-2 rounded-xl border p-4"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="break-all text-sm font-medium">
+                  {preview.queryId} · {preview.source}
+                </h3>
+                <Badge tone={preview.enabled ? 'neutral' : 'amber'}>
+                  {preview.enabled ? '来源已配置启用' : '来源未启用'}
+                </Badge>
+              </div>
+              <p className="break-all text-xs text-muted-foreground">
+                编译模式 {preview.mode} · 查询版本 {preview.queryVersion}
+              </p>
+              {!preview.enabled && (
+                <p className="text-xs text-amber-800">
+                  当前配置未启用此来源，运行时不会执行这条来源查询。
+                </p>
+              )}
+              {preview.backfillFrom && <p className="text-xs">历史起点：{preview.backfillFrom}</p>}
+              {preview.mode === 'seed_union' && (
+                <p className="text-xs text-muted-foreground">
+                  独立种子查询分别请求后取并集，不等价于服务端布尔词组匹配。
+                </p>
+              )}
+              {preview.mode === 'full_window' && (
+                <p className="text-xs text-amber-800">
+                  采集整个时间窗口，不在来源端按关键词过滤；保存后仍需下游评估主题相关性。
+                </p>
+              )}
+              {preview.queries?.length ? (
+                <ol className="space-y-2">
+                  {preview.queries.map((seed, seedIndex) => (
+                    <li key={seedIndex}>
+                      <p className="mb-1 text-xs text-muted-foreground">独立查询 {seedIndex + 1}</p>
+                      <pre className="overflow-auto whitespace-pre-wrap break-words rounded bg-secondary p-3 text-xs">
+                        {seed}
+                      </pre>
+                    </li>
+                  ))}
+                </ol>
+              ) : preview.query ? (
+                <pre className="overflow-auto whitespace-pre-wrap break-words rounded bg-secondary p-3 text-xs">
+                  {preview.query}
+                </pre>
+              ) : null}
+              {preview.warnings?.map((warning, warningIndex) => (
+                <p key={warningIndex} className="break-words text-xs text-amber-800">
+                  来源限制：{warning}
+                </p>
+              ))}
+            </article>
+          ))
+        )}
+      </section>
       {!items.length ? (
         <Empty title="暂无该主题的检索模板" description="已配置的版本化模板会在这里展示。" />
       ) : (

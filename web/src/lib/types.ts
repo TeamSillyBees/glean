@@ -1,5 +1,13 @@
 export type TopicSlug = string
 export type ReadStatus = 'unread' | 'reading' | 'read'
+export interface SearchRoute {
+  id: string
+  name?: string
+  sources: ('crossref' | 'pubmed' | 'europepmc' | 'arxiv' | 'biorxiv' | 'medrxiv')[]
+  termGroups: string[][]
+  fieldMode?: '' | 'default' | 'title_abstract'
+  backfillFrom?: string
+}
 export interface Topic {
   slug: TopicSlug
   name: string
@@ -10,6 +18,7 @@ export interface Topic {
   candidateCount?: number
   searchEnabled?: boolean
   termGroups?: string[][]
+  searchRoutes?: SearchRoute[]
   version?: number
   membershipCount: number
 }
@@ -256,7 +265,19 @@ export interface PublicationEvent {
   date: string
   evidence: string
 }
+export interface DiscoveryHit {
+  runId: string
+  queryId: string
+  queryVersion: string
+  planVersion: string
+  source: string
+  query: string
+  mode: string
+  discoveredAt: string
+}
 export interface SourceObservation {
+  discoveries?: DiscoveryHit[]
+  discoveriesHasMore?: boolean
   kind?: 'historical-abstract-enrichment'
   abstractEvidence?: AbstractEvidence | null
   eventType?: 'source_observed' | 'metadata_updated' | 'version_updated'
@@ -320,5 +341,6 @@ export interface TopicInput {
   rule: string
   searchEnabled: boolean
   termGroups: string[][]
+  searchRoutes?: SearchRoute[]
   expectedVersion: number
 }

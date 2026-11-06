@@ -7,6 +7,7 @@ import type {
   Paper,
   PaperPage,
   Topic,
+  SearchRoute,
 } from '../src/lib/types'
 
 // This project runs after historical acceptance against real Go/PostgreSQL.
@@ -206,28 +207,97 @@ test('真实管理流程：用户、窄屏主题、共享审核、纠错与审�
   await topicDialog
     .getByLabel('检索词组', { exact: true })
     .fill('glioma | glioblastoma\nworld model')
+  // Real persistence and offline compilation: no source calls or scan launch.
+  const routes: SearchRoute[] = [
+    {
+      id: 'medical',
+      sources: ['europepmc', 'pubmed'],
+      termGroups: [['glioma', 'glioblastoma'], ['world model']],
+      fieldMode: 'title_abstract',
+      backfillFrom: '2020-01-01T00:00:00Z',
+    },
+    {
+      id: 'seeds',
+      sources: ['crossref'],
+      termGroups: [['glioma', 'glioblastoma'], ['world model']],
+    },
+    { id: 'preprints', sources: ['arxiv'], termGroups: [['glioma'], ['world model']] },
+  ]
+  await topicDialog.getByText('高级检索路线（JSON）', { exact: true }).click()
+  const routeEditor = topicDialog.getByLabel('检索路线 JSON', { exact: true })
+  await routeEditor.fill('[broken')
+  await expect(topicDialog.getByRole('alert')).toContainText('有效 JSON 数组')
+  await expect(topicDialog.getByRole('button', { name: '保存主题', exact: true })).toBeDisabled()
+  await routeEditor.fill(JSON.stringify(routes, null, 2))
+  await expect(topicDialog.getByText('3 条路线 · 4 个来源查询')).toBeVisible()
   await topicDialog.getByLabel('参与后续扫描', { exact: true }).check()
   const topicCreated = response(page, '/api/v1/catalog/topics', 'POST')
   await topicDialog.getByRole('button', { name: '保存主题', exact: true }).click()
   const topic = await data<Topic>(await topicCreated)
   expect(topic.slug).toBeTruthy()
   expect(topic.version).toBe(1)
+  expect(topic.searchRoutes).toEqual(routes)
   expect(topic.termGroups?.map((group) => [...group].sort())).toEqual([
     ['glioblastoma', 'glioma'],
     ['world model'],
   ])
   await expect(topicDialog).toBeHidden()
+  await navigate(page, new RegExp(`^${topicName}`))
+  const compiled = response(page, '/api/v1/monitor/templates')
+  await navigate(page, '检索模板')
+  const preview = await data<{
+    previews?: { topic: string; source: string; query?: string; queries?: string[]; mode: string }[]
+  }>(await compiled)
+  const topicPreviews = preview.previews?.filter((item) => item.topic === topic.slug) || []
+  expect(topicPreviews).toHaveLength(4)
+  expect(topicPreviews.find((item) => item.source === 'pubmed')?.query).toContain('[tiab]')
+  expect(topicPreviews.find((item) => item.source === 'crossref')?.queries).toEqual([
+    'glioma',
+    'glioblastoma',
+  ])
+  expect(topicPreviews.find((item) => item.source === 'arxiv')?.mode).toBe('full_window')
+  await expect(page.getByText(/仅编译预览，尚未执行/)).toBeVisible()
+  await expect(page.getByText('独立查询 2', { exact: true })).toBeVisible()
+  await expect(page.getByText(/不在来源端按关键词过滤/)).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(
+    true,
+  )
+  await page.screenshot({ path: info.outputPath('management-route-preview-mobile.png') })
+  await navigate(page, '研究主题')
   await page.getByRole('button', { name: `编辑主题 ${topicName}`, exact: true }).click()
   const editTopic = page.getByRole('dialog', { name: '编辑研究主题', exact: true })
+  expect(
+    JSON.parse(await editTopic.getByLabel('检索路线 JSON', { exact: true }).inputValue()),
+  ).toEqual(routes)
+  await editTopic
+    .getByLabel('检索词组', { exact: true })
+    .fill('glioma | glioblastoma\nworld model | simulation')
   await editTopic
     .getByLabel('主题说明', { exact: true })
     .fill('已修改说明；暂停扫描，保留检索规则。')
   await editTopic.getByLabel('参与后续扫描', { exact: true }).uncheck()
+  // Emulate one older client's PUT serialization only. The real authenticated
+  // handler and PostgreSQL still process the request and return the response.
+  let legacyTopicWrite = false
+  await page.route(
+    (url) => url.pathname === `/api/v1/catalog/topics/${topic.slug}`,
+    async (route) => {
+      expect(route.request().method()).toBe('PUT')
+      const legacyInput = route.request().postDataJSON() as Record<string, unknown>
+      expect(legacyInput.searchRoutes).toEqual(routes)
+      delete legacyInput.searchRoutes
+      legacyTopicWrite = true
+      await route.continue({ postData: JSON.stringify(legacyInput) })
+    },
+    { times: 1 },
+  )
   const topicUpdated = response(page, `/api/v1/catalog/topics/${topic.slug}`, 'PUT')
   await editTopic.getByRole('button', { name: '保存主题', exact: true }).click()
   const updatedTopic = await data<Topic>(await topicUpdated)
+  expect(legacyTopicWrite).toBe(true)
   expect(updatedTopic.version).toBe(2)
   expect(updatedTopic.searchEnabled).toBe(false)
+  expect(updatedTopic.searchRoutes).toEqual(routes)
   await expect(editTopic).toBeHidden()
   await page.screenshot({ path: info.outputPath('management-topics-mobile.png') })
   const emptyResult = response(page, '/api/v1/catalog/papers', 'GET', { topic: topic.slug })

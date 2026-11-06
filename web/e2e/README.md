@@ -67,3 +67,5 @@ prove continuous provider availability, complete live discovery, all other sourc
 pipelines, or genuine LLM analysis. Six-source canaries remain separate and require the `live` Go build tag plus an
 explicit environment opt-in; default `go test ./...` excludes them.
 Screenshots are review evidence, not an automatic claim of visual acceptance.
+
+The management scenario also saves multiple search routes through the real topic API, rejects invalid JSON before submission, reloads routes while editing legacy terms, omits searchRoutes from one outgoing PUT to emulate an older client (the real handler and database must preserve the stored routes), and reads offline compiled previews from the existing monitor templates endpoint on a mobile viewport. This does not contact external sources or start scans. These newly added assertions require a fresh browser-capable run; merely typechecking or listing them does not establish a pass.
