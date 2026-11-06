@@ -69,3 +69,5 @@ explicit environment opt-in; default `go test ./...` excludes them.
 Screenshots are review evidence, not an automatic claim of visual acceptance.
 
 The management scenario also saves multiple search routes through the real topic API, rejects invalid JSON before submission, reloads routes while editing legacy terms, omits searchRoutes from one outgoing PUT to emulate an older client (the real handler and database must preserve the stored routes), and reads offline compiled previews from the existing monitor templates endpoint on a mobile viewport. This does not contact external sources or start scans. These newly added assertions require a fresh browser-capable run; merely typechecking or listing them does not establish a pass.
+
+协议项目在 management 后、password 前执行：只使用真实本地 API 导入非生物医学计划，并验证预览确认、重载与错误阻断。整页重载后重新登录，凭据不落浏览器持久存储。实时项目在真实 Europe PMC 入库后校验发现路径、单次请求和下载审计 ZIP；该项目仍仅手动运行。

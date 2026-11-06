@@ -207,3 +207,9 @@ docker run --rm --name glean-web --network glean \
 `test/e2e/glean_auth_test.go` 中的 `TestGleanFrontendAuthContract` 使用 `httptest` 验证真实 Go HTTP handler、JWT 签发/轮换、刷新重放拒绝、认证后的主题查询、退出及随后的撤销；数据库使用 SQL mock。该测试比前端的模拟传输测试更深入，但本身仍不是 PostgreSQL/浏览器端到端验收。
 
 官方参考：[Node Docker 镜像](https://github.com/nodejs/docker-node)、[nginx Docker 镜像与非 root 配置](https://hub.docker.com/_/nginx)、[nginx 代理 URI 行为](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass)、[Docker 健康检查](https://docs.docker.com/reference/dockerfile/#healthcheck)。
+
+### 协议与证据审计
+
+研究主题支持完整协议 JSON 的离线预览、语义差异确认与保存；计划模式保持暂停采集。论文管理新增实际阅读层级和分项短证据，证据不足保存待核。扫描记录支持长期归档、逐次请求、审计 ZIP 和有原因的管理员预算扩容。范围外与个人隐藏状态仍保留在导出中。参见[检索计划](../docs/glean/search-plans.md)。
+
+真实浏览器回归新增 protocol 项目（管理后、改密前），验证非生物医学协议导入、确认门槛、保存重载、未支持来源保留以及无效修改阻断。手动实时验收额外检查真实发现路径、请求账本和 ZIP 下载。
