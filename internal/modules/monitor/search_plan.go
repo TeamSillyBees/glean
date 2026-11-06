@@ -10,6 +10,7 @@ import (
 
 // QueryProgress 保存单一来源查询的冻结语义、分区进度和覆盖证据。
 type QueryProgress struct {
+	LastPageHash        string    `json:"lastPageHash,omitempty"`
 	CoverageWindow      Window    `json:"coverageWindow"`
 	AdvanceCheckpoint   bool      `json:"advanceCheckpoint"`
 	QueryID             string    `json:"queryId"`
@@ -83,6 +84,9 @@ func sourceTemplates(templates []SearchTemplate, core bool, source string) []Sea
 					TermGroups        [][]string
 					BackfillFrom      *time.Time
 				}{source, v.FieldMode, route.TermGroups, route.BackfillFrom})
+				if t.Protocol != nil {
+					v.QueryVersion = hashJSON(struct{ Query, Protocol string }{v.QueryVersion, retrieval.ProtocolSemanticVersion(*t.Protocol)})
+				}
 				ordinary = append(ordinary, v)
 			}
 		}
@@ -99,6 +103,16 @@ func sourceTemplates(templates []SearchTemplate, core bool, source string) []Sea
 }
 
 func queryKey(t SearchTemplate) string { return t.QueryID + "@" + t.QueryVersion }
+
+func coveredSourceEnd(p *SourceProgress, fallback time.Time) time.Time {
+	result := fallback
+	for _, q := range p.Queries {
+		if !q.TargetEnd.IsZero() && q.TargetEnd.Before(result) {
+			result = q.TargetEnd
+		}
+	}
+	return result
+}
 
 func initializeQueryProgress(run *Run, progress *SourceProgress, cp *Checkpoint, templates []SearchTemplate, source string, explicit bool) error {
 	progress.Queries = map[string]*QueryProgress{}
@@ -148,6 +162,24 @@ func initializeQueryProgress(run *Run, progress *SourceProgress, cp *Checkpoint,
 			return fmt.Errorf("query history start must precede scan end")
 		}
 		window.End = run.FixedEnd
+		if t.Protocol != nil {
+			start, end, err := retrieval.ProtocolWindow(*t.Protocol)
+			if err != nil {
+				return err
+			}
+			if window.Start.Before(start) {
+				window.Start = start
+			}
+			if window.End.After(end) {
+				window.End = end
+			}
+			if !window.Start.Before(window.End) {
+				return fmt.Errorf("protocol dates do not intersect the requested scan window")
+			}
+			if window.End.Sub(window.Start) > time.Duration(t.Protocol.Budget.MaxHistoryDays)*24*time.Hour {
+				return fmt.Errorf("protocol historical range exceeds its explicit history budget")
+			}
+		}
 		coverageWindow := window
 		if t.FieldMode != "" && window.End.Sub(window.Start) > 90*24*time.Hour {
 			window.End = window.Start.Add(90 * 24 * time.Hour)
@@ -168,7 +200,7 @@ func initializeQueryProgress(run *Run, progress *SourceProgress, cp *Checkpoint,
 		if !advance {
 			progress.AdvanceCheckpoint = false
 		}
-		progress.Queries[t.QueryID] = &QueryProgress{CoverageWindow: coverageWindow, AdvanceCheckpoint: advance, QueryID: t.QueryID, QueryVersion: t.QueryVersion, Topic: t.Topic, Source: source, Mode: compiled.Mode, Query: compiled.Query, Queries: compiled.Queries, Warnings: compiled.Warnings, Window: window, TargetEnd: run.FixedEnd, Status: "not_started"}
+		progress.Queries[t.QueryID] = &QueryProgress{CoverageWindow: coverageWindow, AdvanceCheckpoint: advance, QueryID: t.QueryID, QueryVersion: t.QueryVersion, Topic: t.Topic, Source: source, Mode: compiled.Mode, Query: compiled.Query, Queries: compiled.Queries, Warnings: compiled.Warnings, Window: window, TargetEnd: coverageWindow.End, Status: "not_started"}
 	}
 	if len(templates) == 0 {
 		progress.Acquired = true

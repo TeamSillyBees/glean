@@ -86,7 +86,7 @@ func runRestartProcess(t *testing.T, dsn, phase, schema string) {
 	tx, err := beginRestartProcessTx(ctx, db, schema)
 	require.NoError(t, err)
 	defer tx.Rollback()
-	client := ent.NewClient(ent.Driver(entsql.NewDriver(dialect.Postgres, entsql.Conn{ExecQuerier: tx})))
+	client := ent.NewClient(ent.Driver(&monitorTestTxDriver{Driver: entsql.NewDriver(dialect.Postgres, entsql.Conn{ExecQuerier: tx}), tx: tx}))
 	client.Use(entx.AuditHook(entx.AuditHookOptions{}))
 	client.Use(entx.RejectDeleteHook())
 	ids, err := idgen.NewGenerator(61)

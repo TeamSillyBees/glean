@@ -319,6 +319,25 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				return state.Snapshot, bizerrors.BadRequest("invalid template cursor")
 			}
 			template := selectedTemplates[progress.TemplateIndex]
+			archivedRequests, budgetErr := s.archivedProtocolRequests(ctx, run, template)
+			if budgetErr != nil {
+				return Snapshot{}, budgetErr
+			}
+			budgetReason := protocolBudgetReason(state, run, template)
+			if template.Protocol != nil && archivedRequests >= effectiveProtocolBudget(run, template).MaxRequests {
+				budgetReason = "protocol_request_budget"
+			}
+			if reason := budgetReason; reason != "" {
+				progress.LastError = reason
+				if q := queryFor(progress, template); q != nil {
+					q.Status = "partial_budget"
+					q.LastError = reason
+				}
+				if err = s.save(ctx, state); err != nil {
+					return Snapshot{}, err
+				}
+				break
+			}
 			fetchWindow := progress.Window
 			if progress.CoreBackfill && !template.Core && !progress.IncrementalWindow.Start.IsZero() {
 				fetchWindow = progress.IncrementalWindow
@@ -339,8 +358,40 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				break
 			}
 			fetchCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
+			audit := &fetchAudit{service: s, state: state, run: run, template: template, window: fetchWindow, cursor: progress.Cursor}
+			fetchCtx = context.WithValue(fetchCtx, auditContextKey{}, audit)
 			page, fetchErr := source.Fetch(fetchCtx, FetchRequest{PageSize: s.config.PageSize, Window: fetchWindow, Cursor: progress.Cursor, Template: template, RegistryISSNs: registryISSNs})
 			cancel()
+			if fetchErr == nil && !page.Complete && (page.NextCursor == "" || page.NextCursor == progress.Cursor) {
+				fetchErr = &SourceError{Kind: "pagination", Message: "source did not advance cursor"}
+			}
+			if query != nil && len(audit.attempts) > 0 && len(page.Records) > 0 {
+				h := audit.attempts[len(audit.attempts)-1].RawSHA256
+				if fetchErr == nil && h != "" && query.LastPageHash == h {
+					fetchErr = &SourceError{Kind: "repeated_page", Message: "repeated response cannot prove pagination completion"}
+				}
+				if fetchErr == nil {
+					query.LastPageHash = h
+				}
+			} else if query != nil && fetchErr == nil {
+				// 空控制页可能推进分区或显式重启；相邻数据页重复才视为分页异常。
+				query.LastPageHash = ""
+			}
+			if auditErr := audit.finish(ctx, page, fetchErr); auditErr != nil {
+				return state.Snapshot, auditErr
+			}
+			var budgetFailure *SourceError
+			if errors.As(fetchErr, &budgetFailure) && budgetFailure.Kind == "protocol_request_budget" {
+				progress.LastError = budgetFailure.Kind
+				if query != nil {
+					query.Status = "partial_budget"
+					query.LastError = budgetFailure.Kind
+				}
+				if err = s.save(ctx, state); err != nil {
+					return Snapshot{}, err
+				}
+				break
+			}
 			pages++
 			run.Requests++
 			if query != nil {
@@ -381,7 +432,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 					record.AcquiredAt = s.clock().UTC()
 				}
 				record.Topics = uniqueStrings(append(record.Topics, template.Topic))
-				if query != nil && template.FieldMode != "" {
+				if query != nil && (!isMockSource(source) || template.FieldMode != "") {
 					record.Discoveries = []retrieval.Hit{{RunID: run.ID, QueryID: query.QueryID, QueryVersion: query.QueryVersion, PlanVersion: run.TemplateVersion, Source: source.Name(), Query: query.Query, Mode: query.Mode, DiscoveredAt: record.AcquiredAt}}
 				}
 				reason := ""
@@ -484,6 +535,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 				break
 			}
 			progress.Pages++
+			progress.LastError = ""
 			if query != nil {
 				query.Pages++
 				query.LastError = ""
@@ -496,6 +548,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			if page.Complete {
 				morePartitions := false
 				if query != nil {
+					query.LastPageHash = ""
 					query.CompletedPartitions++
 					if query.AdvanceCheckpoint {
 						if checkpoint.QueryAcquiredThrough == nil {
@@ -530,7 +583,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 						}
 					}
 					if topicComplete && canAdvance && (progress.AdvanceCheckpoint || run.RequestKey == "") {
-						checkpoint.TopicAcquiredThrough[template.Topic] = later(checkpoint.TopicAcquiredThrough[template.Topic], run.FixedEnd)
+						checkpoint.TopicAcquiredThrough[template.Topic] = later(checkpoint.TopicAcquiredThrough[template.Topic], query.TargetEnd)
 					}
 				} else if (!progress.CoreBackfill || template.Core || (progress.TemplateIndex < len(templates) && !templates[progress.TemplateIndex].Core)) && (progress.AdvanceCheckpoint || run.RequestKey == "") {
 					checkpoint.TopicAcquiredThrough[template.Topic] = later(checkpoint.TopicAcquiredThrough[template.Topic], run.FixedEnd)
@@ -543,7 +596,7 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 					progress.Acquired = true
 					checkpoint.LastAcquiredAt = s.clock().UTC()
 					if progress.AdvanceCheckpoint || run.RequestKey == "" {
-						checkpoint.AcquiredThrough = later(checkpoint.AcquiredThrough, run.FixedEnd)
+						checkpoint.AcquiredThrough = later(checkpoint.AcquiredThrough, coveredSourceEnd(progress, run.FixedEnd))
 					}
 					if progress.CoreWide {
 						checkpoint.CoreBackfillPending = false
@@ -612,11 +665,13 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			}
 			if checkpoint.LastError == "" && progress.Acquired && allReviewed {
 				progress.Reviewed = s.pipeline == nil
-				progress.LastError = ""
+				if !strings.HasPrefix(progress.LastError, "protocol_") {
+					progress.LastError = ""
+				}
 				checkpoint.ConsecutiveFailures = 0
 				if checkpoint.Quarantined == 0 && (progress.AdvanceCheckpoint || run.RequestKey == "") {
 					if s.pipeline == nil {
-						checkpoint.ReviewedThrough = later(checkpoint.ReviewedThrough, run.FixedEnd)
+						checkpoint.ReviewedThrough = later(checkpoint.ReviewedThrough, coveredSourceEnd(progress, run.FixedEnd))
 					}
 				}
 				if err = s.save(ctx, state); err != nil {
@@ -664,12 +719,14 @@ func (s *Service) runOnce(ctx context.Context, now time.Time, requested *Window,
 			} else {
 				progress.Handled = progress.Acquired && !pendingCandidates(state, progress)
 				progress.Published = progress.Handled && progress.Quarantined == 0
-				progress.LastError = ""
+				if !strings.HasPrefix(progress.LastError, "protocol_") {
+					progress.LastError = ""
+				}
 				checkpoint.ConsecutiveFailures = 0
 				if progress.Handled && (progress.AdvanceCheckpoint || run.RequestKey == "") {
-					checkpoint.HandledThrough = later(checkpoint.HandledThrough, run.FixedEnd)
+					checkpoint.HandledThrough = later(checkpoint.HandledThrough, coveredSourceEnd(progress, run.FixedEnd))
 					if checkpoint.Quarantined == 0 {
-						checkpoint.PublishedThrough = later(checkpoint.PublishedThrough, run.FixedEnd)
+						checkpoint.PublishedThrough = later(checkpoint.PublishedThrough, coveredSourceEnd(progress, run.FixedEnd))
 					}
 				}
 			}

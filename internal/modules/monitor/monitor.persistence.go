@@ -13,24 +13,29 @@ import (
 )
 
 type persistedState struct {
-	View       Snapshot  `json:"view"`
-	LeaseOwner string    `json:"leaseOwner"`
-	LeaseUntil time.Time `json:"leaseUntil"`
+	ArchiveHashes map[string]string `json:"archiveHashes,omitempty"`
+	View          Snapshot          `json:"view"`
+	LeaseOwner    string            `json:"leaseOwner"`
+	LeaseUntil    time.Time         `json:"leaseUntil"`
 }
 type monitorState struct {
 	Snapshot
-	id         idgen.ID
-	revision   int
-	leaseOwner string
-	leaseUntil time.Time
+	id            idgen.ID
+	revision      int
+	leaseOwner    string
+	leaseUntil    time.Time
+	archiveHashes map[string]string
 }
 
 // memoryState 仅用于明确的离线演示和测试；生产 NewService 始终使用 Ent。
 type memoryState struct {
-	mu       sync.Mutex
-	data     []byte
-	revision int
-	id       idgen.ID
+	mu               sync.Mutex
+	data             []byte
+	revision         int
+	id               idgen.ID
+	auditRuns        map[idgen.ID]json.RawMessage
+	auditRequests    map[idgen.ID]RequestAudit
+	auditOccurrences []OccurrenceAudit
 }
 
 func (s *Service) emptyState() *monitorState {
@@ -77,7 +82,7 @@ func (s *Service) load(ctx context.Context) (*monitorState, error) {
 	if err := ValidateSnapshot(persisted.View); err != nil {
 		return nil, bizerrors.WrapInternalContext(ctx, err, "unsupported monitor state")
 	}
-	return &monitorState{Snapshot: persisted.View, id: id, revision: revision, leaseOwner: persisted.LeaseOwner, leaseUntil: persisted.LeaseUntil}, nil
+	return &monitorState{Snapshot: persisted.View, id: id, revision: revision, leaseOwner: persisted.LeaseOwner, leaseUntil: persisted.LeaseUntil, archiveHashes: persisted.ArchiveHashes}, nil
 }
 
 func (s *Service) save(ctx context.Context, state *monitorState) error {
@@ -86,6 +91,9 @@ func (s *Service) save(ctx context.Context, state *monitorState) error {
 	}
 	if state.leaseOwner != "" {
 		state.leaseUntil = s.clock().UTC().Add(s.config.LeaseDuration)
+	}
+	if s.memory == nil && s.config.RealFetchEnabled {
+		return s.saveAuditedState(ctx, state)
 	}
 	raw, err := json.Marshal(persistedState{View: state.Snapshot, LeaseOwner: state.leaseOwner, LeaseUntil: state.leaseUntil})
 	if err != nil {
@@ -104,6 +112,13 @@ func (s *Service) save(ctx context.Context, state *monitorState) error {
 		s.memory.id = state.id
 		s.memory.revision = state.revision
 		s.memory.data = raw
+		if s.memory.auditRuns == nil {
+			s.memory.auditRuns = map[idgen.ID]json.RawMessage{}
+		}
+		for _, run := range state.Runs {
+			b, _ := json.Marshal(run)
+			s.memory.auditRuns[run.ID] = b
+		}
 		return nil
 	}
 	if state.id == 0 {

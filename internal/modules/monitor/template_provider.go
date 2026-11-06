@@ -55,6 +55,20 @@ func freezeTemplates(input []SearchTemplate) ([]SearchTemplate, string, error) {
 		if err := retrieval.ValidateRoutes(t.Routes, time.Now().UTC()); err != nil {
 			return nil, "", err
 		}
+		if t.Protocol != nil {
+			preview, err := retrieval.PreviewProtocol(*t.Protocol, time.Now().UTC())
+			if err != nil {
+				return nil, "", err
+			}
+			if !preview.Executable {
+				return nil, "", fmt.Errorf("plan-only protocol cannot execute")
+			}
+			actual, _ := json.Marshal(t.Routes)
+			expected, _ := json.Marshal(preview.SearchRoutes)
+			if string(actual) != string(expected) {
+				return nil, "", fmt.Errorf("protocol route mapping changed; preview and save a new protocol version")
+			}
+		}
 		topics[t.Topic] = true
 		ids[t.ID] = true
 		groups := []string{}

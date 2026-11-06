@@ -54,6 +54,9 @@ func (h *Handler) runs(ctx context.Context, _ *runsRequest) (*runsResponse, erro
 		}
 		return items[i].ID > items[j].ID
 	})
+	for i := range items {
+		items[i] = publicRun(items[i])
+	}
 	return &runsResponse{Body: response.OK(ctx, RunsVO{Items: items})}, nil
 }
 func (h *Handler) templates(ctx context.Context, _ *templatesRequest) (*templatesResponse, error) {

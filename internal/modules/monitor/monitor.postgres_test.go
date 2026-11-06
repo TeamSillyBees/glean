@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/teamsillybees/glean/internal/data/ent"
 	"github.com/teamsillybees/glean/internal/platform/entx"
+	"github.com/teamsillybees/glean/internal/platform/httpclient"
 	"github.com/teamsillybees/glean/internal/platform/idgen"
 )
 
@@ -48,7 +49,7 @@ func TestMonitorPostgresDurableMockRun(t *testing.T) {
 	}
 	// 每次构建全新 Ent client；没有共享 Service.memory，读取必须来自真实 PostgreSQL JSONB。
 	makeClient := func() *ent.Client {
-		client := ent.NewClient(ent.Driver(entsql.NewDriver(dialect.Postgres, entsql.Conn{ExecQuerier: tx})))
+		client := ent.NewClient(ent.Driver(&monitorTestTxDriver{Driver: entsql.NewDriver(dialect.Postgres, entsql.Conn{ExecQuerier: tx}), tx: tx}))
 		client.Use(entx.AuditHook(entx.AuditHookOptions{}))
 		client.Use(entx.RejectDeleteHook())
 		return client
@@ -195,6 +196,40 @@ func TestMonitorPostgresDurableMockRun(t *testing.T) {
 			require.NoError(t, err)
 			return service
 		})
+	})
+
+	t.Run("AuditDistinctAcrossPages", func(t *testing.T) {
+		// HTTP 使用明确夹具，计数、事务和重建读取经过真实 PostgreSQL。
+		executor := &adapterExecutor{responses: []*httpclient.Response{
+			jsonResponse(`{"hitCount":4,"nextCursorMark":"next","resultList":{"result":[{"id":"1","source":"MED","title":"Fixture one"},{"id":"2","source":"MED","title":"Fixture two"}]}}`),
+			jsonResponse(`{"hitCount":4,"resultList":{"result":[{"id":"2","source":"MED","title":"Fixture two"},{"id":"3","source":"MED","title":"Fixture three"}]}}`),
+		}}
+		cfg := RuntimeConfig()
+		cfg.StateKey, cfg.MaxPagesPerCall = "audit-distinct-pages", 2
+		service, err := NewService(makeClient(), ids, cfg, []Source{NewEuropePMCSource(executor)}, nil, &flakyPublisher{})
+		require.NoError(t, err)
+		service.templates = &mutableTemplates{items: []SearchTemplate{TopicSearchTemplate("biomed-ai", [][]string{{"fixture"}}, 1)}}
+		service.clock = func() time.Time { return scenarioTime }
+		result, err := service.RunOnce(actorCtx, scenarioTime)
+		require.NoError(t, err)
+		for i := 0; i < 3 && len(executor.requests) < 2; i++ {
+			result, err = service.RunOnce(actorCtx, scenarioTime.Add(time.Minute))
+			require.NoError(t, err)
+		}
+		rebuilt, err := NewService(makeClient(), ids, cfg, []Source{NewEuropePMCSource(executor)}, nil, &flakyPublisher{})
+		require.NoError(t, err)
+		requests, err := rebuilt.auditRequests(actorCtx, result.Runs[0].ID, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, requests, 2)
+		require.Equal(t, "success", requests[0].Status)
+		require.Equal(t, "success", requests[1].Status)
+		require.NotNil(t, requests[0].CumulativeUnique)
+		require.NotNil(t, requests[1].CumulativeUnique)
+		require.Equal(t, 2, *requests[0].CumulativeUnique)
+		require.Equal(t, 3, *requests[1].CumulativeUnique, "duplicate source IDs across pages count only once")
+		occurrences, err := rebuilt.auditOccurrences(actorCtx, result.Runs[0].ID, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, occurrences, 4, "deduplication must retain every source occurrence")
 	})
 
 }

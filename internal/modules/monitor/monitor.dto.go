@@ -54,19 +54,20 @@ type Record struct {
 
 // SearchTemplate 是各来源共用的版本化检索意图，来源适配器只翻译语法。
 type SearchTemplate struct {
-	Routes       []retrieval.Route `json:"routes,omitempty"`
-	FieldMode    string            `json:"fieldMode,omitempty"`
-	QueryID      string            `json:"queryId,omitempty"`
-	QueryVersion string            `json:"queryVersion,omitempty"`
-	BackfillFrom *time.Time        `json:"backfillFrom,omitempty"`
-	ID           string            `json:"id"`
-	Version      string            `json:"version"`
-	Topic        string            `json:"topic"`
-	Query        string            `json:"query"`
-	Terms        []string          `json:"terms"`
-	TermGroups   [][]string        `json:"termGroups"`
-	Core         bool              `json:"core"`
-	Policy       InclusionPolicy   `json:"policy"`
+	Protocol     *retrieval.Protocol `json:"protocol,omitempty"`
+	Routes       []retrieval.Route   `json:"routes,omitempty"`
+	FieldMode    string              `json:"fieldMode,omitempty"`
+	QueryID      string              `json:"queryId,omitempty"`
+	QueryVersion string              `json:"queryVersion,omitempty"`
+	BackfillFrom *time.Time          `json:"backfillFrom,omitempty"`
+	ID           string              `json:"id"`
+	Version      string              `json:"version"`
+	Topic        string              `json:"topic"`
+	Query        string              `json:"query"`
+	Terms        []string            `json:"terms"`
+	TermGroups   [][]string          `json:"termGroups"`
+	Core         bool                `json:"core"`
+	Policy       InclusionPolicy     `json:"policy"`
 }
 
 // InclusionPolicy 描述纳入门槛；检索命中不代表满足门槛。
@@ -215,6 +216,7 @@ type SourceProgress struct {
 
 // Run 保存一次固定水位的运行，取消或退避后恢复同一 ID。
 type Run struct {
+	BudgetChanges      []BudgetChange             `json:"budgetChanges,omitempty"`
 	UnavailableQueries []QueryProgress            `json:"unavailableQueries,omitempty"`
 	SearchTemplates    []SearchTemplate           `json:"searchTemplates,omitempty"`
 	RetryCandidateKeys map[string][]string        `json:"retryCandidateKeys,omitempty"`

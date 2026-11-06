@@ -124,7 +124,19 @@ func (s *remoteSource) Fetch(ctx context.Context, req FetchRequest) (Page, error
 }
 
 func (s *remoteSource) get(ctx context.Context, path string, query map[string]string) ([]byte, error) {
+	var request *RequestAudit
+	audit, _ := ctx.Value(auditContextKey{}).(*fetchAudit)
+	if audit != nil {
+		var err error
+		request, err = audit.begin(ctx, s.name, path, query)
+		if err != nil {
+			return nil, err
+		}
+	}
 	resp, err := s.executor.Do(ctx, http.MethodGet, path, httpclient.WithQueryParams(query), httpclient.WithHeader("Accept", "application/json, application/xml, application/atom+xml"))
+	if audit != nil {
+		audit.received(request, resp, err)
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return nil, err
 	}
