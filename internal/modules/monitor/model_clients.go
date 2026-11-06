@@ -152,7 +152,12 @@ func validJevAnswer(q JevQuestion, a JevAnswer) bool {
 			return false
 		}
 	}
-	return math.Abs(sum-1) < 0.001 && (q.Type != "score" || math.Abs(expected-*a.Score) < 0.01)
+	// 官方 API 分别把概率和 score 舍入至两位小数，四档实测 1.97 的公开概率重算为 1.98。
+	// 容差仅覆盖每个数字最多 0.005 的舍入误差；保留原值，不自行重算或伪造更高精度。
+	n := float64(len(keys))
+	sumTolerance := 0.005*n + 1e-9
+	scoreTolerance := 0.005*(1+n*(n-1)/2) + 1e-9
+	return math.Abs(sum-1) <= sumTolerance && (q.Type != "score" || math.Abs(expected-*a.Score) <= scoreTolerance)
 }
 
 // GenerativeClient 调用可配置 OpenAI 兼容服务。

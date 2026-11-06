@@ -76,6 +76,25 @@ func TestModelJevRejectsMissingAndOutOfRange(t *testing.T) {
 		}
 	}
 }
+
+// TestModelJevRoundingEnvelope 覆盖实服两位小数的独立舍入，仍拒绝超出可解释误差的分布。
+func TestModelJevRoundingEnvelope(t *testing.T) {
+	q := JevQuestion{Type: "score", Criteria: []string{"none", "possible", "clear", "core"}}
+	score, confidence := 1.97, 0.42
+	a := JevAnswer{Type: "score", Score: &score, Confidence: &confidence, Probabilities: map[string]float64{"0": 0.02, "1": 0.26, "2": 0.44, "3": 0.28}}
+	if !validJevAnswer(q, a) {
+		t.Fatal("independently rounded public response must be accepted")
+	}
+	score = 1.70
+	if validJevAnswer(q, a) {
+		t.Fatal("inconsistent score must still be rejected")
+	}
+	score = 1.97
+	a.Probabilities["0"] = 0.1
+	if validJevAnswer(q, a) {
+		t.Fatal("invalid total probability must still be rejected")
+	}
+}
 func TestModelHTTPErrorSafeAndNoRetry(t *testing.T) {
 	for _, status := range []int{400, 401, 413, 422, 429, 529} {
 		f := &modelFakeExecutor{status: status, replies: []string{`secret upstream response`}}
