@@ -156,7 +156,7 @@ CI 启动隔离 PostgreSQL 16，强制检查真实迁移、文献导入/查询�
 
 生产上线前请阅读 [生产部署与备份恢复](docs/glean/production.md) 和 [GitHub Actions 镜像发布与手动部署](docs/glean/github-actions-deployment.md)。镜像构建发布由独立的手动工作流完成，推送 GHCR 后在新 runner 按 digest 拉取并执行隔离 HTTP 验证；服务器部署只消费成功发布的镜像清单。二者均不会随普通 push/PR 自动触发；服务器上线仍需先配置审批、接入和生产配置。普通 CI 会在隔离数据库中演练备份及空库恢复，不接触生产数据。 部署必须显式设置 `PRODUCTION_BASE_DIR`（无默认值），发布、私有配置、应用数据、原始档案、备份与状态统一保存在该目录；外置数据库/Redis 和 Docker 全局存储不因此迁移。既有部署换目录需按手册人工停写迁移，不能只改变量。
 
-`47.104.200.154` 已在 `/root/docker/glean` 以单个 `compose.yaml` 上线 [Glean](https://glean.starxy.cc)，运行功能版本 `7fa0b91`，期刊分页与页面易用性修复已上线。完整历史基线已导入，检索协议与审计迁移已应用，HTTPS 和续期演练通过。GitHub 服务器部署开关仍关闭，现有 CD 脚本须先适配新的单 Compose 布局。实际配置、管理命令和验证结果见[服务器部署记录](docs/glean/server-47.104.200.154.md)。
+`47.104.200.154` 已在 `/root/docker/glean` 以单个 `compose.yaml` 上线 [Glean](https://glean.starxy.cc)，运行功能版本 `ab256b4`，采集状态页支持管理员手动测试来源连通性，2026-11-07 生产实测六源均连通。完整历史基线已导入，检索协议与审计迁移已应用，HTTPS 和续期演练通过。GitHub 服务器部署开关仍关闭，现有 CD 脚本须先适配新的单 Compose 布局。实际配置、管理命令和验证结果见[服务器部署记录](docs/glean/server-47.104.200.154.md)。
 
 登录后从“个人研究空间 → 修改密码”修改自己的密码。成功后所有旧会话失效，需使用新密码重新登录；此功能不提供管理员代改密码或公开找回密码流程。
 
