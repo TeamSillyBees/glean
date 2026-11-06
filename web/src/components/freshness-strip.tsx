@@ -23,6 +23,7 @@ export function FreshnessStrip({ topic, onOpen }: { topic: TopicSlug; onOpen: ()
       </span>
       {failures > 0 && <span className="text-amber-700">{failures} 个来源待处理</span>}
       <button
+        type="button"
         onClick={onOpen}
         className="ml-auto inline-flex min-h-8 items-center gap-1 rounded px-1 text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >

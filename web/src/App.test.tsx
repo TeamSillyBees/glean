@@ -179,9 +179,14 @@ describe('Glean query workspace', () => {
     ).getAllByRole('button')) {
       expect(button).toHaveAttribute('type', 'button')
     }
-    await user.click(screen.getByRole('button', { name: '采集状态' }))
-    await screen.findByRole('heading', { name: '采集状态', level: 1 })
-    await user.click(screen.getByRole('button', { name: '论文工作台' }))
+    // 两个入口分属不同组件；不能只验证侧栏而漏掉论文页的快捷入口。
+    for (const entry of ['查看来源进度', '采集状态']) {
+      const button = screen.getByRole('button', { name: entry })
+      expect(button).toHaveProperty('type', 'button')
+      await user.click(button)
+      await screen.findByRole('heading', { name: '采集状态', level: 1 })
+      await user.click(screen.getByRole('button', { name: '论文工作台' }))
+    }
     expect(document.querySelector('input[type="password"]')).toBeNull()
     expect(paths.filter((p) => p === '/api/v1/auth/login')).toHaveLength(1)
     expect(paths).not.toContain('/api/v1/auth/password')

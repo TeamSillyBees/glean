@@ -41,7 +41,9 @@ function mount() {
     const [id, setId] = useState<string | null>('123')
     return (
       <>
-        <button onClick={() => setId('123')}>重开详情</button>
+        <button type="button" onClick={() => setId('123')}>
+          重开详情
+        </button>
         <PaperDetail id={id} onClose={() => setId(null)} notify={() => {}} />
       </>
     )

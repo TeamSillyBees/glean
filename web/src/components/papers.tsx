@@ -75,6 +75,7 @@ export function PaperCard({
         </span>
       </div>
       <button
+        type="button"
         onClick={onOpen}
         className="block min-h-11 w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -116,6 +117,7 @@ export function PaperCard({
             </span>
           </Tooltip>
           <button
+            type="button"
             onClick={onOpen}
             aria-label={`查看 ${paper.titleZh || paper.title} 的详情`}
             className="flex min-h-11 items-center gap-1 rounded-sm px-2 py-1 text-primary hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

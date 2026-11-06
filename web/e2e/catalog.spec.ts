@@ -1,4 +1,11 @@
-import { expect, test, type Page, type Response, type TestInfo } from '@playwright/test'
+import {
+  expect,
+  test,
+  type Page,
+  type Request,
+  type Response,
+  type TestInfo,
+} from '@playwright/test'
 import type { Facets, Paper, PaperPage, Topic, Venue } from '../src/lib/types'
 
 // No page.route, synthetic papers, token injection or mocked HTTP: every assertion
@@ -428,7 +435,29 @@ test('real historical catalog: login, filters, detail, durable personal state an
 
   // A configured real provider is not a completed harvest. No scheduler or live
   // canary runs in this isolated historical-only database, so progress stays unknown.
-  await navigate(page, '采集状态')
+  const sourceProgress = page.getByRole('button', { name: '查看来源进度', exact: true })
+  // 真实浏览器识别的 type 才是密码管理器看到的语义；缺省值为 submit。
+  await expect(sourceProgress).toHaveJSProperty('type', 'button')
+  await expect(page.locator('button:not([type])')).toHaveCount(0)
+  const authRequests: string[] = []
+  const observeNavigation = (request: Request) => {
+    const path = new URL(request.url()).pathname
+    if (path.startsWith('/api/v1/auth/')) authRequests.push(path)
+  }
+  page.on('request', observeNavigation)
+  try {
+    await sourceProgress.click()
+    await expect(page.getByRole('heading', { name: '采集状态', exact: true })).toBeVisible()
+    await expect(page.locator('input[type="password"]')).toHaveCount(0)
+    await navigate(page, '论文工作台')
+    await expect(sourceProgress).toBeVisible()
+    await sourceProgress.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('heading', { name: '采集状态', exact: true })).toBeVisible()
+    expect(authRequests).toEqual([])
+  } finally {
+    page.off('request', observeNavigation)
+  }
   await expect(page.getByText('真实来源采集', { exact: true })).toBeVisible()
   await expect(page.getByText('自动采集已关闭', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: '测试连通性', exact: true })).toHaveCount(0)

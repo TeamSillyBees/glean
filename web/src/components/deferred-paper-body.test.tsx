@@ -28,10 +28,12 @@ function mount(load: () => Promise<BodyModule>) {
     const trigger = useRef<HTMLButtonElement>(null)
     return (
       <>
-        <button ref={trigger} onClick={() => setId('123')}>
+        <button type="button" ref={trigger} onClick={() => setId('123')}>
           打开 {account}
         </button>
-        <button onClick={() => setId('456')}>下一篇</button>
+        <button type="button" onClick={() => setId('456')}>
+          下一篇
+        </button>
         <Detail
           id={id}
           onClose={() => setId(null)}
@@ -173,7 +175,9 @@ it('Back during a lazy import stays closed; Forward opens the current URL target
     const navigation = usePaperNavigation()
     return (
       <>
-        <button onClick={() => navigation.open('123')}>打开链接</button>
+        <button type="button" onClick={() => navigation.open('123')}>
+          打开链接
+        </button>
         <Detail id={navigation.id} onClose={navigation.close} notify={() => {}} />
       </>
     )
